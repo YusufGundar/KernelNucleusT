@@ -1,6 +1,6 @@
 # KernelNucleusT
 
-Modern C++17 library pack. High-performance, customizable, fully header-only.
+Modern C++17 library package. High-performance, customizable, cross-platform supported.
 
 ## Philosophy
 
@@ -46,6 +46,7 @@ This philosophy applies to all current and future libraries in the pack.
                     window.destroy();
                     window.should_close();
                 }
+            window.clear_temporary_events(); // resets the event
             }
 
             std::cout << "cleaning sources..." << std::endl;
