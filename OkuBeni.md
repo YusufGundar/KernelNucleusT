@@ -46,6 +46,7 @@ Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir.
                     window.destroy();
                     window.should_close();
                 }
+                window.clear_temporary_events(); // eventi sıfırlar
             }
 
             std::cout << "cleaning sources..." << std::endl;
