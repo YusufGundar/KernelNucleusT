@@ -19,29 +19,29 @@
 
     // align macros
 
-    #if defined(KNST_C16STRING_ALIGN_64)
+    /*#if defined(KNST_C16STRING_ALIGN_64)
       
-        #define KNST_STRING_ALIGNMENT alignas(64)
+        #define KNST_CLASS_ALIGNMENT alignas(64)
         static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 31; // 31 * 2 == 62 byte Stack Data; 61 bayt character 1 byte u'/0'; max 30 character count;
         static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 30;
 
     #elif defined(KNST_C16STRING_ALIGN_32)
         
-        #define KNST_STRING_ALIGNMENT alignas(32)
+        #define KNST_CLASS_ALIGNMENT alignas(32)
         static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 15; // 15 * 2 == 30 byte Stack Data; 29 bayt character 1 byte u'/0'; max 14 character count;
         static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 14;
 
     #else
        
-        #define KNST_STRING_ALIGNMENT alignas(8)
+        #define KNST_CLASS_ALIGNMENT alignas(8)
         static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 11; // 11 * 2 == 22 byte Stack Data; 29 bayt character 1 byte u'/0'; max 10 character count;
         static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 10;
 
-    #endif
+    #endif*/ 
 
 
 template <typename Allocator = knst_default_allocator>
-class KNST_STRING_ALIGNMENT basic_c16string{
+class KNST_CLASS_ALIGNMENT basic_c16string{
 
 
 
@@ -474,7 +474,7 @@ friend std::wostream& operator<<(std::wostream& os, const basic_c16string& obj){
     uint32_t str_size = obj.length();
 
   
-    #if defined(_WIN32) || defined(_WIN64)
+    #if KNST_USING_PLATFORM_WINDOWS
        
         os.write(reinterpret_cast<const wchar_t*>(str_data), str_size);
     #else
@@ -533,6 +533,50 @@ public:
        return is_heap() ? this->heap_data.m_capacity : KNST_SSO_BUFFER_CAPACITY;
 
     }
+
+    KNST_FORCE_INLINE char* to_char() const noexcept {
+        const char16_t* str_data = data();
+        uint32_t str_size = length();
+        uint32_t char_str_size = knst_get_utf16_to_utf8_exact_byte_size(str_data, str_size);
+        
+       
+        void* str = this->m_allocator.allocate(char_str_size + 1);
+        if (!str) return nullptr;
+        
+        char* char_str = static_cast<char*>(str);
+        knst_convert_utf16_to_utf8(str_data, str_size, char_str);
+        char_str[char_str_size] = '\0';
+        
+        return char_str; 
+    }
+
+    KNST_FORCE_INLINE wchar_t* to_wchar_alloc() const noexcept {
+        const char16_t* str_data = data();
+        uint32_t str_size = length();
+        
+    #if KNST_USING_PLATFORM_WINDOWS
+       
+        wchar_t* result = static_cast<wchar_t*>(
+            this->m_allocator.allocate((str_size + 1) * sizeof(wchar_t))
+        );
+        if (!result) return nullptr;
+        
+        memcpy(result, str_data, str_size * sizeof(wchar_t));
+        result[str_size] = L'\0';
+        return result;
+    #else
+       
+        wchar_t* result = static_cast<wchar_t*>(
+            this->m_allocator.allocate((str_size + 1) * sizeof(wchar_t))
+        );
+        if (!result) return nullptr;
+        
+        knst_convert_utf16_to_wchar(str_data, str_size, result);
+        result[str_size] = L'\0';
+        return result;
+    #endif
+    }
+
 
     KNST_FORCE_INLINE void clear() noexcept{
 

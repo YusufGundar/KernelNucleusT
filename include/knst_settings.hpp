@@ -1,3 +1,5 @@
+#ifndef KNST_SETTINGS_HPP
+#define KNST_SETTINGS_HPP
 #pragma once
 /*
 
@@ -46,8 +48,38 @@
 
 
 
+//#define KNST_LINUX_PLATFORM_WAYLAND     If you are using Linux Wayland
 
 
+
+//#define KNST_LINUX_PLATFORM_X11    If you are using Linux X11
+
+
+//#define KNST_USING_VULKAN    If you're going to use Vulkan
+
+
+//#define KNST_USING_OPENGL     If you're going to use Opengl
+// |
+// |
+//  -------->   #define KNST_OPENGL_USING_EGL     If you are using Linux X11, you need to specify that additionally.
+//  -------->   #define KNST_OPENGL_USING_GLX     If you are using Linux X11, you need to specify that additionally.
+
+
+
+
+//#define KNST_DISABLE_REDRAW_ON_EVENT_MANAGER     to disable triggering the frame callback on every cycle
+
+
+//______________________________Title Bar______________________________
+
+//#define KNST_DISABLE_TITLE_BAR      // to close the window's title bar
+ 
+// #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
+// #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
+// #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
+// #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
+
+//_____________________________________________________________________
 
 
 
@@ -55,6 +87,7 @@
 
 
 
+#endif
 
 
 

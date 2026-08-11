@@ -1,0 +1,109 @@
+
+# KernelNucleusT <-> Build Commands Helper
+
+
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+# WINDOWS (MSVC)
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+
+# OpenGL
+cmake -B build -DENABLE_OPENGL=ON
+cmake --build build --config Release
+
+# Vulkan
+cmake -B build -DENABLE_VULKAN=ON
+cmake --build build --config Release
+
+# OpenGL + Vulkan
+cmake -B build -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build --config Release
+
+# Run
+.\build\Release\knst_app.exe
+
+
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+# WINDOWS (MinGW / MSYS2)
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+
+# OpenGL
+cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON
+cmake --build build
+
+# Vulkan
+cmake -B build -G "MinGW Makefiles" -DENABLE_VULKAN=ON
+cmake --build build
+
+# OpenGL + Vulkan
+cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+# Run
+.\build\knst_app.exe
+
+
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+# WINDOWS (Ninja / MSYS2)
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+
+# OpenGL
+cmake -B build -G Ninja -DENABLE_OPENGL=ON
+cmake --build build
+
+# Vulkan
+cmake -B build -G Ninja -DENABLE_VULKAN=ON
+cmake --build build
+
+# OpenGL + Vulkan
+cmake -B build -G Ninja -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+
+
+
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+# LINUX / X11
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+
+# X11 + OpenGL (GLX)
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON
+cmake --build build
+
+# X11 + OpenGL (EGL)
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON
+cmake --build build
+
+# X11 + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DENABLE_VULKAN=ON
+cmake --build build
+
+# X11 + OpenGL (GLX) + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+# X11 + OpenGL (EGL) + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+
+
+
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+# LINUX / WAYLAND
+# *_____*_____**_____*_____**_____*_____**_____*_____*
+
+# Wayland + OpenGL (EGL)
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON
+cmake --build build
+
+# Wayland + Vulkan
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_VULKAN=ON
+cmake --build build
+
+# Wayland + OpenGL (EGL) + Vulkan
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+
+
+

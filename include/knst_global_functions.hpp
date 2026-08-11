@@ -5,6 +5,9 @@
 #include "knst_memory.hpp" 
 #include <cstdint> // uint8_t
 #include <cstddef>
+#include <ostream>
+
+
 
 
 // This function reads the part up to '\0', meaning it only takes the part up to '\0'.
