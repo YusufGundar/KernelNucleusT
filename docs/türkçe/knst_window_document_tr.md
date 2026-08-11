@@ -189,11 +189,11 @@
 
 Pencere Özellikleri Makroları
 
-  Makro	                                               Açıklama
 
-KNST_DEFAULT	                              Varsayılan değer (örn. -10000)
-KNST_DISABLE_TITLE_BAR	                    Başlık çubuğunu kapatır, özel çizim aktif eder
-KNST_DISABLE_REDRAW_ON_EVENT_MANAGER	      Event yönetiminde otomatik yeniden çizimi kapatır
+
+KNST_DEFAULT--------------------------------------------------------->Varsayılan değer (örn. -10000)
+KNST_DISABLE_TITLE_BAR--------------------------------------------------------->Başlık çubuğunu kapatır, özel çizim aktif eder
+KNST_DISABLE_REDRAW_ON_EVENT_MANAGER--------------------------------------------------------->Event yönetiminde otomatik yeniden çizimi kapatır
 Pencere Nitelikleri (Attribute)
 
 
@@ -207,62 +207,61 @@ KNST_WINDOW_ATTRIB_TRANSPARENT
 
 İmleç Modları (Cursor Mode)
 
-  Makro	                                                        Açıklama
 
-KNST_CURSOR_NORMAL	                                          Normal imleç
-KNST_CURSOR_HIDDEN	                                          İmleç gizli
-KNST_CURSOR_DISABLED	                                  İmleç devre dışı (kilitli)
+
+KNST_CURSOR_NORMAL--------------------------------------------------------->Normal imleç
+KNST_CURSOR_HIDDEN--------------------------------------------------------->İmleç gizli
+KNST_CURSOR_DISABLED--------------------------------------------------------->İmleç devre dışı (kilitli)
 
 İmleç Tipleri (Cursor Type)
 
-  Makro	                                                         Açıklama
+
   
-KNST_CURSOR_ARROW	                                            Ok (varsayılan)
-KNST_CURSOR_IBEAM	                                             Metin imleci
-KNST_CURSOR_CROSSHAIR	                                         Artı işareti
-KNST_CURSOR_HAND	                                       El imleci (tıklanabilir)
-KNST_CURSOR_HRESIZE	                                    Yatay yeniden boyutlandırma
-KNST_CURSOR_VRESIZE	                                    Dikey yeniden boyutlandırma
-KNST_CURSOR_MOVE	                                             Taşıma imleci
-KNST_CURSOR_WAIT	                                             Bekleme imleci
-KNST_CURSOR_HELP	                                             Yardım imleci
-KNST_CURSOR_NOT_ALLOWED	                                       İzin verilmiyor
+KNST_CURSOR_ARROW--------------------------------------------------------->Ok (varsayılan)
+KNST_CURSOR_IBEAM--------------------------------------------------------->Metin imleci
+KNST_CURSOR_CROSSHAIR--------------------------------------------------------->Artı işareti
+KNST_CURSOR_HAND--------------------------------------------------------->El imleci (tıklanabilir)
+KNST_CURSOR_HRESIZE--------------------------------------------------------->Yatay yeniden boyutlandırma
+KNST_CURSOR_VRESIZE--------------------------------------------------------->Dikey yeniden boyutlandırma
+KNST_CURSOR_MOVE--------------------------------------------------------->Taşıma imleci
+KNST_CURSOR_WAIT--------------------------------------------------------->Bekleme imleci
+KNST_CURSOR_HELP--------------------------------------------------------->Yardım imleci
+KNST_CURSOR_NOT_ALLOWED--------------------------------------------------------->İzin verilmiyor
 
 Klavye Tuşları
 
-  Makro	                                                          Açıklama
 
-KNST_KEY_A ... KNST_KEY_Z	                                     Alfabe tuşları
-KNST_KEY_0 ... KNST_KEY_9	                                     Sayı tuşları
-KNST_KEY_F1 ... KNST_KEY_F12	                                  F tuşları
-KNST_KEY_ESCAPE	                                                ESC tuşu
-KNST_KEY_ENTER	                                               Enter tuşu
-KNST_KEY_SPACE	                                               Space tuşu
-KNST_KEY_BACKSPACE	                                           Backspace tuşu
-KNST_KEY_TAB	                                                 Tab tuşu
-KNST_KEY_LEFT/RIGHT/UP/DOWN	                                   Ok tuşları
-KNST_KEY_HOME/END/PAGE_UP/PAGE_DOWN	                           Navigasyon tuşları
-KNST_KEY_INSERT/DELETE	                                       Ekle/Sil tuşları
-KNST_KEY_SHIFT/CONTROL/ALT/SUPER	                             Modifier tuşlar
-KNST_KEY_CAPS_LOCK/NUM_LOCK/SCROLL_LOCK	                       Kilit tuşları
-KNST_KEY_VOLUME_*	                                             Ses kontrol tuşları
-KNST_KEY_MEDIA_*	                                             Medya kontrol tuşları
-KNST_KEY_BROWSER_*	                                           Tarayıcı tuşları
-KNST_KEY_C_CEDILLA	                                           Ç (Türkçe)
-KNST_KEY_G_BREVE	                                             Ğ (Türkçe)
-KNST_KEY_I_DOTLESS	                                           ı (Türkçe)
-KNST_KEY_O_DIAERESIS	                                         Ö (Türkçe)
-KNST_KEY_S_CEDILLA	                                           Ş (Türkçe)
-KNST_KEY_U_DIAERESIS	                                         Ü (Türkçe)
+
+KNST_KEY_A ... KNST_KEY_Z--------------------------------------------------------->Alfabe tuşları
+KNST_KEY_0 ... KNST_KEY_9--------------------------------------------------------->Sayı tuşları
+KNST_KEY_F1 ... KNST_KEY_F12--------------------------------------------------------->F tuşları
+KNST_KEY_ESCAPE--------------------------------------------------------->ESC tuşu
+KNST_KEY_ENTER--------------------------------------------------------->Enter tuşu
+KNST_KEY_SPACE--------------------------------------------------------->Space tuşu
+KNST_KEY_BACKSPACE--------------------------------------------------------->Backspace tuşu
+KNST_KEY_TAB--------------------------------------------------------->Tab tuşu
+KNST_KEY_LEFT/RIGHT/UP/DOWN--------------------------------------------------------->Ok tuşları
+KNST_KEY_HOME/END/PAGE_UP/PAGE_DOWN--------------------------------------------------------->Navigasyon tuşları
+KNST_KEY_INSERT/DELETE--------------------------------------------------------->Ekle/Sil tuşları
+KNST_KEY_SHIFT/CONTROL/ALT/SUPER--------------------------------------------------------->Modifier tuşlar
+KNST_KEY_CAPS_LOCK/NUM_LOCK/SCROLL_LOCK--------------------------------------------------------->Kilit tuşları
+KNST_KEY_VOLUME_*--------------------------------------------------------->Ses kontrol tuşları
+KNST_KEY_MEDIA_*--------------------------------------------------------->Medya kontrol tuşları
+KNST_KEY_BROWSER_*--------------------------------------------------------->Tarayıcı tuşları
+KNST_KEY_C_CEDILLA--------------------------------------------------------->Ç (Türkçe)
+KNST_KEY_G_BREVE--------------------------------------------------------->Ğ (Türkçe)
+KNST_KEY_I_DOTLESS--------------------------------------------------------->ı (Türkçe)
+KNST_KEY_O_DIAERESIS--------------------------------------------------------->Ö (Türkçe)
+KNST_KEY_S_CEDILLA--------------------------------------------------------->Ş (Türkçe)
+KNST_KEY_U_DIAERESIS--------------------------------------------------------->Ü (Türkçe)
 
 Modifier Tuşlar (Mods)
 
-  Makro	                                                        Açıklama
 
-KNST_MOD_SHIFT	                                            Shift tuşu basılı
-KNST_MOD_CONTROL	                                           Ctrl tuşu basılı
-KNST_MOD_ALT	                                               Alt tuşu basılı
-KNST_MOD_SUPER	                                        Windows/Super tuşu basılı
-KNST_MOD_CAPS_LOCK	                                        Caps Lock aktif
-KNST_MOD_NUM_LOCK	                                           Num Lock aktif
 
+KNST_MOD_SHIFT--------------------------------------------------------->Shift tuşu basılı
+KNST_MOD_CONTROL--------------------------------------------------------->Ctrl tuşu basılı
+KNST_MOD_ALT--------------------------------------------------------->Alt tuşu basılı
+KNST_MOD_SUPER--------------------------------------------------------->Windows/Super tuşu basılı
+KNST_MOD_CAPS_LOCK--------------------------------------------------------->Caps Lock aktif
+KNST_MOD_NUM_LOCK--------------------------------------------------------->Num Lock aktif
