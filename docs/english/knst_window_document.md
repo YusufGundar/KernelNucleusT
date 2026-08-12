@@ -194,9 +194,9 @@ Window Feature Macros
 
 
 
-KNST_DEFAULT--------------------------------------------------------->Default value (e.g. -10000)
-KNST_DISABLE_TITLE_BAR--------------------------------------------------------->Disables title bar, enables custom drawing
-KNST_DISABLE_REDRAW_ON_EVENT_MANAGER--------------------------------------------------------->Disables automatic redraw in event management
+KNST_DEFAULT--->Default value (e.g. -10000)
+KNST_DISABLE_TITLE_BAR--->Disables title bar, enables custom drawing
+KNST_DISABLE_REDRAW_ON_EVENT_MANAGER--->Disables automatic redraw in event management
 
 Window Attributes -- Passed as parameters to set_attribute()
 
@@ -209,56 +209,56 @@ Cursor Modes (Cursor Mode)
 
 
 
-KNST_CURSOR_NORMAL--------------------------------------------------------->Normal cursor
-KNST_CURSOR_HIDDEN--------------------------------------------------------->Hidden cursor
-KNST_CURSOR_DISABLED --------------------------------------------------------->Disabled cursor (locked)
+KNST_CURSOR_NORMAL--->Normal cursor
+KNST_CURSOR_HIDDEN--->Hidden cursor
+KNST_CURSOR_DISABLED--->Disabled cursor (locked)
 
 Cursor Types (Cursor Type)
 
 
-KNST_CURSOR_ARROW --------------------------------------------------------->Arrow (default)
-KNST_CURSOR_IBEAM--------------------------------------------------------->Text cursor (I-beam)
-KNST_CURSOR_CROSSHAIR--------------------------------------------------------->Crosshair cursor
-KNST_CURSOR_HAND--------------------------------------------------------->Hand cursor (clickable)
-KNST_CURSOR_HRESIZE--------------------------------------------------------->Horizontal resize cursor
-KNST_CURSOR_VRESIZE--------------------------------------------------------->Vertical resize cursor
-KNST_CURSOR_MOVE--------------------------------------------------------->Move cursor
-KNST_CURSOR_WAIT--------------------------------------------------------->Wait cursor
-KNST_CURSOR_HELP--------------------------------------------------------->Help cursor
-KNST_CURSOR_NOT_ALLOWED--------------------------------------------------------->Not allowed cursor
+KNST_CURSOR_ARROW--->Arrow (default)
+KNST_CURSOR_IBEAM--->Text cursor (I-beam)
+KNST_CURSOR_CROSSHAIR--->Crosshair cursor
+KNST_CURSOR_HAND--->Hand cursor (clickable)
+KNST_CURSOR_HRESIZE--->Horizontal resize cursor
+KNST_CURSOR_VRESIZE--->Vertical resize cursor
+KNST_CURSOR_MOVE--->Move cursor
+KNST_CURSOR_WAIT--->Wait cursor
+KNST_CURSOR_HELP--->Help cursor
+KNST_CURSOR_NOT_ALLOWED--->Not allowed cursor
+
 
 Keyboard Keys
 
-
-KNST_KEY_A ... KNST_KEY_Z--------------------------------------------------------->Alphabet keys
-KNST_KEY_0 ... KNST_KEY_9--------------------------------------------------------->Number keys
-KNST_KEY_F1 ... KNST_KEY_F12--------------------------------------------------------->Function keys (F1-F12)
-KNST_KEY_ESCAPE--------------------------------------------------------->Escape key
-KNST_KEY_ENTER--------------------------------------------------------->Enter key
-KNST_KEY_SPACE--------------------------------------------------------->Space key
-KNST_KEY_BACKSPACE--------------------------------------------------------->Backspace key
-KNST_KEY_TAB--------------------------------------------------------->Tab key
-KNST_KEY_LEFT/RIGHT/UP/DOWN--------------------------------------------------------->Arrow keys
-KNST_KEY_HOME/END/PAGE_UP/PAGE_DOWN --------------------------------------------------------->Navigation keys
-KNST_KEY_INSERT/DELETE--------------------------------------------------------->Insert/Delete keys
-KNST_KEY_SHIFT/CONTROL/ALT/SUPER--------------------------------------------------------->Modifier keys
-KNST_KEY_CAPS_LOCK/NUM_LOCK/SCROLL_LOCK--------------------------------------------------------->Lock keys
-KNST_KEY_VOLUME_*--------------------------------------------------------->Volume control keys
-KNST_KEY_MEDIA_*--------------------------------------------------------->Media control keys
-KNST_KEY_BROWSER_*--------------------------------------------------------->Browser keys
-KNST_KEY_C_CEDILLA--------------------------------------------------------->Ç (Turkish)
-KNST_KEY_G_BREVE--------------------------------------------------------->Ğ (Turkish)
-KNST_KEY_I_DOTLESS--------------------------------------------------------->ı (Turkish)
-KNST_KEY_O_DIAERESIS--------------------------------------------------------->Ö (Turkish)
-KNST_KEY_S_CEDILLA--------------------------------------------------------->Ş (Turkish)
-KNST_KEY_U_DIAERESIS--------------------------------------------------------->Ü (Turkish)
+KNST_KEY_A ... KNST_KEY_Z--->Alphabet keys
+KNST_KEY_0 ... KNST_KEY_9--->Number keys
+KNST_KEY_F1 ... KNST_KEY_F12--->Function keys (F1-F12)
+KNST_KEY_ESCAPE--->Escape key
+KNST_KEY_ENTER--->Enter key
+KNST_KEY_SPACE--->Space key
+KNST_KEY_BACKSPACE--->Backspace key
+KNST_KEY_TAB--->Tab key
+KNST_KEY_LEFT/RIGHT/UP/DOWN--->Arrow keys
+KNST_KEY_HOME/END/PAGE_UP/PAGE_DOWN--->Navigation keys
+KNST_KEY_INSERT/DELETE--->Insert/Delete keys
+KNST_KEY_SHIFT/CONTROL/ALT/SUPER--->Modifier keys
+KNST_KEY_CAPS_LOCK/NUM_LOCK/SCROLL_LOCK--->Lock keys
+KNST_KEY_VOLUME_*--->Volume control keys
+KNST_KEY_MEDIA_*--->Media control keys
+KNST_KEY_BROWSER_*--->Browser keys
+KNST_KEY_C_CEDILLA--->Ç (Turkish)
+KNST_KEY_G_BREVE--->Ğ (Turkish)
+KNST_KEY_I_DOTLESS--->ı (Turkish)
+KNST_KEY_O_DIAERESIS--->Ö (Turkish)
+KNST_KEY_S_CEDILLA--->Ş (Turkish)
+KNST_KEY_U_DIAERESIS--->Ü (Turkish)
 
 Modifier Keys (Mods)
 
 
-KNST_MOD_SHIFT--------------------------------------------------------->Shift key pressed
-KNST_MOD_CONTROL--------------------------------------------------------->Control key pressed
-KNST_MOD_ALT Alt--------------------------------------------------------->key pressed
-KNST_MOD_SUPER--------------------------------------------------------->Windows/Super key pressed
-KNST_MOD_CAPS_LOCK--------------------------------------------------------->Caps Lock active
-KNST_MOD_NUM_LOCK--------------------------------------------------------->Num Lock active
+KNST_MOD_SHIFT--->Shift key pressed
+KNST_MOD_CONTROL--->Control key pressed
+KNST_MOD_ALT Alt--->key pressed
+KNST_MOD_SUPER--->Windows/Super key pressed
+KNST_MOD_CAPS_LOCK--->Caps Lock active
+KNST_MOD_NUM_LOCK--->Num Lock active
