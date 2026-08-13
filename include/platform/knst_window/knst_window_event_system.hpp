@@ -70,7 +70,7 @@ struct knst_window_event_system {
             load_native_to_knst_event(window, xcb_wait_for_event(KnstWindowSources::m_connection));
 
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-             window.m_knst_event.type = KNST_UNKNOWN;
+             
             wl_display_dispatch(KnstWindowSources::wayland_display);
             check_key_repeat(window);
         #endif
@@ -98,7 +98,7 @@ struct knst_window_event_system {
             }
 
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-           window.m_knst_event.type = KNST_UNKNOWN;
+          
             
             while (wl_display_prepare_read(KnstWindowSources::wayland_display) != 0) {
                 wl_display_dispatch_pending(KnstWindowSources::wayland_display);
@@ -175,7 +175,7 @@ struct knst_window_event_system {
             }
 
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-            window.m_knst_event.type = KNST_UNKNOWN;
+            
             
             while (wl_display_prepare_read(KnstWindowSources::wayland_display) != 0) {
                 wl_display_dispatch_pending(KnstWindowSources::wayland_display);
