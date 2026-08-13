@@ -1,3 +1,6 @@
+// A simple example demonstrating the multi-window feature of a knst_window
+
+
 
 #include <iostream>
 #include <chrono>
