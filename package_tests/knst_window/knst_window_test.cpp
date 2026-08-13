@@ -4,9 +4,6 @@
 #include <iostream>
 #include <chrono>
 
-
-
-
 // Windows automatic detection
 //#define KNST_LINUX_PLATFORM_WAYLAND     If you are using Linux Wayland
 //#define KNST_LINUX_PLATFORM_X11    If you are using Linux X11
@@ -19,15 +16,11 @@
 //  -------->   #define KNST_OPENGL_USING_GLX     If you are using Linux X11, you need to specify that additionally.
 
 
+#include "../../glad_3_3/include/glad/glad.h" // glad path
+#include "../../include/KernelNucleusT.hpp"
 
 
 
-
-
-
-
-#include "../glad_3_3/include/glad/glad.h" // glad path
-#include "../include/KernelNucleusT.hpp"
 
 
 
