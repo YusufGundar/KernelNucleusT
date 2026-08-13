@@ -38,7 +38,7 @@ This philosophy applies to all current and future libraries in the pack.
 
             while (!window.is_should_close()) {
 
-                knst_window_event_system::block_pool_event(window);
+                knst_window_event_system::block_pool_event();
 
                 if (window.get_window_event_handle().type == KNST_CLOSE_WINDOW || 
                     window.get_window_event_handle().type == KNST_DISCONNECT) {

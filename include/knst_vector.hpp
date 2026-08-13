@@ -136,6 +136,13 @@ public:
 
     }
 
+    KNST_FORCE_INLINE void pop_back() noexcept {
+        if (m_size > 0) {
+            m_data[m_size - 1].~T();
+            m_size--;
+        }
+    }
+
     KNST_FORCE_INLINE iterator erase(const_iterator pos) noexcept {
         uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
         

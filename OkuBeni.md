@@ -38,7 +38,7 @@ Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir.
 
             while (!window.is_should_close()) {
 
-                knst_window_event_system::block_pool_event(window);
+                knst_window_event_system::block_pool_event();
 
                 if (window.get_window_event_handle().type == KNST_CLOSE_WINDOW || 
                     window.get_window_event_handle().type == KNST_DISCONNECT) {

@@ -205,6 +205,8 @@ inline void knst_window::creation() noexcept {
         m_knst_event.window_root_x = rect.left;
         m_knst_event.window_root_y = rect.top;
     }
+
+    knst_window_event_system::register_window(this);
 }
 
 inline void knst_window::show() noexcept {
@@ -215,6 +217,7 @@ inline void knst_window::show() noexcept {
 }
 
 inline void knst_window::destroy() noexcept {
+    knst_window_event_system::unregister_window(this);
     if (m_window) {
         RemoveClipboardFormatListener(m_window);
         DestroyWindow(m_window);

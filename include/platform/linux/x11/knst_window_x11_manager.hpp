@@ -135,6 +135,7 @@ inline void knst_window::creation() noexcept{
     }
 
    
+    knst_window_event_system::register_window(this);
 }
 
 
@@ -155,6 +156,7 @@ inline void knst_window::show() noexcept{
 }
 
 inline void knst_window::destroy() noexcept {
+    knst_window_event_system::unregister_window(this);
     if (m_window == 0) return;
     xcb_connection_t* conn = KnstWindowSources::m_connection;
     if (!conn) {

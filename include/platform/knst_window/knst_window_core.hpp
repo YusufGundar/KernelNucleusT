@@ -1091,6 +1091,7 @@ public:
 
 };
 
+    #include "knst_window_event_system.hpp"
 
     #if KNST_USING_PLATFORM_WINDOWS
 

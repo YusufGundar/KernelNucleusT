@@ -888,44 +888,18 @@ inline void knst_window_wayland_funcs::DataDeviceLeave(void*, struct wl_data_dev
     KnstWindowSources::drag_offer_has_uri_list = false;
     KnstWindowSources::drag_target_window = nullptr; 
 }
+
+
+
 inline void knst_window_wayland_funcs::DataDeviceMotion(
     void*, struct wl_data_device*, uint32_t, wl_fixed_t x, wl_fixed_t y) 
 {
     auto* window = KnstWindowSources::drag_target_window;
     if (!window) return;
     
-    int mx = wl_fixed_to_int(x);
-    int my = wl_fixed_to_int(y);
-    
-  
-    if (mx < 0 || my < 0 || 
-        mx >= window->m_knst_event.window_width || 
-        my >= window->m_knst_event.window_height) 
-    {
-        
-        window->m_knst_event.type = KNST_FILE_DROP_LEAVE;
-        window->m_knst_event.drop_files.clear();
-        window->m_knst_event.drop_count = 0;
-        
-        if (KnstWindowSources::drag_offer) { 
-            wl_data_offer_destroy(KnstWindowSources::drag_offer);
-            KnstWindowSources::drag_offer = nullptr;
-        }
-        KnstWindowSources::drag_offer_has_uri_list = false;
-        KnstWindowSources::drag_target_window = nullptr;
-        return;
-    }
-    
-  
-    if (KnstWindowSources::drag_offer) {
-        wl_data_offer_accept(KnstWindowSources::drag_offer,KnstWindowSources::drag_enter_serial,"text/uri-list");
-                            
-                           
-    }
-    
     window->m_knst_event.type = KNST_FILE_DROP_MOVE;
-    window->m_knst_event.mouse_x = mx;
-    window->m_knst_event.mouse_y = my;
+    window->m_knst_event.mouse_x = wl_fixed_to_int(x);
+    window->m_knst_event.mouse_y = wl_fixed_to_int(y);
 }
 
 inline void knst_window_wayland_funcs::DataDeviceDrop(void*, struct wl_data_device*) {

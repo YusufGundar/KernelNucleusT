@@ -16,6 +16,38 @@
 
 struct knst_window_event_system {
 
+    private:
+
+        static knst_vector<knst_window*> windows;
+        
+        #if KNST_USING_LINUX_PLATFORM_X11
+        KNST_FORCE_INLINE static knst_window* find_window(xcb_window_t id) noexcept {
+            for (size_t i = 0; i < windows.size(); i++) {
+                if (windows[i]->get_x11_window_handle() == id) {
+                    return windows[i];
+                }
+            }
+            return nullptr;
+        }
+        #endif
+
+
+    public:
+
+        KNST_FORCE_INLINE static void register_window(knst_window* window) noexcept {
+            windows.push_back(window);
+        }
+        
+        KNST_FORCE_INLINE static void unregister_window(knst_window* window) noexcept {
+            for (size_t i = 0; i < windows.size(); i++) {
+                if (windows[i] == window) {
+                    windows[i] = windows.back();
+                    windows.pop_back();
+                    return;
+                }
+            }
+        }
+            
 
         #if KNST_USING_LINUX_PLATFORM_WAYLAND
         KNST_FORCE_INLINE static uint32_t get_current_time_ms() noexcept {
@@ -59,7 +91,7 @@ struct knst_window_event_system {
 
 
 
-    KNST_FORCE_INLINE static void block_pool_event(knst_window& window) noexcept {
+    KNST_FORCE_INLINE static void block_pool_event() noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             MSG msg;
             if (GetMessageW(&msg, nullptr, 0, 0)) {
@@ -67,20 +99,115 @@ struct knst_window_event_system {
                 DispatchMessageW(&msg);
             }
         #elif KNST_USING_LINUX_PLATFORM_X11
-            load_native_to_knst_event(window, xcb_wait_for_event(KnstWindowSources::m_connection));
+           
+            while (true) {
+                xcb_generic_event_t* ev = xcb_wait_for_event(KnstWindowSources::m_connection);
+                if (!ev) {
 
+                    for (size_t i = 0; i < windows.size(); i++) {
+                        windows[i]->m_knst_event.type = KNST_DISCONNECT;
+                    }
+                    return;
+                }
+                
+               
+                xcb_window_t target = XCB_NONE;
+                uint8_t event_type = ev->response_type & ~0x80;
+                
+                                switch (event_type) {
+                    case XCB_KEY_PRESS:
+                    case XCB_KEY_RELEASE:
+                    case XCB_BUTTON_PRESS:
+                    case XCB_BUTTON_RELEASE:
+                    case XCB_MOTION_NOTIFY:
+                    case XCB_ENTER_NOTIFY:
+                    case XCB_LEAVE_NOTIFY:
+                    case XCB_FOCUS_IN:
+                    case XCB_FOCUS_OUT:
+                        target = ((xcb_key_press_event_t*)ev)->event;
+                        break;
+
+                    case XCB_CONFIGURE_NOTIFY:
+                        target = ((xcb_configure_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_EXPOSE:
+                        target = ((xcb_expose_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_CLIENT_MESSAGE:
+                        target = ((xcb_client_message_event_t*)ev)->window; 
+                        break;
+                        
+                    case XCB_PROPERTY_NOTIFY:
+                        target = ((xcb_property_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_VISIBILITY_NOTIFY:
+                        target = ((xcb_visibility_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_MAP_NOTIFY:
+                        target = ((xcb_map_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_UNMAP_NOTIFY:
+                        target = ((xcb_unmap_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_DESTROY_NOTIFY:
+                        target = ((xcb_destroy_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_SELECTION_NOTIFY:
+                        target = ((xcb_selection_notify_event_t*)ev)->requestor;
+                        break;
+                        
+                    case XCB_SELECTION_REQUEST:
+                        target = ((xcb_selection_request_event_t*)ev)->owner;
+                        break;
+                        
+                    default:
+                        target = XCB_NONE;
+                        break;
+                }
+                
+                
+                if (target == XCB_NONE) {
+                 
+                    if (!windows.empty()) {
+                        load_native_to_knst_event(*windows[0], ev);
+                    } else {
+                        free(ev);
+                    }
+                    break;
+                } else {
+                    knst_window* target_window = find_window(target);
+                    if (target_window) {
+                        load_native_to_knst_event(*target_window, ev);
+                        break; 
+                    } else {
+                        free(ev);
+                        
+                    }
+                }
+            }
+            
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-             
             wl_display_dispatch(KnstWindowSources::wayland_display);
-            check_key_repeat(window);
+            for (size_t i = 0; i < windows.size(); i++) {
+                check_key_repeat(*windows[i]);
+            }
         #endif
 
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            window.call_redraw_callback();
+            for (size_t i = 0; i < windows.size(); i++) {
+                windows[i]->call_redraw_callback();
+            };
         #endif
     }
 
-    KNST_FORCE_INLINE static void non_block_pool_event(knst_window& window) noexcept {
+    KNST_FORCE_INLINE static void non_block_pool_event() noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             MSG msg;
             if (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -89,16 +216,95 @@ struct knst_window_event_system {
             }
             
         #elif KNST_USING_LINUX_PLATFORM_X11
-            xcb_generic_event_t* ev = xcb_poll_for_event(KnstWindowSources::m_connection);
-            if (ev) {
-                load_native_to_knst_event(window, ev);
-            } else if (xcb_connection_has_error(KnstWindowSources::m_connection)) {
-                window.m_knst_event.type = KNST_DISCONNECT;
-                return;
-            }
+           
+            while (true) {
+                xcb_generic_event_t* ev = xcb_poll_for_event(KnstWindowSources::m_connection);
+                if (!ev) {
+                    break;
+                }
+                
+              
+                xcb_window_t target = XCB_NONE;
+                uint8_t event_type = ev->response_type & ~0x80;
+                
+                switch (event_type) {
+                    case XCB_KEY_PRESS:
+                    case XCB_KEY_RELEASE:
+                    case XCB_BUTTON_PRESS:
+                    case XCB_BUTTON_RELEASE:
+                    case XCB_MOTION_NOTIFY:
+                    case XCB_ENTER_NOTIFY:
+                    case XCB_LEAVE_NOTIFY:
+                    case XCB_FOCUS_IN:
+                    case XCB_FOCUS_OUT:
+                        target = ((xcb_key_press_event_t*)ev)->event;
+                        break;
 
+                    case XCB_CONFIGURE_NOTIFY:
+                        target = ((xcb_configure_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_EXPOSE:
+                        target = ((xcb_expose_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_CLIENT_MESSAGE:
+                        target = ((xcb_client_message_event_t*)ev)->window; 
+                        break;
+                        
+                    case XCB_PROPERTY_NOTIFY:
+                        target = ((xcb_property_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_VISIBILITY_NOTIFY:
+                        target = ((xcb_visibility_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_MAP_NOTIFY:
+                        target = ((xcb_map_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_UNMAP_NOTIFY:
+                        target = ((xcb_unmap_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_DESTROY_NOTIFY:
+                        target = ((xcb_destroy_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_SELECTION_NOTIFY:
+                        target = ((xcb_selection_notify_event_t*)ev)->requestor;
+                        break;
+                        
+                    case XCB_SELECTION_REQUEST:
+                        target = ((xcb_selection_request_event_t*)ev)->owner;
+                        break;
+                        
+                    default:
+                        target = XCB_NONE;
+                        break;
+                }
+                
+                
+                if (target == XCB_NONE) {
+                    
+                    if (!windows.empty()) {
+                        load_native_to_knst_event(*windows[0], ev);
+                    } else {
+                        free(ev);
+                    }
+                } else {
+                    knst_window* target_window = find_window(target);
+                    if (target_window) {
+                        load_native_to_knst_event(*target_window, ev);
+                    } else {
+                        free(ev);
+                    }
+                }
+            }
+            
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-          
+            
             
             while (wl_display_prepare_read(KnstWindowSources::wayland_display) != 0) {
                 wl_display_dispatch_pending(KnstWindowSources::wayland_display);
@@ -107,10 +313,12 @@ struct knst_window_event_system {
             errno = 0;
             if (wl_display_flush(KnstWindowSources::wayland_display) == -1 && errno == EPIPE) {
                 wl_display_cancel_read(KnstWindowSources::wayland_display);
-                window.m_knst_event.type = KNST_DISCONNECT;
+                for (size_t i = 0; i < windows.size(); i++) {
+                    windows[i]->m_knst_event.type = KNST_DISCONNECT;
+                }
                 return;
             }
-         
+            
             struct pollfd pfd;
             pfd.fd = wl_display_get_fd(KnstWindowSources::wayland_display);
             pfd.events = POLLIN;
@@ -121,7 +329,9 @@ struct knst_window_event_system {
             if (ret > 0) {
                 if (pfd.revents & (POLLHUP | POLLERR)) {
                     wl_display_cancel_read(KnstWindowSources::wayland_display);
-                    window.m_knst_event.type = KNST_DISCONNECT;
+                    for (size_t i = 0; i < windows.size(); i++) {
+                        windows[i]->m_knst_event.type = KNST_DISCONNECT;
+                    }
                     return;
                 }
                 
@@ -132,16 +342,20 @@ struct knst_window_event_system {
             } else {
                 wl_display_cancel_read(KnstWindowSources::wayland_display);
             }
-            
-            check_key_repeat(window);
+      
+            for (size_t i = 0; i < windows.size(); i++) {
+                check_key_repeat(*windows[i]);
+            }
         #endif
 
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            window.call_redraw_callback();
+            for (size_t i = 0; i < windows.size(); i++) {
+                windows[i]->call_redraw_callback();
+            }
         #endif
     }
 
-    KNST_FORCE_INLINE static void timeout_pool_event(knst_window& window, int timeout_ms = 16) noexcept {
+    KNST_FORCE_INLINE static void timeout_pool_event(int timeout_ms = 16) noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             if (MsgWaitForMultipleObjects(0, nullptr, FALSE, timeout_ms, QS_ALLINPUT) == WAIT_OBJECT_0) {
                 MSG msg;
@@ -153,7 +367,9 @@ struct knst_window_event_system {
             
         #elif KNST_USING_LINUX_PLATFORM_X11
             if (xcb_connection_has_error(KnstWindowSources::m_connection)) {
-                window.m_knst_event.type = KNST_DISCONNECT;
+                for (size_t i = 0; i < windows.size(); i++) {
+                    windows[i]->m_knst_event.type = KNST_DISCONNECT;
+                }
                 return;
             }
             
@@ -164,19 +380,98 @@ struct knst_window_event_system {
             pfd.revents = 0;
             
             if (poll(&pfd, 1, timeout_ms) == 0) {
-                return;
+                return; 
             }
             
             if (pfd.revents & POLLIN) {
-                xcb_generic_event_t* ev = xcb_poll_for_event(KnstWindowSources::m_connection);
-                if (ev) {
-                    load_native_to_knst_event(window, ev);
+              
+                while (true) {
+                    xcb_generic_event_t* ev = xcb_poll_for_event(KnstWindowSources::m_connection);
+                    if (!ev) {
+                        break;
+                    }
+                    
+                   
+                    xcb_window_t target = XCB_NONE;
+                    uint8_t event_type = ev->response_type & ~0x80;
+                    
+                                    switch (event_type) {
+                    case XCB_KEY_PRESS:
+                    case XCB_KEY_RELEASE:
+                    case XCB_BUTTON_PRESS:
+                    case XCB_BUTTON_RELEASE:
+                    case XCB_MOTION_NOTIFY:
+                    case XCB_ENTER_NOTIFY:
+                    case XCB_LEAVE_NOTIFY:
+                    case XCB_FOCUS_IN:
+                    case XCB_FOCUS_OUT:
+                        target = ((xcb_key_press_event_t*)ev)->event;
+                        break;
+
+                    case XCB_CONFIGURE_NOTIFY:
+                        target = ((xcb_configure_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_EXPOSE:
+                        target = ((xcb_expose_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_CLIENT_MESSAGE:
+                        target = ((xcb_client_message_event_t*)ev)->window; 
+                        break;
+                        
+                    case XCB_PROPERTY_NOTIFY:
+                        target = ((xcb_property_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_VISIBILITY_NOTIFY:
+                        target = ((xcb_visibility_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_MAP_NOTIFY:
+                        target = ((xcb_map_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_UNMAP_NOTIFY:
+                        target = ((xcb_unmap_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_DESTROY_NOTIFY:
+                        target = ((xcb_destroy_notify_event_t*)ev)->window;
+                        break;
+                        
+                    case XCB_SELECTION_NOTIFY:
+                        target = ((xcb_selection_notify_event_t*)ev)->requestor;
+                        break;
+                        
+                    case XCB_SELECTION_REQUEST:
+                        target = ((xcb_selection_request_event_t*)ev)->owner;
+                        break;
+                        
+                    default:
+                        target = XCB_NONE;
+                        break;
+                }
+                    
+                    
+                    if (target == XCB_NONE) {
+                        if (!windows.empty()) {
+                            load_native_to_knst_event(*windows[0], ev);
+                        } else {
+                            free(ev);
+                        }
+                    } else {
+                        knst_window* target_window = find_window(target);
+                        if (target_window) {
+                            load_native_to_knst_event(*target_window, ev);
+                        } else {
+                            free(ev);
+                        }
+                    }
                 }
             }
 
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-            
-            
             while (wl_display_prepare_read(KnstWindowSources::wayland_display) != 0) {
                 wl_display_dispatch_pending(KnstWindowSources::wayland_display);
             }
@@ -184,10 +479,12 @@ struct knst_window_event_system {
             errno = 0;
             if (wl_display_flush(KnstWindowSources::wayland_display) == -1 && errno == EPIPE) {
                 wl_display_cancel_read(KnstWindowSources::wayland_display);
-                window.m_knst_event.type = KNST_DISCONNECT;
+                for (size_t i = 0; i < windows.size(); i++) {
+                    windows[i]->m_knst_event.type = KNST_DISCONNECT;
+                }
                 return;
             }
-       
+            
             struct pollfd pfd;
             pfd.fd = wl_display_get_fd(KnstWindowSources::wayland_display);
             pfd.events = POLLIN;
@@ -198,7 +495,9 @@ struct knst_window_event_system {
             if (ret > 0) {
                 if (pfd.revents & (POLLHUP | POLLERR)) {
                     wl_display_cancel_read(KnstWindowSources::wayland_display);
-                    window.m_knst_event.type = KNST_DISCONNECT;
+                    for (size_t i = 0; i < windows.size(); i++) {
+                        windows[i]->m_knst_event.type = KNST_DISCONNECT;
+                    }
                     return;
                 }
                 
@@ -207,21 +506,25 @@ struct knst_window_event_system {
                     wl_display_dispatch_pending(KnstWindowSources::wayland_display);
                 }
             } else {
-                if (ret == 0) {
-                    wl_display_cancel_read(KnstWindowSources::wayland_display);
-                } else {
-                    wl_display_cancel_read(KnstWindowSources::wayland_display);
-                }
+                wl_display_cancel_read(KnstWindowSources::wayland_display);
                 wl_display_dispatch_pending(KnstWindowSources::wayland_display);
             }
             
-            check_key_repeat(window);
+            
+            for (size_t i = 0; i < windows.size(); i++) {
+                check_key_repeat(*windows[i]);
+            }
         #endif
         
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            window.call_redraw_callback();
+            for (size_t i = 0; i < windows.size(); i++) {
+                windows[i]->call_redraw_callback();
+            }
         #endif
-    }
+        }
 };
+
+
+knst_vector<knst_window*> knst_window_event_system::windows;
 
 #endif // KNST_WINDOW_EVENT_SYSTEM_HPP

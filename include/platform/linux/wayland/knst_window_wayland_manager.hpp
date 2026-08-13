@@ -27,6 +27,8 @@ inline void knst_window::creation() noexcept
     xdg_surface_add_listener(xdgSurface, &knst_window_wayland_funcs::xdgSurfaceListener, this);
     xdg_toplevel_add_listener(toplevel, &knst_window_wayland_funcs::xdgToplevelListener, this);
     wl_surface_commit(m_surface);
+    
+    knst_window_event_system::register_window(this);
 }
 
 inline void knst_window::show() noexcept
@@ -37,6 +39,7 @@ inline void knst_window::show() noexcept
 
 inline void knst_window::destroy() noexcept
 {
+    knst_window_event_system::unregister_window(this);
     if (m_layer_surface) { 
         
             wl_proxy_destroy((struct wl_proxy*)m_layer_surface);

@@ -27,7 +27,7 @@
 #include "platform/knst_window/knst_window_core.hpp"
 
 
-#include "platform/knst_window/knst_window_event_system.hpp"
+
 
 #ifdef KNST_USING_OPENGL
 
