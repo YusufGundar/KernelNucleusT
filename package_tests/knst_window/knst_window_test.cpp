@@ -1,5 +1,4 @@
-//A simple example of how to use the KernelNucleusT window library
-
+//This is a simple example of drawing a triangle using `knst window` and OpenGL; I recommend that you follow this usage pattern.
 
 #include <iostream>
 #include <chrono>
