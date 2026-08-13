@@ -91,10 +91,15 @@ Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir.
   isterseniz #define KNST_DISABLE_TITLE_BAR ile title barı kapatıp , şimdilik opengl için özel title barları aktif edebilirsiniz  , yakında vulkanada gelicektir...
   ayrıca opengl için koda BeginFrame() ile başlamanızı öneriyorum
 
-    #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
-    #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
-    #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
-    #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
+ ```cpp
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
+ 
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
+ 
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
+ 
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
+ ```
 
 
 ### knst_c16string
