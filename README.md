@@ -92,10 +92,15 @@ You can disable the title bar with `#define KNST_DISABLE_TITLE_BAR` and enable c
 Also, it is recommended to start with BeginFrame() for OpenGL.
 
 
- **#define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN**
- **#define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN**
- **#define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC**
- **#define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW**
+ ```cpp
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
+ 
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
+ 
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
+ 
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
+ ```
 
 
 ### knst_c16string
