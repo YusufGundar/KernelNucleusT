@@ -420,7 +420,10 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             EndPaint(hwnd, &ps);
-            window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+            #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
+               window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+            #endif
+            
 
             return 0;
         }
