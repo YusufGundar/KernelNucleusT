@@ -26,7 +26,7 @@ This philosophy applies to all current and future libraries in the pack.
 
     ```cpp
         #include <iostream>
-        #include "../include/KernelNucleusT.hpp"
+        #include "../../include/KernelNucleusT.hpp"
 
         int main() {
             
