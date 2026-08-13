@@ -26,7 +26,7 @@ Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir.
 
     ```cpp
         #include <iostream>
-        #include "../include/KernelNucleusT.hpp"
+        #include "../../include/KernelNucleusT.hpp"
 
         int main() {
             
