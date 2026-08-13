@@ -86,15 +86,17 @@ This philosophy applies to all current and future libraries in the pack.
   — timeout_pool_event == waits for the specified duration, processes the event if available, returns immediately if not
 
 **OpenGL and Vulkan**
-  — With knst_window_opengl_content and knst_window_vulkan_content, you can use drawing APIs with your window.
+— With knst_window_opengl_content and knst_window_vulkan_content, you can use drawing APIs with your window.
 
-  You can disable the title bar with #define KNST_DISABLE_TITLE_BAR and enable custom title bars (currently available for OpenGL, Vulkan support coming soon...).
-  Also, it is recommended to start with BeginFrame() for OpenGL.
+You can disable the title bar with `#define KNST_DISABLE_TITLE_BAR` and enable custom title bars (currently available for OpenGL, Vulkan support coming soon...).
+Also, it is recommended to start with BeginFrame() for OpenGL.
 
-  #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
-  #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
-  #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
-  #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
+```cpp
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
+ #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
+
 
 ### knst_c16string
 
