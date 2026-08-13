@@ -18,7 +18,7 @@ struct knst_window_event_system {
 
     private:
 
-        static knst_vector<knst_window*> windows;
+        static inline knst_vector<knst_window*> windows;
         
         #if KNST_USING_LINUX_PLATFORM_X11
         KNST_FORCE_INLINE static knst_window* find_window(xcb_window_t id) noexcept {
@@ -525,6 +525,6 @@ struct knst_window_event_system {
 };
 
 
-knst_vector<knst_window*> knst_window_event_system::windows;
+
 
 #endif // KNST_WINDOW_EVENT_SYSTEM_HPP
