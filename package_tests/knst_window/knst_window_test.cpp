@@ -16,10 +16,6 @@
 //  -------->   #define KNST_OPENGL_USING_GLX     If you are using Linux X11, you need to specify that additionally.
 
 
-//#define KNST_LINUX_PLATFORM_X11
-//#define KNST_USING_OPENGL 
-//#define KNST_OPENGL_USING_EGL 
-
 
 #include "../../glad_3_3/include/glad/glad.h" // glad path
 #include "../../include/KernelNucleusT.hpp"
