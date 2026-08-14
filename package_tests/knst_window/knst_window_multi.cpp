@@ -3,7 +3,7 @@
 
 
 #include <iostream>
-#include <chrono>
+
 
 // Windows automatic detection
 //#define KNST_LINUX_PLATFORM_WAYLAND     If you are using Linux Wayland
