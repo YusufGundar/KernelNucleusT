@@ -1,3 +1,0 @@
-/home/knst_tester/Desktop/KernelNucleusT/build-android/CMakeFiles/knst_app.dir
-/home/knst_tester/Desktop/KernelNucleusT/build-android/CMakeFiles/edit_cache.dir
-/home/knst_tester/Desktop/KernelNucleusT/build-android/CMakeFiles/rebuild_cache.dir

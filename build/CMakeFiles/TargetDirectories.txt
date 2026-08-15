@@ -1,3 +1,0 @@
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/knst_app.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/edit_cache.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/rebuild_cache.dir
