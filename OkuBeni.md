@@ -108,7 +108,7 @@ cmake -B build -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build --config Release
 
 # Run
-.\build\Release\knst_app.exe
+build/knst_app.exe
 ```
 
 
@@ -128,7 +128,7 @@ cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
 
 # Run
-.\build\knst_app.exe
+build/knst_app.exe
 ```
 
 
@@ -147,6 +147,9 @@ cmake --build build
 # OpenGL + Vulkan
 cmake -B build -G Ninja -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
+
+# Run
+build/knst_app.exe
 ```
 
 
@@ -173,6 +176,9 @@ cmake --build build
 # X11 + OpenGL (EGL) + Vulkan
 cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
+
+# Run
+build/./knst_app
 ```
 
 ### LINUX / WAYLAND
@@ -188,6 +194,9 @@ cmake --build build
 # Wayland + OpenGL (EGL) + Vulkan
 cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
+
+# Run
+build/./knst_app
 ```
 
 
