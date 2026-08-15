@@ -1,161 +1,381 @@
 # KernelNucleusT
 
-Modern C++17 library package. High-performance, customizable, cross-platform supported.
+A modern C++17 library package. A high-performance, customizable, cross-platform library package
+
+## Included Components
+
+### Packaged Structures
+
+- **knst_window** — Provides support for Window / Linux (X11 / Wayland) / Android
+
+---
+
+### Core Structures
+
+- **knst_c16string**
+- **knst_byte_array**
+- **knst_vector**
+- **knst_memory**
+- **knst_image_loader** — Currently only `BMP` format is supported
+
+These classes are included within the package.
 
 ## Philosophy
 
-KernelNucleusT is built on the principle of **optimal balance between performance and safety**. Core principles:
+KernelNucleusT is built upon the principle of **optimal balance between performance and security**. Core principles:
 
-- **noexcept + bool return** — Most functions return `bool` instead of throwing exceptions. This boosts performance while giving the developer full control over error handling.
+- **noexcept + bool return** — Most functions return `bool` instead of throwing exceptions. This increases performance and gives the developer full control over error handling.
 
-- **Force Inline** — By default, functions are compiled with `force_inline`. No call overhead — code is copied directly to the call site. Result: faster execution, larger binary.
+- **Force Inline** — Functions are compiled with `force_inline` by default. There is no call overhead; code is copied directly to the call site. Result: faster execution, but larger binary size.
 
-- **Adjustable Binary Size** — Define `KNST_SMALL_SIZE_CLASS` to replace `force_inline` with standard `inline`. The compiler decides, usually using `call` to reach the function. Smaller binary, potentially slower. Your choice.
+- **Configurable Binary Size** — If `KNST_SMALL_SIZE_CLASS` is defined, `force_inline` is replaced with standard `inline`. The compiler decides when to inline, usually using `call` to invoke functions. Binary size decreases, speed may decrease. The choice is yours. Additionally, the library offers extensive customization options, and `knst_window` provides custom title bar themes for OpenGL content.
 
-- **Situational Flexibility** — Critical, frequently-used functions may include extra optimizations at the cost of binary size. This is not a bug — it's a deliberate trade-off.
+- **Contextual Flexibility** — Extra optimizations may be applied to frequently used critical functions at the cost of binary size. This is not a bug, but a conscious design choice. Our goal is to harmonize flexibility and performance in the best way possible. Macros also provide the ability to shape the library according to your needs.
 
-This philosophy applies to all current and future libraries in the pack.
+This philosophy applies to all current and future libraries within the package.
 
 ## 🚀 Libraries
 
-### knst_window  ---BETA---
+## knst_window (Beta)
 
-
-  * Simple Example
-
-
-    ```cpp
-        #include <iostream>
-        #include "../../include/KernelNucleusT.hpp"
-
-        int main() {
-            
-            KnstWindowSources::Init();
-
-            knst_window window(300, 300, u"Test");
-            
-            window.creation_and_show();
-
-            while (!window.is_should_close()) {
-
-                knst_window_event_system::block_pool_event();
-
-                if (window.get_window_event_handle().type == KNST_CLOSE_WINDOW || 
-                    window.get_window_event_handle().type == KNST_DISCONNECT) {
-                    std::cout << "cleaning window..." << std::endl;
-                    window.destroy();
-                    window.should_close();
-                }
-            window.clear_temporary_events(); // resets the event
-            }
-
-            std::cout << "cleaning sources..." << std::endl;
-            KnstWindowSources::CleanUp();
-
-            return 0;
-        }
-        ```
-
-  *
-
-
-**A comprehensive window management library for Windows and Linux.**
+**A comprehensive window management library with full support for Windows, Linux, and Android, aiming to provide as many features as possible.**
 
 **Features:**
-- **Performance and Size Balance — Aims to provide the best balance between performance and binary size**
-- **Modern C++ — Offers clean code writing with modern C++ features**
-- **Event-Driven — Handles events similar to operating system event loops**
-- **Security — Currently in beta stage, security is continuously improving**
+- **`force inline` is used in most critical and frequently called sections during application runtime**
+- **Provides a clean coding experience with modern C++ features**
+- **Event handling mechanism similar to the operating system's event model**
+- **Security — Has successfully passed a limited but rigorous set of tests**
 
+---
 
-**Usage and Important Notes**
- — First, you must call KnstWindowSources::Init() at the beginning of your program to initialize the library. This prepares and initializes the static resources defined for the library.
- Additionally, this call internally retrieves the list of monitors based on the operating system, meaning it automatically calls knst_display::refresh_monitors() internally. Therefore, you don't need to call ::refresh_monitors() separately to read monitor information from knst_display. However, you can call it again if you need to refresh the list (e.g., after connecting a new monitor).
+## knst_c16string
 
- — Some events are restricted on Wayland. Due to the Wayland compositor's security model, certain events are blocked.
-
- — Wayland Limitations: Due to Wayland's security model, some functions like move() and set_cursor_pos_*() are not supported.
-
-**About Event Handling**
- — Events that come to your window are stored in the event structure inside the window object. You can access it as const using the get_window_event_handle() function and check the structures within using switch-case and if-else statements.
-
-**Loops**
-  — There are 3 main loop types available in knst_window_event_system:
-  — block_pool_event == triggers only when an event arrives
-  — non_block_pool_event == processes the event if available, returns immediately if not
-  — timeout_pool_event == waits for the specified duration, processes the event if available, returns immediately if not
-
-**OpenGL and Vulkan**
-— With knst_window_opengl_content and knst_window_vulkan_content, you can use drawing APIs with your window.
-
-You can disable the title bar with `#define KNST_DISABLE_TITLE_BAR` and enable custom title bars (currently available for OpenGL, Vulkan support coming soon...).
-Also, it is recommended to start with BeginFrame() for OpenGL.
-
-
- ```cpp
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
- 
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
- 
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
- 
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
- ```
-
-
-### knst_c16string
-
-`char16_t`-based, high-performance string class.
-**By default, stores up to 22 bytes (10 characters) on the stack; overflows to heap.**
+A high-performance `char16_t`-based string class.
+**By default, it stores up to 22 bytes (10 characters) on the stack; beyond that, it moves to the heap.**
 
 **Features:**
-- **Multi-Character Support** — Constructors and functions directly accept `char16_t`, `char`, `wchar_t`, `char32_t`.
-- **STL Compatible** — Works seamlessly with `std::string`, `std::wstring`, `std::u16string`, `std::u32string` and their views.
+- **Multi-Character Support** — Directly accepts `char16_t`, `char`, `wchar_t`, `char32_t` types in constructors and functions.
+- **STL Compatible** — Works seamlessly with `std::string`, `std::wstring`, `std::u16string`, `std::u32string`, and their views.
 - **Macro Customization:**
   - `KNST_C16STRING_DEACTIVE_COW` — Disables Copy-On-Write
   - `KNST_C16_STRING_USING_ATOMIC_COW` — Makes COW counter thread-safe
-  - `KNST_C16STRING_ALIGN_64` / `KNST_C16STRING_ALIGN_32` — Adjusts class alignment and SSO capacity
-- **Safety** — Passed comprehensive test suite.
+  - `KNST_C16STRING_ALIGN_64` / `KNST_C16STRING_ALIGN_32` — Changes class alignment and SSO capacity
+- **Security** — Successfully passed an extensive test suite
 
-### knst_byte_string
+---
 
-An alternative to knst_c16string based on 'unsigned char', designed to store binary data and UTF-8 values.
- -  **UTF-8 Support:** Stores as raw bytes
- -  **Security** — Successfully passed all tests
- -  **Binary Safe:** Can contain \0 (null) bytes
+## knst_byte_string
 
+An `unsigned char`-based alternative to `knst_c16string` for storing binary data and UTF-8 values. Future features for network communication will be added.
 
-### knst_vector
-Contains methods optimized for the library's internal needs. New methods will be added for user-facing usage.
+- **UTF-8 Support:** Stores as raw bytes
+- **Security** — Successfully passed tests
+- **Binary Safe:** Can contain `\0` (null) bytes
 
- - **Security** — Successfully passed all tests
- 
+---
 
-### knst_memory
+## knst_vector
 
-Instance-based memory pool allocator. Thread-safe option available. All future libraries will include `knst_memory` support, just like `knst_c16string`.
+Currently provides only the methods required by the library's internal needs; methods are limited. New methods for user-facing usage will be added.
 
-### Goals
+- **Security** — Successfully passed tests
+- **Memory** — Designed to work with `knst_memory`
 
- In the future, I plan to bring cross-platform, comprehensive versions of structures such as knst_vector, knst_functional, knst_regex, and a GUI framework. I strive to make them highly customizable for every use case.
+---
 
+## knst_memory
 
+An instance-based memory pool allocator. Thread-safe option is available. All future libraries will also support `knst_memory`.
+
+---
+
+## Goals
+
+I plan to design a GUI framework library in the future, along with regex-supported structures and cross-platform file I/O primitives.
+
+---
 
 ## 📦 Installation
 
-Detailed CMake information is provided in the 'cmake_compile_helper.txt' file.
 
-```cpp
-#include "../include/KernelNucleusT.hpp"
+### WINDOWS (MSVC)
+
+```bash
+# OpenGL
+- cmake -B build -DENABLE_OPENGL=ON
+- cmake --build build --config Release
+
+# Vulkan
+cmake -B build -DENABLE_VULKAN=ON
+cmake --build build --config Release
+
+# OpenGL + Vulkan
+cmake -B build -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build --config Release
+
+# Run
+.\build\Release\knst_app.exe
 ```
 
-🤝 Contributing
 
-  # Use the Issues page for bug reports and feature requests
-  # Feel free to contact me directly for any special requests or to share feedback
+### WINDOWS (MinGW / MSYS2)
+
+```bash
+# OpenGL
+cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON
+cmake --build build
+
+# Vulkan
+cmake -B build -G "MinGW Makefiles" -DENABLE_VULKAN=ON
+cmake --build build
+
+# OpenGL + Vulkan
+cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+# Run
+.\build\knst_app.exe
+```
 
 
 
-📄 License
+### WINDOWS (Ninja / MSYS2)
 
-  MIT License — Freely use, develop, and share.
+```bash
+# OpenGL
+cmake -B build -G Ninja -DENABLE_OPENGL=ON
+cmake --build build
+
+# Vulkan
+cmake -B build -G Ninja -DENABLE_VULKAN=ON
+cmake --build build
+
+# OpenGL + Vulkan
+cmake -B build -G Ninja -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+```
+
+
+
+### LINUX / X11
+
+```bash
+# X11 + OpenGL (GLX)
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON
+cmake --build build
+
+# X11 + OpenGL (EGL)
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON
+cmake --build build
+
+# X11 + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DENABLE_VULKAN=ON
+cmake --build build
+
+# X11 + OpenGL (GLX) + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+# X11 + OpenGL (EGL) + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+```
+
+### LINUX / WAYLAND
+```bash
+# Wayland + OpenGL (EGL)
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON
+cmake --build build
+
+# Wayland + Vulkan
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_VULKAN=ON
+cmake --build build
+
+# Wayland + OpenGL (EGL) + Vulkan
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+```
+
+### ANDROID
+
+```bash
+# Linux
+
+    package_tests/knst_window/android/./build_android.sh  # Builds the APK
+    package_tests/knst_window/android/./run_android.sh    # Runs the APK on the device
+
+# Windows
+
+    package_tests/knst_window/android/./build_android.bat # Builds the APK
+    package_tests/knst_window/android/./run_android.bat   # Runs the APK on the device
+```
+
+
+ 📌 **NOTE:** For Android: You must download the Android SDK and Android NDK and configure them with your compiler. Example VS Code JSON configuration:
+
+```json
+{
+    "configurations": [
+        {
+            "name": "Android",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/EGL",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES3",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES2",
+                "/opt/android-ndk/sources/android/native_app_glue"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_ANDROID",
+                "KNST_PLATFORM_ANDROID_OPENGL"
+            ],
+            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-arm64"
+        },
+        {
+            "name": "Windows (MSVC)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_WGL",
+                "_CRT_SECURE_NO_WARNINGS",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "cl.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Windows (MinGW)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "C:/msys64/mingw64/include",
+                "C:/msys64/mingw64/include/SDL2",
+                "C:/msys64/mingw64/include/GL",
+                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
+                "C:/mingw64/include"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_OPENGL"
+            ],
+            "compilerPath": "g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        },
+        {
+            "name": "Linux (X11)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
+                "${workspaceFolder}/include/linux/x11"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_GLX"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux (Wayland)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "${workspaceFolder}/include/linux/wayland",
+                "/usr/include/wayland-client"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_WAYLAND",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_EGL"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux (Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
+```
+📌 **NOTE:** You can use the following JSON configuration as an example:
+
+---
+---
+```cpp
+#include "../include/KernelNucleusT.hpp" // That's all
+```
+
+- You can directly include the `KernelNucleusT.hpp` header, or alternatively, you can use only the specific structures you need in a separate project.
+
+```cpp
+
+// All core structures depend on `knst_global_functions.hpp`
+
+#include "knst_global_functions.hpp"
+
+#include "knst_c16string.hpp"
+#include "knst_byte_string.hpp"
+#include "knst_vector.hpp"
+#include "knst_image_loader.hpp"
+```
+
+```cpp
+#include "knst_window.hpp" // Package libraries depend on the core structures
+```
+
+## 🤝 Contributing
+
+- Use the **Issues** page for bug reports and feature requests.
+- For any special requests or if you'd like to get in touch with me directly, you can reach me via email.
+
+
+
+## 📄 License
+
+- MIT License — Use freely, develop, and share.

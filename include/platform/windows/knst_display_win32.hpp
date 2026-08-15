@@ -4,7 +4,7 @@
 
 #if KNST_USING_PLATFORM_WINDOWS
 
-                inline void knst_display::refresh_monitors() noexcept {
+                inline void knst_display::refresh_screens() noexcept {
 
                 
                         m_monitor_list.clear();

@@ -8,7 +8,57 @@ class knst_window_opengl_content;
 
 #include "knst_display.hpp"
 
- #if KNST_USING_LINUX_PLATFORM_WAYLAND
+
+
+
+#if defined(KNST_USING_PLATFORM_ANDROID)
+
+    class KnstWindowSources;    
+    #include <mutex>
+
+    class knst_mobile_keyboard {
+    private:
+        friend KnstWindowSources;
+        static inline JavaVM* s_javaVM = nullptr;
+        static inline jobject s_activity = nullptr;
+        static inline jclass s_activityClass = nullptr;
+        static inline jclass s_immClass = nullptr;
+        static inline jmethodID s_getSystemService = nullptr;
+        static inline jmethodID s_showSoftInput = nullptr;
+        static inline jmethodID s_hideSoftInput = nullptr;
+        static inline jmethodID s_getWindow = nullptr;
+        static inline jmethodID s_getDecorView = nullptr;
+        static inline jmethodID s_getWindowToken = nullptr;
+        static inline bool s_initialized = false;
+        static inline bool s_visible = false;
+        static inline std::mutex s_mutex;
+
+        struct jni_scope {
+            JNIEnv* env = nullptr;
+            bool attached = false;
+            JavaVM* vm = nullptr;
+
+            jni_scope(JavaVM* vm);
+            ~jni_scope();
+
+            JNIEnv* get() const { return env; }
+            bool valid() const { return env != nullptr; }
+        };
+        static void shutdown();
+    public:
+        static void Init(struct android_app* app);
+        static bool show();
+        static bool hide();
+        static void toggle();
+        static bool is_visible();
+        
+    };
+
+
+#endif
+
+
+#if KNST_USING_LINUX_PLATFORM_WAYLAND
         
         
 
@@ -30,6 +80,9 @@ class knst_window_opengl_content;
         #include "../linux/wayland/knst_window_wayland_event_manager.hpp"
 
 #endif
+
+
+
 
 class knst_window;
 
@@ -114,7 +167,7 @@ class KnstWindowSources{
             static inline knst_window* drag_target_window = nullptr;
             static inline uint32_t keyboard_serial = 0;
             friend class knst_window_wayland_funcs;
-            friend inline void knst_display::refresh_monitors() noexcept;
+            friend inline void knst_display::refresh_screens() noexcept;
             friend class knst_window_opengl_content;
             static inline wl_display* wayland_display = nullptr;
             static inline wl_registry * registery = nullptr;
@@ -224,18 +277,21 @@ class KnstWindowSources{
             RegistryAdd,
             nullptr
         };
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            
+            friend KNST_FORCE_INLINE void handle_android_cmd(int32_t cmd);
+            friend KNST_FORCE_INLINE int32_t handle_android_input(AInputEvent* event);
+            friend class knst_window_opengl_content;
 
-
-
+            friend class knst_display;
+            static inline struct android_app* m_app;
+           
         #endif
 
        
         
 
     public:
-
-
-
 
 
         #if KNST_USING_PLATFORM_WINDOWS
@@ -261,12 +317,21 @@ class KnstWindowSources{
                 return m_xlib_display;
             }
         
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            KNST_FORCE_INLINE static android_app* get_android_app() noexcept{
 
+                return m_app;
+            }
+        
+        #else
             
         #endif
-
-        KNST_FORCE_INLINE static void Init() noexcept {
-
+        
+        #if defined(KNST_USING_PLATFORM_ANDROID)
+            KNST_FORCE_INLINE static void Init(struct android_app* app) noexcept {
+        #else
+            KNST_FORCE_INLINE static void Init() noexcept {
+        #endif
             #if KNST_USING_PLATFORM_WINDOWS
 
                 m_hInstance = GetModuleHandleW(nullptr);
@@ -450,10 +515,49 @@ class KnstWindowSources{
                             compositor
                         );
                 }
+           #elif defined(KNST_USING_PLATFORM_ANDROID)
 
+
+    
+    
+                while (app->window == nullptr) {
+                
+                    
+                    int events;
+                    struct android_poll_source* source = nullptr;
+                    
+                
+                    int pollResult = ALooper_pollOnce(0, nullptr, &events, (void**)&source);
+                    
+                    if (pollResult >= 0) {
+                    
+                        
+                        if (source) {
+                        
+                            source->process(app, source);
+                            
+                        } 
+                    }
+                    
+                
+                    if (app->destroyRequested != 0) {
+                    
+                        return;
+                    }
+                    
+                    
+                }
+            
+                
+                m_app = app;
+                int width = ANativeWindow_getWidth(app->window);
+                int height = ANativeWindow_getHeight(app->window);
+                knst_mobile_keyboard::Init(app);
+           
             #endif
 
-                knst_display::refresh_monitors();
+                knst_display::refresh_screens();
+                
             }
 
         KNST_FORCE_INLINE static void CleanUp() noexcept {
@@ -612,7 +716,9 @@ class KnstWindowSources{
 
                 pending_offer = nullptr;
                
-
+            #elif defined(KNST_USING_PLATFORM_ANDROID)
+                m_app = nullptr;
+                knst_mobile_keyboard::shutdown();
             #endif
 
         }
@@ -638,7 +744,7 @@ struct knst_window_event{
     private:
 
     #if KNST_USING_PLATFORM_WINDOWS
-         friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
+        friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
     #elif KNST_USING_LINUX_PLATFORM_X11
         friend KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic_event_t* ev) noexcept;
             
@@ -659,9 +765,6 @@ struct knst_window_event{
       
         static constexpr uint32_t KEY_REPEAT_DELAY = 400;     
         static constexpr uint32_t KEY_REPEAT_INTERVAL = 30;   
-
-
-
         
         
     #endif
@@ -673,6 +776,42 @@ struct knst_window_event{
     
 
     public:
+
+
+        #if defined(KNST_USING_PLATFORM_ANDROID)
+   
+            int pointer_count = 0;
+            float pointer_x[10] = {0}; 
+            float pointer_y[10] = {0};
+            int pointer_id[10] = {0};
+            int touch_action = 0;  
+            
+            int content_left = 0;
+            int content_top = 0;
+            int content_right = 0;
+            int content_bottom = 0;
+            
+        
+            int orientation = 0;  // 0=portrait, 1=landscape
+            char language[4] = {0};
+            char country[4] = {0};
+            bool is_night_mode = false;
+            
+            // Memory status
+            bool is_low_memory = false;
+            
+            // Screen density
+            float density = 1.0f;
+            int screen_width_dp = 0;
+            int screen_height_dp = 0;
+            
+            // State status
+            void* saved_state = nullptr;
+            size_t saved_state_size = 0;
+        #endif
+
+
+
 
 
         int type = 0;
@@ -712,6 +851,10 @@ struct knst_window_event{
         
         uint32_t drop_count = 0;
 
+
+
+
+
     
         KNST_FORCE_INLINE void clear()noexcept{
             key_code = 0;
@@ -740,7 +883,8 @@ struct knst_window_event{
 #elif KNST_USING_LINUX_PLATFORM_WAYLAND
 
     #include "../linux/wayland/knst_display_wayland.hpp"
-   
+
+
 
 #endif
 
@@ -885,8 +1029,15 @@ private:
         
     }
     
-                
+    #elif defined(KNST_USING_PLATFORM_ANDROID)
+
+        friend class knst_window_opengl_content;
+        friend KNST_FORCE_INLINE void cmd_callback(struct android_app* app, int32_t cmd);
+        friend KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* event);
+        
     #endif
+                
+
 
 
     double m_mouse_x = 0.0;
@@ -962,6 +1113,14 @@ public:
         KNST_FORCE_INLINE const xcb_window_t& get_x11_window_handle() const noexcept{
             return m_window;
         }
+    #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+
+        KNST_FORCE_INLINE const wl_surface * get_wayland_surface_handle() const noexcept{
+            return m_surface;
+        }
+    #elif defined(KNST_USING_PLATFORM_ANDROID)
+
+        
 
     #endif
 
@@ -986,7 +1145,7 @@ public:
     KNST_FORCE_INLINE ~knst_window() noexcept{
         destroy();
     }
-
+    #if !defined(KNST_USING_PLATFORM_ANDROID)
     KNST_FORCE_INLINE knst_window(int width = 800, int height = 800,knst_c16string title = u"Knst_Window",int root_x = KNST_DEFAULT, int root_y = KNST_DEFAULT, 
         const knst_monitor& monitor = knst_monitor()) noexcept
         : m_title(title), 
@@ -1014,6 +1173,17 @@ public:
 
 
     }
+    #else
+
+    KNST_FORCE_INLINE knst_window(int width = KNST_DEFAULT, int height = KNST_DEFAULT,knst_c16string title = u"Knst_Window",int root_x = KNST_DEFAULT, int root_y = KNST_DEFAULT, 
+        const knst_monitor& monitor = knst_monitor()){
+
+            
+
+
+        }
+
+    #endif
 
     KNST_FORCE_INLINE const knst_window_event& get_window_event_handle() const noexcept{
         return m_knst_event;
@@ -1029,7 +1199,14 @@ public:
     }
 
     KNST_FORCE_INLINE const bool& is_should_close()const noexcept{
-        return m_should_close;
+        
+        #if defined(KNST_USING_PLATFORM_ANDROID)
+            return m_should_close || (KnstWindowSources::m_app != nullptr && KnstWindowSources::m_app->destroyRequested != 0);
+        #else
+            return m_should_close;
+        #endif
+
+        
     }
 
     KNST_FORCE_INLINE void set_user_data(void* data)noexcept{
@@ -1044,7 +1221,15 @@ public:
         return m_title;
     }
 
-    void creation() noexcept;
+
+
+        void creation() noexcept;
+
+
+    
+
+    
+   
     void show() noexcept;
     void destroy() noexcept;
     
@@ -1081,7 +1266,7 @@ public:
 
     void apply_bmp_icon(const knst_byte_string&data,int with,int height)noexcept;
 
-
+    
     KNST_FORCE_INLINE void creation_and_show()noexcept{
         
         creation();
@@ -1103,16 +1288,15 @@ public:
 
     #elif KNST_USING_LINUX_PLATFORM_WAYLAND
         
-    #include "../linux/wayland/knst_window_wayland_event_helper.hpp"
-    #include "../linux/wayland/knst_window_wayland_manager.hpp"
+        #include "../linux/wayland/knst_window_wayland_event_helper.hpp"
+        #include "../linux/wayland/knst_window_wayland_manager.hpp"
 
+    #elif defined(KNST_USING_PLATFORM_ANDROID)
+
+        #include "../android/knst_window_android_manager.hpp"
+        #include "../android/knst_display_android.hpp"
     #endif
 
     
-    
-
-
-
-
 
 #endif // KNST_WINDOW_CORE_HPP

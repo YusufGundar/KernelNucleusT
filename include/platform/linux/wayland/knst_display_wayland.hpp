@@ -8,7 +8,7 @@
 
 
 
-                inline void knst_display::refresh_monitors() noexcept {
+                inline void knst_display::refresh_screens() noexcept {
                     if (!KnstWindowSources::wayland_display || !KnstWindowSources::registery) return;
                     
                 

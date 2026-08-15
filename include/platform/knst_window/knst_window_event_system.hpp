@@ -11,13 +11,16 @@
     #include <poll.h>
     #include <unistd.h>
     #include <errno.h>
+#elif defined(KNST_USING_PLATFORM_ANDROID)
+
+    #include "../android/knst_window_android_event_manager.hpp"
 
 #endif
 
 struct knst_window_event_system {
 
     private:
-
+        friend class knst_window;
         static inline knst_vector<knst_window*> windows;
         
         #if KNST_USING_LINUX_PLATFORM_X11
@@ -32,8 +35,6 @@ struct knst_window_event_system {
         #endif
 
 
-    public:
-
         KNST_FORCE_INLINE static void register_window(knst_window* window) noexcept {
             windows.push_back(window);
         }
@@ -47,50 +48,55 @@ struct knst_window_event_system {
                 }
             }
         }
+
+
+    public:
+
+        
             
 
         #if KNST_USING_LINUX_PLATFORM_WAYLAND
-        KNST_FORCE_INLINE static uint32_t get_current_time_ms() noexcept {
-            struct timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-        }
-
-        KNST_FORCE_INLINE static void check_key_repeat(knst_window& window) noexcept {
-            auto& ev = window.m_knst_event;
-            
-            if (!ev.m_key_held || ev.m_last_scancode == 0) {
-                return;
+            KNST_FORCE_INLINE static uint32_t get_current_time_ms() noexcept {
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
             }
-            
-            uint32_t current_time = get_current_time_ms();
-            
-            if (!ev.m_repeat_initialized) {
-                if (current_time - ev.m_last_key_time >= ev.KEY_REPEAT_DELAY) {
-                    ev.type = KNST_KEYBOARD_EVENT;
-                    ev.key_action = KNST_KEY_REPEAT;
-                    ev.key_code = ev.m_last_key;
-                    ev.scancode = ev.m_last_scancode;
-                    
-                    ev.m_repeat_initialized = true;
-                    ev.m_last_repeat_time = current_time;
+
+            KNST_FORCE_INLINE static void check_key_repeat(knst_window& window) noexcept {
+                auto& ev = window.m_knst_event;
+                
+                if (!ev.m_key_held || ev.m_last_scancode == 0) {
+                    return;
+                }
+                
+                uint32_t current_time = get_current_time_ms();
+                
+                if (!ev.m_repeat_initialized) {
+                    if (current_time - ev.m_last_key_time >= ev.KEY_REPEAT_DELAY) {
+                        ev.type = KNST_KEYBOARD_EVENT;
+                        ev.key_action = KNST_KEY_REPEAT;
+                        ev.key_code = ev.m_last_key;
+                        ev.scancode = ev.m_last_scancode;
+                        
+                        ev.m_repeat_initialized = true;
+                        ev.m_last_repeat_time = current_time;
+                    }
+                }
+                else {
+                    if (current_time - ev.m_last_repeat_time >= ev.KEY_REPEAT_INTERVAL) {
+                        ev.type = KNST_KEYBOARD_EVENT;
+                        ev.key_action = KNST_KEY_REPEAT;
+                        ev.key_code = ev.m_last_key;
+                        ev.scancode = ev.m_last_scancode;
+                        
+                        ev.m_last_repeat_time = current_time;
+                    }
                 }
             }
-            else {
-                if (current_time - ev.m_last_repeat_time >= ev.KEY_REPEAT_INTERVAL) {
-                    ev.type = KNST_KEYBOARD_EVENT;
-                    ev.key_action = KNST_KEY_REPEAT;
-                    ev.key_code = ev.m_last_key;
-                    ev.scancode = ev.m_last_scancode;
-                    
-                    ev.m_last_repeat_time = current_time;
-                }
-            }
-        }
-    #endif
+        #endif
 
 
-
+  
     KNST_FORCE_INLINE static void block_pool_event() noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             MSG msg;
@@ -198,6 +204,26 @@ struct knst_window_event_system {
             for (size_t i = 0; i < windows.size(); i++) {
                 check_key_repeat(*windows[i]);
             }
+
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+                   
+                
+                    int events;
+                    struct android_poll_source* source = nullptr;
+                    
+                    
+                    int result = ALooper_pollOnce(-1, nullptr, &events, (void**)&source);
+                    
+                    if (result < 0) {
+                        
+                        return;
+                    }
+                    
+                    if (source != nullptr && source->process != nullptr) {
+                        source->process(KnstWindowSources::m_app, source);
+                    }
+                    
+
         #endif
 
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
@@ -207,6 +233,8 @@ struct knst_window_event_system {
         #endif
     }
 
+
+  
     KNST_FORCE_INLINE static void non_block_pool_event() noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             MSG msg;
@@ -346,16 +374,38 @@ struct knst_window_event_system {
             for (size_t i = 0; i < windows.size(); i++) {
                 check_key_repeat(*windows[i]);
             }
-        #endif
 
-        #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            for (size_t i = 0; i < windows.size(); i++) {
-                windows[i]->call_redraw_callback();
+
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            
+        
+            int events;
+            struct android_poll_source* source = nullptr;
+            
+            
+            int result = ALooper_pollOnce(0, nullptr, &events, (void**)&source);
+            
+            if (result < 0) {
+                
+                return;
             }
-        #endif
+            
+            if (source != nullptr && source->process != nullptr) {
+                source->process(KnstWindowSources::m_app, source);
+            }
+            
+
+            #endif
+
+            #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
+                for (size_t i = 0; i < windows.size(); i++) {
+                    windows[i]->call_redraw_callback();
+                }
+            #endif
     }
 
-    KNST_FORCE_INLINE static void timeout_pool_event(int timeout_ms = 16) noexcept {
+KNST_FORCE_INLINE static void timeout_pool_event(int timeout_ms = 16) noexcept {
+    
         #if KNST_USING_PLATFORM_WINDOWS
             if (MsgWaitForMultipleObjects(0, nullptr, FALSE, timeout_ms, QS_ALLINPUT) == WAIT_OBJECT_0) {
                 MSG msg;
@@ -514,13 +564,37 @@ struct knst_window_event_system {
             for (size_t i = 0; i < windows.size(); i++) {
                 check_key_repeat(*windows[i]);
             }
-        #endif
+
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+
+           
         
-        #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            for (size_t i = 0; i < windows.size(); i++) {
-                windows[i]->call_redraw_callback();
+            int events;
+            struct android_poll_source* source = nullptr;
+            
+            
+            int result = ALooper_pollOnce(timeout_ms, nullptr, &events, (void**)&source);
+            
+            if (result < 0) {
+                
+                return;
             }
+            
+            if (source != nullptr && source->process != nullptr) {
+                source->process(KnstWindowSources::m_app, source);
+            }
+            
+
         #endif
+
+            #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
+                for (size_t i = 0; i < windows.size(); i++) {
+                    windows[i]->call_redraw_callback();
+                }
+            #endif
+
+        
+       
         }
 };
 

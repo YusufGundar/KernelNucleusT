@@ -10,8 +10,6 @@
 //#define KNST_LINUX_PLATFORM_X11    If you are using Linux X11
 
 
-#define KNST_LINUX_PLATFORM_X11
-
 
 #include "../../include/KernelNucleusT.hpp"
 

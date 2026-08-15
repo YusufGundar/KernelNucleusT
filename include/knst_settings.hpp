@@ -55,6 +55,13 @@
 //#define KNST_LINUX_PLATFORM_X11    If you are using Linux X11
 
 
+//#define KNST_USING_PLATFORM_ANDROID    If you are using Android
+//
+//  --------> #define KNST_PLATFORM_ANDROID_OPENGL     If you are using Linux X11, you need to specify that additionally.
+//  --------> #define KNST_PLATFORM_ANDROID_VULKAN     If you are using Linux X11, you need to specify that additionally.
+
+
+
 //#define KNST_USING_VULKAN    If you're going to use Vulkan
 
 
@@ -63,6 +70,11 @@
 // |
 //  -------->   #define KNST_OPENGL_USING_EGL     If you are using Linux X11, you need to specify that additionally.
 //  -------->   #define KNST_OPENGL_USING_GLX     If you are using Linux X11, you need to specify that additionally.
+//
+//
+
+
+
 
 
 

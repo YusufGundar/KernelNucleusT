@@ -78,8 +78,7 @@ private:
         }
     }
 
-    static inline void wayland_output_mode(void* data, wl_output*, uint32_t flags,
-                                    int32_t w, int32_t h, int32_t refresh) {
+    static inline void wayland_output_mode(void* data, wl_output*, uint32_t flags,int32_t w, int32_t h, int32_t refresh) {
         auto* m = (knst_monitor*)data;
         if (flags & WL_OUTPUT_MODE_CURRENT) {
             m->width = w;
@@ -120,9 +119,11 @@ private:
 
 public:
     
-
-        static void refresh_monitors() noexcept;
-
+    #if defined(KNST_USING_PLATFORM_ANDROID)
+        static void refresh_screens() noexcept;
+    #else
+        static void refresh_screens() noexcept;
+    #endif
 
     static const knst_vector<knst_monitor>& get_monitor_list() noexcept {
         return m_monitor_list;

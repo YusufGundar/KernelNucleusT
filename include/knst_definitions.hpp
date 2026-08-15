@@ -61,7 +61,41 @@
     #endif
 
 
-    
+
+    #if defined(KNST_USING_PLATFORM_ANDROID)
+            #define KNST_USING_PLATFORM_WINDOWS 0
+            #define KNST_USING_LINUX_PLATFORM_X11 0
+            #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
+            
+            #define KNST_LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, "KNST", __VA_ARGS__)  
+            #define KNST_LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, "KNST", __VA_ARGS__)
+            #define KNST_LOG_WARN(...) __android_log_print(ANDROID_LOG_WARN, "KNST", __VA_ARGS__)  
+            #define KNST_LOG_DEBUG(...) __android_log_print(ANDROID_LOG_DEBUG, "KNST", __VA_ARGS__) 
+            #define KNST_LOG_VERBOSE(...) __android_log_print(ANDROID_LOG_VERBOSE, "KNST", __VA_ARGS__)
+
+            #include <jni.h>
+            #include <android/log.h>
+            #include <android_native_app_glue.h>
+            #include <android/native_window.h>
+
+
+        #if defined(KNST_PLATFORM_ANDROID_OPENGL)
+            #define KNST_USING_OPENGL
+            
+                
+        #elif defined(KNST_PLATFORM_ANDROID_VULKAN)
+            #define KNST_USING_VULKAN
+           
+
+        #endif
+
+
+    #endif
+
+   
+        
+        
+
 
     #if defined(_WIN32) || defined(_WIN64)
         #define KNST_USING_PLATFORM_WINDOWS 1
@@ -83,5 +117,11 @@
         #endif
 
     #endif
+
+           
+       
+
+
+
 
 #endif // KNST_MACROS_HPP

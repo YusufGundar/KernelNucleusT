@@ -85,6 +85,8 @@
 
 
 
+
+
 #if KNST_USING_PLATFORM_WINDOWS
     #include <windows.h>
 
@@ -666,6 +668,220 @@
     #define KNST_CURSOR_HELP           9
     #define KNST_CURSOR_NOT_ALLOWED    10
 
+
+#elif defined(KNST_USING_PLATFORM_ANDROID)
+
+   
+    #define KNST_WINDOW_LOST           10000  
+    #define KNST_LOW_MEMORY            10002 
+    #define KNST_APP_STARTED           10003  
+    #define KNST_APP_RESUMED           10004 
+    #define KNST_APP_PAUSED            10005 
+    #define KNST_SAVE_STATE            10006 
+    #define KNST_CONTENT_RECT_CHANGED  10007  
+    #define KNST_CONFIG_CHANGED        10008  
+    #define KNST_INPUT_CHANGED         10009 
+    #define KNST_APP_STOPPED           10046 
+
+    #define KNST_MOBILE_TOUCH_EVENT    10017  
+
+   
+    #define KNST_MOBILE_KEY_EVENT      10018  
+
+   
+    #define KNST_MOBILE_BACK_PRESS     10040  
+    #define KNST_MOBILE_HOME_PRESS     10041  
+    #define KNST_MOBILE_MENU_PRESS     10042  
+    #define KNST_MOBILE_SEARCH_PRESS   10043  
+    #define KNST_MOBILE_VOLUME_UP      10044
+    #define KNST_MOBILE_VOLUME_DOWN    10045
+    #define KNST_MOBILE_APP_SWITCH     10047
+    #define KNST_MOBILE_RECENT_APPS    10048
+    #define KNST_MOBILE_VOLUME_MUTE    10049
+    #define KNST_MOBILE_POWER          10050
+    #define KNST_MOBILE_CAMERA         10051
+    #define KNST_MOBILE_HELP           10052
+    #define KNST_MOBILE_SETTINGS       10053
+    #define KNST_MOBILE_SLEEP          10054
+    #define KNST_MOBILE_WAKEUP         10055
+
+   
+    #define KNST_MOBILE_MEDIA_PLAY_PAUSE       10060
+    #define KNST_MOBILE_MEDIA_STOP             10061
+    #define KNST_MOBILE_MEDIA_NEXT             10062
+    #define KNST_MOBILE_MEDIA_PREVIOUS         10063
+    #define KNST_MOBILE_MEDIA_REWIND           10064
+    #define KNST_MOBILE_MEDIA_FAST_FORWARD     10065
+    #define KNST_MOBILE_MEDIA_RECORD           10066
+    #define KNST_MOBILE_MEDIA_CLOSE            10067
+    #define KNST_MOBILE_MEDIA_EJECT            10068
+    #define KNST_MOBILE_MEDIA_PAUSE            10069
+
+    
+    #define KNST_MOBILE_NOTIFICATION        10080
+    #define KNST_MOBILE_ASSIST              10083
+    #define KNST_MOBILE_VOICE_ASSIST        10084
+    #define KNST_MOBILE_BOOKMARK            10085
+    #define KNST_MOBILE_CALCULATOR          10086
+    #define KNST_MOBILE_CALENDAR            10087
+    #define KNST_MOBILE_CONTACTS            10088
+    #define KNST_MOBILE_EXPLORER            10090
+    #define KNST_MOBILE_MUSIC               10092
+
+   
+    #define KNST_KEY_NUMPAD_COMMA          10094
+    #define KNST_KEY_NUMPAD_EQUALS         10095
+    #define KNST_KEY_NUMPAD_LEFT_PAREN     10096
+    #define KNST_KEY_NUMPAD_RIGHT_PAREN    10097
+
+    
+    #define KNST_KEY_A                      AKEYCODE_A
+    #define KNST_KEY_B                      AKEYCODE_B
+    #define KNST_KEY_C                      AKEYCODE_C
+    #define KNST_KEY_D                      AKEYCODE_D
+    #define KNST_KEY_E                      AKEYCODE_E
+    #define KNST_KEY_F                      AKEYCODE_F
+    #define KNST_KEY_G                      AKEYCODE_G
+    #define KNST_KEY_H                      AKEYCODE_H
+    #define KNST_KEY_I                      AKEYCODE_I
+    #define KNST_KEY_J                      AKEYCODE_J
+    #define KNST_KEY_K                      AKEYCODE_K
+    #define KNST_KEY_L                      AKEYCODE_L
+    #define KNST_KEY_M                      AKEYCODE_M
+    #define KNST_KEY_N                      AKEYCODE_N
+    #define KNST_KEY_O                      AKEYCODE_O
+    #define KNST_KEY_P                      AKEYCODE_P
+    #define KNST_KEY_Q                      AKEYCODE_Q
+    #define KNST_KEY_R                      AKEYCODE_R
+    #define KNST_KEY_S                      AKEYCODE_S
+    #define KNST_KEY_T                      AKEYCODE_T
+    #define KNST_KEY_U                      AKEYCODE_U
+    #define KNST_KEY_V                      AKEYCODE_V
+    #define KNST_KEY_W                      AKEYCODE_W
+    #define KNST_KEY_X                      AKEYCODE_X
+    #define KNST_KEY_Y                      AKEYCODE_Y
+    #define KNST_KEY_Z                      AKEYCODE_Z
+
+    
+    #define KNST_KEY_0                      AKEYCODE_0
+    #define KNST_KEY_1                      AKEYCODE_1
+    #define KNST_KEY_2                      AKEYCODE_2
+    #define KNST_KEY_3                      AKEYCODE_3
+    #define KNST_KEY_4                      AKEYCODE_4
+    #define KNST_KEY_5                      AKEYCODE_5
+    #define KNST_KEY_6                      AKEYCODE_6
+    #define KNST_KEY_7                      AKEYCODE_7
+    #define KNST_KEY_8                      AKEYCODE_8
+    #define KNST_KEY_9                      AKEYCODE_9
+
+   
+    #define KNST_KEY_F1                     AKEYCODE_F1
+    #define KNST_KEY_F2                     AKEYCODE_F2
+    #define KNST_KEY_F3                     AKEYCODE_F3
+    #define KNST_KEY_F4                     AKEYCODE_F4
+    #define KNST_KEY_F5                     AKEYCODE_F5
+    #define KNST_KEY_F6                     AKEYCODE_F6
+    #define KNST_KEY_F7                     AKEYCODE_F7
+    #define KNST_KEY_F8                     AKEYCODE_F8
+    #define KNST_KEY_F9                     AKEYCODE_F9
+    #define KNST_KEY_F10                    AKEYCODE_F10
+    #define KNST_KEY_F11                    AKEYCODE_F11
+    #define KNST_KEY_F12                    AKEYCODE_F12
+
+    
+    #define KNST_KEY_ESCAPE                 AKEYCODE_ESCAPE
+    #define KNST_KEY_ENTER                  AKEYCODE_ENTER
+    #define KNST_KEY_SPACE                  AKEYCODE_SPACE
+    #define KNST_KEY_BACKSPACE              AKEYCODE_DEL
+    #define KNST_KEY_TAB                    AKEYCODE_TAB
+    #define KNST_KEY_CAPS_LOCK              AKEYCODE_CAPS_LOCK
+    #define KNST_KEY_NUM_LOCK               AKEYCODE_NUM_LOCK
+    #define KNST_KEY_SCROLL_LOCK            AKEYCODE_SCROLL_LOCK
+    #define KNST_KEY_DELETE                 AKEYCODE_FORWARD_DEL
+    #define KNST_KEY_INSERT                 AKEYCODE_INSERT
+
+    
+    #define KNST_KEY_SHIFT                  AKEYCODE_SHIFT_LEFT
+    #define KNST_KEY_CONTROL                AKEYCODE_CTRL_LEFT
+    #define KNST_KEY_ALT                    AKEYCODE_ALT_LEFT
+    #define KNST_KEY_SUPER                  AKEYCODE_META_LEFT
+    #define KNST_KEY_MENU                   AKEYCODE_MENU
+
+    
+    #define KNST_KEY_LEFT                   AKEYCODE_DPAD_LEFT
+    #define KNST_KEY_RIGHT                  AKEYCODE_DPAD_RIGHT
+    #define KNST_KEY_UP                     AKEYCODE_DPAD_UP
+    #define KNST_KEY_DOWN                   AKEYCODE_DPAD_DOWN
+    #define KNST_KEY_HOME                   AKEYCODE_MOVE_HOME
+    #define KNST_KEY_END                    AKEYCODE_MOVE_END
+    #define KNST_KEY_PAGE_UP                AKEYCODE_PAGE_UP
+    #define KNST_KEY_PAGE_DOWN              AKEYCODE_PAGE_DOWN
+    #define KNST_KEY_PRINT                  AKEYCODE_SYSRQ
+    #define KNST_KEY_PAUSE                  AKEYCODE_MEDIA_PAUSE
+    #define KNST_KEY_BREAK                  AKEYCODE_BREAK
+
+
+    #define KNST_KEY_NUMPAD_0               AKEYCODE_NUMPAD_0
+    #define KNST_KEY_NUMPAD_1               AKEYCODE_NUMPAD_1
+    #define KNST_KEY_NUMPAD_2               AKEYCODE_NUMPAD_2
+    #define KNST_KEY_NUMPAD_3               AKEYCODE_NUMPAD_3
+    #define KNST_KEY_NUMPAD_4               AKEYCODE_NUMPAD_4
+    #define KNST_KEY_NUMPAD_5               AKEYCODE_NUMPAD_5
+    #define KNST_KEY_NUMPAD_6               AKEYCODE_NUMPAD_6
+    #define KNST_KEY_NUMPAD_7               AKEYCODE_NUMPAD_7
+    #define KNST_KEY_NUMPAD_8               AKEYCODE_NUMPAD_8
+    #define KNST_KEY_NUMPAD_9               AKEYCODE_NUMPAD_9
+    #define KNST_KEY_NUMPAD_ADD             AKEYCODE_NUMPAD_ADD
+    #define KNST_KEY_NUMPAD_SUBTRACT        AKEYCODE_NUMPAD_SUBTRACT
+    #define KNST_KEY_NUMPAD_MULTIPLY        AKEYCODE_NUMPAD_MULTIPLY
+    #define KNST_KEY_NUMPAD_DIVIDE          AKEYCODE_NUMPAD_DIVIDE
+    #define KNST_KEY_NUMPAD_DECIMAL         AKEYCODE_NUMPAD_DOT
+    #define KNST_KEY_NUMPAD_ENTER           AKEYCODE_NUMPAD_ENTER
+    #define KNST_KEY_NUMPAD_COMMA           AKEYCODE_NUMPAD_COMMA
+    #define KNST_KEY_NUMPAD_EQUALS          AKEYCODE_NUMPAD_EQUALS
+    #define KNST_KEY_NUMPAD_LEFT_PAREN      AKEYCODE_NUMPAD_LEFT_PAREN
+    #define KNST_KEY_NUMPAD_RIGHT_PAREN     AKEYCODE_NUMPAD_RIGHT_PAREN
+
+   
+    #define KNST_KEY_SEMICOLON              AKEYCODE_SEMICOLON
+    #define KNST_KEY_SLASH                  AKEYCODE_SLASH
+    #define KNST_KEY_GRAVE                  AKEYCODE_GRAVE
+    #define KNST_KEY_LEFT_BRACKET           AKEYCODE_LEFT_BRACKET
+    #define KNST_KEY_BACKSLASH              AKEYCODE_BACKSLASH
+    #define KNST_KEY_RIGHT_BRACKET          AKEYCODE_RIGHT_BRACKET
+    #define KNST_KEY_APOSTROPHE             AKEYCODE_APOSTROPHE
+    #define KNST_KEY_PERIOD                 AKEYCODE_PERIOD
+    #define KNST_KEY_COMMA                  AKEYCODE_COMMA
+    #define KNST_KEY_MINUS                  AKEYCODE_MINUS
+    #define KNST_KEY_PLUS                   AKEYCODE_PLUS
+    #define KNST_KEY_EQUALS                 AKEYCODE_EQUALS
+
+    
+    #define KNST_MOD_SHIFT                  AMETA_SHIFT_ON
+    #define KNST_MOD_CONTROL                AMETA_CTRL_ON
+    #define KNST_MOD_ALT                    AMETA_ALT_ON
+    #define KNST_MOD_SUPER                  AMETA_META_ON
+    #define KNST_MOD_CAPS_LOCK              AMETA_CAPS_LOCK_ON
+    #define KNST_MOD_NUM_LOCK               AMETA_NUM_LOCK_ON
+
+    
+    #define KNST_MOBILE_TOUCH_ACTION_PRESS          0   
+    #define KNST_MOBILE_TOUCH_ACTION_RELEASE        1 
+    #define KNST_MOBILE_TOUCH_ACTION_MOVE           2   
+    #define KNST_MOBILE_TOUCH_ACTION_CANCEL         3   
+    #define KNST_MOBILE_TOUCH_ACTION_OUTSIDE        4   
+    #define KNST_MOBILE_TOUCH_ACTION_POINTER_PRESS  5   
+    #define KNST_MOBILE_TOUCH_ACTION_POINTER_RELEASE 6  
+
+    
+    #define KNST_MOBILE_ORIENTATION_UNDEFINED  0
+    #define KNST_MOBILE_ORIENTATION_PORTRAIT   1
+    #define KNST_MOBILE_ORIENTATION_LANDSCAPE  2
+    #define KNST_MOBILE_ORIENTATION_SQUARE     3
+
+   
+    #define KNST_MOBILE_NIGHT_MODE_OFF         0
+    #define KNST_MOBILE_NIGHT_MODE_ON          1
 
 #endif
 

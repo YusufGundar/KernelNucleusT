@@ -1,9 +1,6 @@
-
 # KernelNucleusT - Build Configuration
 
-
 cmake_minimum_required(VERSION 3.15)
-
 
 project(KernelNucleusT VERSION 1.0.0 LANGUAGES C CXX)
 
@@ -20,11 +17,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 option(ENABLE_OPENGL "Enable OpenGL backend" OFF)
 option(ENABLE_VULKAN "Enable Vulkan backend" OFF)
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT ANDROID)
     set(LINUX_PLATFORM "" CACHE STRING "Display server protocol (X11 or Wayland) [REQUIRED]")
     set_property(CACHE LINUX_PLATFORM PROPERTY STRINGS "X11" "Wayland")
-
-   
 endif()
 
 #*_____________________________________________________________
@@ -38,9 +33,67 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|IntelLLVM")
 endif()
 
 #*_____________________________________________________________
+# Platform: Android
+#*_____________________________________________________________
+if(ANDROID)
+    add_definitions(-DKNST_USING_PLATFORM_ANDROID)
+    add_definitions(-DKNST_USING_PLATFORM_LINUX)
+    set(PLATFORM_TYPE "Android")
+    set(PLATFORM_INCLUDES)
+    set(PROTOCOL_SOURCES)
+    set(EXTRA_LIBS)
+    set(ANDROID_SOURCES package_tests/knst_window/android/knst_window_android_test.cpp)
+
+    set(NATIVE_APP_GLUE_DIR ${ANDROID_NDK}/sources/android/native_app_glue)
+    
+    set(PLATFORM_LIBS android log)
+    list(APPEND ANDROID_SOURCES ${NATIVE_APP_GLUE_DIR}/android_native_app_glue.c)
+    list(APPEND PLATFORM_INCLUDES ${NATIVE_APP_GLUE_DIR})
+
+    # ============================================================
+    # OpenGL ES
+    # ============================================================
+    if(ENABLE_OPENGL)
+        add_definitions(-DKNST_USING_OPENGL)
+        add_definitions(-DKNST_OPENGL_USING_EGL)
+        add_definitions(-DKNST_PLATFORM_ANDROID_OPENGL)      # ✅ Android OpenGL makrosu
+        set(OPENGL_LIBS EGL GLESv3 GLESv2)
+        set(EXTRA_LIBS ${EXTRA_LIBS} EGL GLESv3 GLESv2)
+        set(OPENGL_INCLUDES)
+        set(GLAD_SOURCES)
+        set(GLAD_INCLUDES)
+        message(STATUS " Android OpenGL: ENABLED")
+    else()
+        message(STATUS " Android OpenGL: DISABLED")
+    endif()
+    # ============================================================
+
+    # ============================================================
+    # Vulkan
+    # ============================================================
+    if(ENABLE_VULKAN)
+        add_definitions(-DKNST_USING_VULKAN)
+        add_definitions(-DKNST_PLATFORM_ANDROID_VULKAN)      # ✅ Android Vulkan makrosu
+        set(VULKAN_LIBS vulkan)
+        set(EXTRA_LIBS ${EXTRA_LIBS} vulkan)
+        set(VULKAN_INCLUDES)
+        message(STATUS " Android Vulkan: ENABLED")
+    else()
+        message(STATUS " Android Vulkan: DISABLED")
+    endif()
+    # ============================================================
+
+    # ============================================================
+    # None - Her ikisi de kapalı
+    # ============================================================
+    if(NOT ENABLE_OPENGL AND NOT ENABLE_VULKAN)
+        message(STATUS " Android Graphics: NONE (No OpenGL/Vulkan)")
+    endif()
+
+#*_____________________________________________________________
 # Platform: Windows
 #*_____________________________________________________________
-if(WIN32)
+elseif(WIN32)
     add_definitions(-DKNST_USING_PLATFORM_WINDOWS)
     set(PLATFORM_TYPE "Windows")
     set(PLATFORM_EXTRA_LIBS)
@@ -93,7 +146,10 @@ if(WIN32)
         endif()
     endif()
 
-elseif(UNIX AND NOT APPLE)
+#*_____________________________________________________________
+# Platform: Linux
+#*_____________________________________________________________
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     add_definitions(-DKNST_USING_PLATFORM_LINUX)
 
     if(LINUX_PLATFORM STREQUAL "Wayland")
@@ -142,7 +198,7 @@ elseif(UNIX AND NOT APPLE)
     endif()
 
 else()
-    message(FATAL_ERROR "Unsupported platform. Only Windows and Linux are supported.")
+    message(FATAL_ERROR "Unsupported platform. Only Windows, Linux, and Android are supported.")
 endif()
 
 #*_____________________________________________________________
@@ -160,21 +216,22 @@ if(ENABLE_OPENGL AND PLATFORM_TYPE STREQUAL "X11")
 endif()
 
 #*_____________________________________________________________
-# OpenGL Configuration
+# OpenGL Configuration (Masaüstü)
 #*_____________________________________________________________
+if(NOT ANDROID)
+    set(OPENGL_LIBS)
+    set(OPENGL_INCLUDES)
+    set(GLAD_SOURCES)
+    set(GLAD_INCLUDES)
+endif()
 
-set(OPENGL_LIBS)
-set(OPENGL_INCLUDES)
-set(GLAD_SOURCES)
-set(GLAD_INCLUDES)
-
-if(ENABLE_OPENGL)
+if(ENABLE_OPENGL AND NOT ANDROID)
     add_definitions(-DKNST_USING_OPENGL)
 
     if(WIN32)
         set(OPENGL_LIBS opengl32 glu32)
 
-    elseif(UNIX AND NOT APPLE)
+    elseif(UNIX AND NOT APPLE AND NOT ANDROID)
         find_package(OpenGL REQUIRED)
         set(OPENGL_LIBS ${OPENGL_LIBRARIES})
         set(OPENGL_INCLUDES ${OPENGL_INCLUDE_DIR})
@@ -199,7 +256,6 @@ if(ENABLE_OPENGL)
         endif()
     endif()
 
-
     set(GLAD_SOURCES glad_3_3/src/glad.c)
     set(GLAD_INCLUDES glad_3_3/include)
 
@@ -211,12 +267,14 @@ if(ENABLE_OPENGL)
 endif()
 
 #*_____________________________________________________________
-# Vulkan Configuration
+# Vulkan Configuration (Masaüstü)
 #*_____________________________________________________________
-set(VULKAN_LIBS)
-set(VULKAN_INCLUDES)
+if(NOT ANDROID)
+    set(VULKAN_LIBS)
+    set(VULKAN_INCLUDES)
+endif()
 
-if(ENABLE_VULKAN)
+if(ENABLE_VULKAN AND NOT ANDROID)
     add_definitions(-DKNST_USING_VULKAN)
 
     if(WIN32)
@@ -226,7 +284,7 @@ if(ENABLE_VULKAN)
         set(VULKAN_LIBS vulkan-1)
         set(VULKAN_INCLUDES ${VULKAN_INCLUDE_DIR})
 
-    elseif(UNIX AND NOT APPLE)
+    elseif(UNIX AND NOT APPLE AND NOT ANDROID)
         find_package(PkgConfig REQUIRED)
         pkg_check_modules(VULKAN vulkan)
 
@@ -250,14 +308,20 @@ endif()
 # ************************************************************
 # Targets
 # ************************************************************
-set(SOURCES
-    package_tests/knst_window/knst_window_test.cpp
-    ${PROTOCOL_SOURCES}
-    ${GLAD_SOURCES}
-)
-
-add_executable(knst_app ${SOURCES})
-
+if(ANDROID)
+    add_library(knst_app SHARED
+        ${ANDROID_SOURCES}
+        ${PROTOCOL_SOURCES}
+        ${GLAD_SOURCES}
+    )
+else()
+    set(SOURCES
+        package_tests/knst_window/knst_window_test.cpp
+        ${PROTOCOL_SOURCES}
+        ${GLAD_SOURCES}
+    )
+    add_executable(knst_app ${SOURCES})
+endif()
 
 if(GLAD_SOURCES)
     set_source_files_properties(${GLAD_SOURCES} PROPERTIES LANGUAGE C)
@@ -285,13 +349,14 @@ target_link_libraries(knst_app PRIVATE
     ${EXTRA_LIBS}
 )
 
-if(UNIX AND NOT APPLE)
+if(ANDROID)
+  
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     target_link_libraries(knst_app PRIVATE dl pthread m)
 endif()
 
 if(WIN32 AND NOT MSVC)
     target_link_libraries(knst_app PRIVATE mingw32)
-    #set_target_properties(knst_app PROPERTIES WIN32_EXECUTABLE TRUE) optional no console
 endif()
 
 #*_____________________________________________________________
@@ -319,6 +384,8 @@ if(ENABLE_OPENGL)
         message(STATUS " GL Backend:   ${OPENGL_BACKEND}")
     elseif(PLATFORM_TYPE STREQUAL "Wayland")
         message(STATUS " GL Backend:   EGL (mandatory)")
+    elseif(PLATFORM_TYPE STREQUAL "Android")
+        message(STATUS " GL Backend:   EGL + GLES (mandatory)")
     endif()
     message(STATUS " GLAD source:  ${GLAD_SOURCES}")
 endif()

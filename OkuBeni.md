@@ -1,162 +1,377 @@
 # KernelNucleusT
 
-Modern C++17 kütüphane paketi. Yüksek performanslı, özelleştirilebilir , çapraz platform destekli
+Modern C++17 kütüphane paketi. Yüksek performanslı, özelleştirilebilir , çapraz platform destekli bir kütüphane Paketidir
+
+## İçerisinde 
+### Paketli Yapılardan
+
+- knst_window  ---> Window / Linux(X11 / Wayland) / Android <---  Desteği sağlamaktadır
+___
+
+
+### Temel Yapılardan
+
+- knst_c16string  
+- knst_byte_array
+- knst_vector
+- knst_memory
+- knst_image_loader ---> şimdilik sadece `BMP` desteği mevcuttur
+
+Sınıfları içerisinde bulundurmaktadır
 
 ## Felsefe
 
 KernelNucleusT, **performans ve güvenlik arasında optimum denge** üzerine kurulmuştur. Temel prensipler:
 
-- **noexcept + bool dönüş** — Çoğu fonksiyon exception fırlatmak yerine `bool` döndürür. Bu sayede hem performans artar hem de hata kontrolü tamamen geliştiricinin elinde olur.
+- **noexcept + bool dönüş** — Çoğu fonksiyon exception fırlatmak yerine `bool` döndürür. Bu sayede hem performans artar hem de hata kontrolü tamamen geliştiricinin elinde olur
 
-- **Force Inline** — Varsayılan olarak fonksiyonlar `force_inline` ile derlenir. Call overhead'i olmaz, kod direkt çağrıldığı yere kopyalanır. Sonuç: daha hızlı çalışma, fakat daha büyük binary.
+- **Force Inline** — Varsayılan olarak fonksiyonlar `force_inline` ile derlenir. Call overhead'i olmaz, kod direkt çağrıldığı yere kopyalanır. Sonuç: daha hızlı çalışma, fakat daha büyük binary
 
-- **Ayarlanabilir Binary Boyutu** — `KNST_SMALL_SIZE_CLASS` tanımlanırsa, `force_inline` yerine standart `inline` kullanılır. Derleyici kendi karar verir, çoğu durumda `call` ile fonksiyona gidilir. Binary boyutu küçülür, hız azalabilir. Tercih sizin.
+- **Ayarlanabilir Binary Boyutu** — `KNST_SMALL_SIZE_CLASS` tanımlanırsa, `force_inline` yerine standart `inline` kullanılır. Derleyici kendi karar verir, çoğu durumda `call` ile fonksiyona gidilir. Binary boyutu küçülür, hız azalabilir. Tercih sizin. Ayrıca genel olarak kütüphaneleri istediğiniz gibi özelleştirme imkanı sunmaktadır , ayrıca `knst_window` opengl contenti için özel title bar temalarıda sunmaktadır
 
-- **Duruma Göre Esneklik** — Sık kullanılan kritik fonksiyonlarda binary boyut pahasına ek optimizasyonlar yapılabilir. Bu bir hata değil, bilinçli bir tercihtir.
+- **Duruma Göre Esneklik** — Sık kullanılan kritik fonksiyonlarda binary boyut pahasına ek optimizasyonlar yapılabilir. Bu bir hata değil, bilinçli bir tercihtir. hedefimiz sizlere esneklik ve performansı en iyi şekilde harmanlamaktır , ayrıca makrolar kütüphaneyi istediğiniz gibi şekillendirme imkanı sunar
 
-Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir.
+Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir
 
 ## 🚀 Kütüphaneler
 
-### knst_window  ---BETA---
+## knst_window  (Beta)
 
 
-  * basit bi örnek
-
-
-    ```cpp
-        #include <iostream>
-        #include "../../include/KernelNucleusT.hpp"
-
-        int main() {
-            
-            KnstWindowSources::Init();
-
-            knst_window window(300, 300, u"Test");
-            
-            window.creation_and_show();
-
-            while (!window.is_should_close()) {
-
-                knst_window_event_system::block_pool_event();
-
-                if (window.get_window_event_handle().type == KNST_CLOSE_WINDOW || 
-                    window.get_window_event_handle().type == KNST_DISCONNECT) {
-                    std::cout << "cleaning window..." << std::endl;
-                    window.destroy();
-                    window.should_close();
-                }
-                window.clear_temporary_events(); // eventi sıfırlar
-            }
-
-            std::cout << "cleaning sources..." << std::endl;
-            KnstWindowSources::CleanUp();
-
-            return 0;
-        }
-        ```
-
-  *
-
-
-**Çok kapsamlı windows ve linux için tam destekli bir pencere yönetim kütüphanesi olmaya aday bir kütüphanedir**
+**Çok kapsamlı windows , linux ve android için tam destekli bir pencere yönetim kütüphanesi olmayı ve sizlere olabildiğince çok özellik sunmayı hedefler**
 
 **Özellikler:**
-- **Performans ve Boyut arasındaki en iyi dengeyi sunmayı hedefler**
+- **Çoğu kritik ve uygulama çalışırken sürekli tekrarlancak yerlerde `force inline` kullanılmıştır**
 - **Modern C++ özellikleri ile kullanıcıya temiz kod yazma imkanı sunar**
-- **işletim sistemi event mantığına benzer bir şekilde eventleri yakalar ve işlersiniz**
-- **Güvenlik açısından daha beta durumundadır**
+- **işletim sisteminin event mantığına benzer bir şekilde eventleri yakalar ve işleme imkanı sunar**
+- **Güvenlik** — Sınırlı sayıdaki , testlerden başarıyla geçmiştir
 
 
-**Kullanım ve Bilmeniz gerekenler**
-  — Öncelikle kütüphaneyi başlatmak adına programın başında 'KnstWindowSources::Init()' çağrısının yapılması gereklidir bu kütüphane için tanımlanan static kaynakları hazırlar ve başlatır
-  ayrıca bu çağrı kendi içinde işletim sistemine bağlı olan monitörlerin listelerinide çıkartır yani içinde 'knst_display::refresh_monitors()' da otomatik yapılır ve knst_display:: içinden gerekli bilgileri okumak için tekrar ::refresh_monitors() yapmanı gerek yoktur ancak yenileme işlemleri için yeniden kontrol etmek için yapaiblirsiniz.
-
-  — Bazı olaylar waylandda kısıtlıdır , wayland compositor gereği güvenlik amacıyla bazı olayları engellenmiştir
-
-  — Wayland Kısıtlamaları: Wayland compositor güvenlik modeli nedeniyle move(), set_cursor_pos_*() gibi bazı fonksiyonlar çalışmaz.
-
-**Event İşleme Hakkında**
-  — Pencerenize gelen eventler , pencere nesnesinin içinde event yapısına dolar , bunu 'get_window_event_handle()' fonksiyonu ile const olarak alıp içindeki yapıları switch case ve if else yapıları ile kontrol edebilirsiniz
-
-**Döngüler**
-  — 3 ana döngü çeşidi knst_window_event_system içerisinde mevcuttur
-    — block_pool_event == sadece event geldiğinde tetiklenir
-    — non_block_pool_event == event varsa alır yoksa hemen döner
-    — timeout_pool_event == verdiğiniz süre kadar bekler event varsa alır yoksa hemen döner
-
-**Opengl ve Vulkan**
-  — knst_window_opengl_content ve knst_window_vulkan_content sayesinde pencere ile çizim apilerini kullanabilirsiniz
-
-  isterseniz #define KNST_DISABLE_TITLE_BAR ile title barı kapatıp , şimdilik opengl için özel title barları aktif edebilirsiniz  , yakında vulkanada gelicektir...
-  ayrıca opengl için koda BeginFrame() ile başlamanızı öneriyorum
-
- ```cpp
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN
- 
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
- 
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC
- 
- #define KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW
- ```
-
-
-### knst_c16string
+## knst_c16string
 
 `char16_t` tabanlı, yüksek performanslı string sınıfı.
 **Default olarak 22 byte'a kadar yani 10 karaktere kadar stack'te tutar, fazlasında heap'e geçer.**
 
 **Özellikler:**
 - **Çoklu Karakter Desteği** — Kurucu ve fonksiyonlarda `char16_t`, `char`, `wchar_t`, `char32_t` türlerini doğrudan kabul eder.
-- **STL Uyumlu** — `std::string`, `std::wstring`, `std::u16string`, `std::u32string` ve view'leri gibi yapılar ile sorunsuz çalışır.
+- **STL Uyumlu** — `std::string`, `std::wstring`, `std::u16string`, `std::u32string` ve view'leri gibi yapılar ile sorunsuz çalışır
 - **Makro ile Özelleştirme:**
   - `KNST_C16STRING_DEACTIVE_COW` — Copy-On-Write'ı kapatır
   - `KNST_C16_STRING_USING_ATOMIC_COW` — COW sayacını thread-safe yapar
   - `KNST_C16STRING_ALIGN_64` / `KNST_C16STRING_ALIGN_32` — Sınıf hizalamasını ve SSO kapasitesini değiştirir
-- **Güvenlik** — Kapsamlı test paketinden başarıyla geçmiştir.
+- **Güvenlik** — Kapsamlı test paketinden başarıyla geçmiştir
 
 
-### knst_byte_string
+## knst_byte_string
 
-'unsigned char` tabanlı, binary data ve utf8 değerlerini tutmak için knst_c16string alternetifidir
+'unsigned char` tabanlı, binary data ve utf8 değerlerini tutmak için knst_c16string alternetifidir, ileride ağ iletişimi için özellikler eklenecektir.
  -  **UTF-8 Desteği:** Ham byte olarak saklar
- -  **Güvenlik** — testlerden başarıyla geçmiştir.
+ -  **Güvenlik** — testlerden başarıyla geçmiştir
  -  **Binary Güvenli:** \0 (null) byte'ları içerebilir
 
 
-### knst_vector
- kütüphanenin ihtiyaçlarına göre metotları mevcuttur , kullanıcı kullanımı için yeni metotlar eklenecektir
+## knst_vector
+ Şimdilik kütüphanenin ihtiyaçlarına göre metotları mevcuttur ,metotları sınırlıdır, kullanıcı kullanımı için yeni metotlar eklenecektir
 
- - **Güvenlik** — testlerden başarıyla geçmiştir.
-
-
-### knst_memory
-
-Instance tabanlı, memory pool allocator. Thread-safe opsiyonu mevcuttur ayrıca eklenecek yeni kütüphanelerin hepsinde knst_memory desteği mevcut olucaktır, tıpkı knst_c16string deki gibi.
-
-### Hedefler
-
-İleride knst_vector , knst_functional , knst_regex , gui framework gibi yapılar çapraz platform destekli kapsamlı bir şekilde getirmeyi planlıyorum , her kullanıma uygun çok özelleştirilebilir olmasına özen gösteririm
+ - **Güvenlik** — testlerden başarıyla geçmiştir
+ - **Bellek** — knst_memory ile beraber kullanılabilmektedir
 
 
+## knst_memory
 
+Instance tabanlı, memory pool allocator. Thread-safe opsiyonu mevcuttur ayrıca eklenecek yeni kütüphanelerin hepsinde knst_memory desteği mevcut olucaktır
+
+---
+## Hedefler
+
+Gelecek için bi tür gui framework kütüphanesi tasarlamayı düşünüyorum  ayrıca regex destekli yapılar ve yine çapraz platform destekli dosya okuma işlemleri için temel yapılar eklemeyi düşünüyorum
+
+
+---
 
 ## 📦 Kurulum
 
-'cmake_compile_helper.txt' dosyası içinde detaylı cmake bilgileri verilmiştir 
 
-```cpp
-#include "../include/KernelNucleusT.hpp"
+### WINDOWS (MSVC)
+
+```bash
+# OpenGL
+- cmake -B build -DENABLE_OPENGL=ON
+- cmake --build build --config Release
+
+# Vulkan
+cmake -B build -DENABLE_VULKAN=ON
+cmake --build build --config Release
+
+# OpenGL + Vulkan
+cmake -B build -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build --config Release
+
+# Run
+.\build\Release\knst_app.exe
 ```
 
-🤝 Katkıda Bulunma
 
-  # Bug raporları ve özellik istekleri için Issues sayfasını kullanın
-  # Herangi bir özel istek veya beni bilgilendirmek isterseniz benimle iletişime geçebilirsiniz
+### WINDOWS (MinGW / MSYS2)
+
+```bash
+# OpenGL
+cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON
+cmake --build build
+
+# Vulkan
+cmake -B build -G "MinGW Makefiles" -DENABLE_VULKAN=ON
+cmake --build build
+
+# OpenGL + Vulkan
+cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+# Run
+.\build\knst_app.exe
+```
 
 
 
-📄 Lisans
+### WINDOWS (Ninja / MSYS2)
 
-  MIT License — Özgürce kullanın, geliştirin, paylaşın.
+```bash
+# OpenGL
+cmake -B build -G Ninja -DENABLE_OPENGL=ON
+cmake --build build
+
+# Vulkan
+cmake -B build -G Ninja -DENABLE_VULKAN=ON
+cmake --build build
+
+# OpenGL + Vulkan
+cmake -B build -G Ninja -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+```
+
+
+
+### LINUX / X11
+
+```bash
+# X11 + OpenGL (GLX)
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON
+cmake --build build
+
+# X11 + OpenGL (EGL)
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON
+cmake --build build
+
+# X11 + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DENABLE_VULKAN=ON
+cmake --build build
+
+# X11 + OpenGL (GLX) + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+
+# X11 + OpenGL (EGL) + Vulkan
+cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+```
+
+### LINUX / WAYLAND
+```bash
+# Wayland + OpenGL (EGL)
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON
+cmake --build build
+
+# Wayland + Vulkan
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_VULKAN=ON
+cmake --build build
+
+# Wayland + OpenGL (EGL) + Vulkan
+cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
+cmake --build build
+```
+
+
+### ANDROID
+
+```bash
+#Linux
+
+    package_tests/knst_window/android/./build_android.sh # apk oluşturur
+    package_tests/knst_window/android/./run_android.sh # telefonda apk çalışır
+
+#Windows
+
+    package_tests/knst_window/android/./build_android.bat # apk oluşturur
+    package_tests/knst_window/android/./run_android.bat # telefonda apk çalışır
+```
+
+
+ 📌 **NOT:** Android için : Android SDK ve Android NDK ' yı indirip derleyiciye tanıtmalısınız  örnek vscode json ayarı :
+
+```json
+{
+    "configurations": [
+        {
+            "name": "Android",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/EGL",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES3",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES2",
+                "/opt/android-ndk/sources/android/native_app_glue"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_ANDROID",
+                "KNST_PLATFORM_ANDROID_OPENGL"
+            ],
+            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-arm64"
+        },
+        {
+            "name": "Windows (MSVC)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_WGL",
+                "_CRT_SECURE_NO_WARNINGS",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "cl.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Windows (MinGW)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "C:/msys64/mingw64/include",
+                "C:/msys64/mingw64/include/SDL2",
+                "C:/msys64/mingw64/include/GL",
+                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
+                "C:/mingw64/include"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_OPENGL"
+            ],
+            "compilerPath": "g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        },
+        {
+            "name": "Linux (X11)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
+                "${workspaceFolder}/include/linux/x11"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_GLX"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux (Wayland)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "${workspaceFolder}/include/linux/wayland",
+                "/usr/include/wayland-client"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_WAYLAND",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_EGL"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux (Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
+```
+📌 **NOT:** Örnek olarak size bu json ayarını verebilirim
+ 
+---
+---
+```cpp
+#include "../include/KernelNucleusT.hpp" // Hepsi bukadar
+```
+
+- İsterseniz direkt `KernelNucleusT.hpp` bu başlığı include edebilirsiniz yada ek olarak , sadece ihtiyacınız olan yapıları ayrı bir projede kullanabilirsiniz
+
+
+```cpp
+
+// Bütün temel yapılar `knst_global_functions.hpp` ye bağımlıdır
+
+#include "knst_global_functions.hpp"
+
+#include "knst_c16string.hpp"
+#include "knst_byte_string.hpp"
+#include "knst_vector.hpp"
+#include "knst_image_loader.hpp"
+```
+
+```cpp
+#include "knst_window.hpp" // Paket kütüphaneler ise temel yapılara bağımlıdırlar
+```
+
+## 🤝 Katkıda Bulunma
+
+  - Bug raporları ve özellik istekleri için **Issues** sayfasını kullanın
+  - Herangi bir özel istek veya benimle iletişime geçmek isterseniz mail adresimden ulaşabilirsiniz
+
+
+
+##  📄 Lisans
+
+- MIT License — Özgürce kullanın, geliştirin, paylaşın.

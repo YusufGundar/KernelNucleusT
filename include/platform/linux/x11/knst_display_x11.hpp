@@ -5,7 +5,7 @@
 
 #if KNST_USING_LINUX_PLATFORM_X11
 
-inline void knst_display::refresh_monitors() noexcept {
+inline void knst_display::refresh_screens() noexcept {
 
                 xcb_randr_query_version_cookie_t version_cookie = 
                     xcb_randr_query_version(KnstWindowSources::m_connection, 1, 5);

@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/knst_tester/Desktop/KernelNucleusT/build-android/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

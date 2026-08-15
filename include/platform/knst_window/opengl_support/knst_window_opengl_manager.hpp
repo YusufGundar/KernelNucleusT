@@ -34,6 +34,13 @@
     #include <EGL/egl.h>
     #include <wayland-egl.h>
     #include <GL/gl.h>
+    
+#elif defined(KNST_USING_PLATFORM_ANDROID)
+    #ifdef KNST_PLATFORM_ANDROID_OPENGL
+        #include <EGL/egl.h>
+        #include <GLES3/gl3.h>
+        #include <GLES2/gl2ext.h>
+    #endif
 #endif
 
 class knst_window_opengl_content {
@@ -77,7 +84,17 @@ private:
     EGLSurface m_egl_surface = EGL_NO_SURFACE;
     EGLConfig  m_egl_config  = nullptr;
     wl_egl_window* m_wl_egl_window = nullptr;
+
+#elif defined(KNST_USING_PLATFORM_ANDROID)
+    #ifdef KNST_PLATFORM_ANDROID_OPENGL
+        static inline EGLDisplay s_egl_display = EGL_NO_DISPLAY;
+        EGLContext m_egl_context = EGL_NO_CONTEXT;
+        EGLSurface m_egl_surface = EGL_NO_SURFACE;
+        EGLConfig  m_egl_config  = nullptr;
+    #endif
 #endif
+
+
 
     knst_window* window = nullptr;
 
@@ -85,6 +102,8 @@ public:
 
     bool Init(knst_window* window_p , bool vsync = false);
 
+   
+    
     void Shutdown() {
         if (!m_initialized) return;
 
@@ -141,6 +160,21 @@ public:
                 m_egl_context = EGL_NO_CONTEXT;
             }
             m_egl_config = nullptr;
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                if (m_egl_surface != EGL_NO_SURFACE) {
+                    eglDestroySurface(s_egl_display, m_egl_surface);
+                    m_egl_surface = EGL_NO_SURFACE;
+                }
+                if (m_egl_context != EGL_NO_CONTEXT) {
+                    if (eglGetCurrentContext() == m_egl_context)
+                        eglMakeCurrent(s_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+                    eglDestroyContext(s_egl_display, m_egl_context);
+                    m_egl_context = EGL_NO_CONTEXT;
+                }
+                m_egl_config = nullptr;
+                
+            #endif
         #endif
 
         m_initialized = false;
@@ -157,6 +191,11 @@ public:
                     eglTerminate(s_egl_display);
                     s_egl_display = EGL_NO_DISPLAY;
                 }
+            #elif defined(KNST_USING_PLATFORM_ANDROID) && defined(KNST_PLATFORM_ANDROID_OPENGL)
+                if (s_egl_display != EGL_NO_DISPLAY) {
+                    eglTerminate(s_egl_display);
+                    s_egl_display = EGL_NO_DISPLAY;
+                }
             #elif KNST_USING_LINUX_PLATFORM_X11 && defined(KNST_OPENGL_USING_GLX)
                 s_glx_display = nullptr;
             #endif
@@ -169,74 +208,88 @@ public:
     }
     
     KNST_FORCE_INLINE void SwapBuffers() {
+
+
+
+            GLint old_viewport[4];
+            GLint old_scissor[4];
+            GLfloat old_clear_color[4];
+            GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
+
+            glGetIntegerv(GL_VIEWPORT, old_viewport);
+            glGetIntegerv(GL_SCISSOR_BOX, old_scissor);
+            glGetFloatv(GL_COLOR_CLEAR_VALUE, old_clear_color);
+
+            
+            int w = window->get_window_event_handle().window_width;
+            int h = window->get_window_event_handle().window_height;
+            glViewport(0, 0, w, h);
+
+            #if !defined(KNST_USING_PLATFORM_ANDROID)
+
+                #ifdef KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
+                    DrawKnstTitleBarBlueModern();
+                #elif defined(KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN)
+                    DrawKnstTitleBarWhiteModern();
+                #elif defined(KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC)
+                    DrawKnstTitleBarFuturistic();
+                #elif defined(KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW)
+                    DrawKnstTitleBarSunsetGlow();
+                #elif KNST_USING_LINUX_PLATFORM_WAYLAND && !defined(KNST_DISABLE_TITLE_BAR)
+                    DrawKnstTitleBarWhiteModern();
+                #endif
+
+            #endif
+            
+
+        
+            glViewport(old_viewport[0], old_viewport[1], old_viewport[2], old_viewport[3]);
+            glScissor(old_scissor[0], old_scissor[1], old_scissor[2], old_scissor[3]);
+            glClearColor(old_clear_color[0], old_clear_color[1], old_clear_color[2], old_clear_color[3]);
+
+            if (scissor_was_enabled) {
+                glEnable(GL_SCISSOR_TEST);
+            } else {
+                glDisable(GL_SCISSOR_TEST);
+            }
+
+
+            #if KNST_USING_PLATFORM_WINDOWS
+                ::SwapBuffers(m_hdc);
+            #elif KNST_USING_LINUX_PLATFORM_X11
+                #ifdef KNST_OPENGL_USING_EGL
+                    eglSwapBuffers(s_egl_display, m_egl_surface);
+                #elif defined(KNST_OPENGL_USING_GLX)
+                    glXSwapBuffers(s_glx_display, m_glx_drawable);
+                #endif
+            #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+                eglSwapBuffers(s_egl_display, m_egl_surface);
+            #elif defined(KNST_USING_PLATFORM_ANDROID)
+                eglSwapBuffers(s_egl_display, m_egl_surface);
+            #endif
+        
+        
+
     
-    GLint old_viewport[4];
-    GLint old_scissor[4];
-    GLfloat old_clear_color[4];
-    GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
-
-    glGetIntegerv(GL_VIEWPORT, old_viewport);
-    glGetIntegerv(GL_SCISSOR_BOX, old_scissor);
-    glGetFloatv(GL_COLOR_CLEAR_VALUE, old_clear_color);
-
-    
-    int w = window->get_window_event_handle().window_width;
-    int h = window->get_window_event_handle().window_height;
-    glViewport(0, 0, w, h);
-
-    
-    #ifdef KNST_WINDOW_USING_KNST_TITLE_BAR_BLUE_MODERN
-        DrawKnstTitleBarBlueModern();
-    #elif defined(KNST_WINDOW_USING_KNST_TITLE_BAR_WHITE_MODERN)
-        DrawKnstTitleBarWhiteModern();
-    #elif defined(KNST_WINDOW_USING_KNST_TITLE_BAR_FUTURISTIC)
-        DrawKnstTitleBarFuturistic();
-    #elif defined(KNST_WINDOW_USING_KNST_TITLE_BAR_SUNSET_GLOW)
-        DrawKnstTitleBarSunsetGlow();
-    #elif KNST_USING_LINUX_PLATFORM_WAYLAND && !defined(KNST_DISABLE_TITLE_BAR)
-        DrawKnstTitleBarWhiteModern();
-    #endif
-
-   
-    glViewport(old_viewport[0], old_viewport[1], old_viewport[2], old_viewport[3]);
-    glScissor(old_scissor[0], old_scissor[1], old_scissor[2], old_scissor[3]);
-    glClearColor(old_clear_color[0], old_clear_color[1], old_clear_color[2], old_clear_color[3]);
-
-    if (scissor_was_enabled) {
-        glEnable(GL_SCISSOR_TEST);
-    } else {
-        glDisable(GL_SCISSOR_TEST);
+        
     }
-
-
-    #if KNST_USING_PLATFORM_WINDOWS
-        ::SwapBuffers(m_hdc);
-    #elif KNST_USING_LINUX_PLATFORM_X11
-        #ifdef KNST_OPENGL_USING_EGL
-            eglSwapBuffers(s_egl_display, m_egl_surface);
-        #elif defined(KNST_OPENGL_USING_GLX)
-            glXSwapBuffers(s_glx_display, m_glx_drawable);
-        #endif
-    #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-        eglSwapBuffers(s_egl_display, m_egl_surface);
-    #endif
-}
 
 
 
 KNST_FORCE_INLINE void BeginFrame() {
+    #ifndef KNST_USING_PLATFORM_ANDROID
     if (window->get_window_event_handle().window_width != m_last_width || 
         window->get_window_event_handle().window_height != m_last_height) {
         
         m_last_width = window->get_window_event_handle().window_width;
         m_last_height = window->get_window_event_handle().window_height;
         
-       
-        int ch = window->get_window_event_handle().window_height; 
-        if (window->m_draw_custom_title_bar) {
-            ch -= window->get_title_bar_height();   
-        }
-
+        
+            int ch = window->get_window_event_handle().window_height; 
+            if (window->m_draw_custom_title_bar) {
+                ch -= window->get_title_bar_height();   
+            }
+        
       
         glViewport(0, 0, window->get_window_event_handle().window_width, ch);
         glEnable(GL_SCISSOR_TEST);
@@ -254,692 +307,694 @@ KNST_FORCE_INLINE void BeginFrame() {
             }
         #endif
     }
+    #endif
 }
+#ifndef KNST_USING_PLATFORM_ANDROID
 
-
-KNST_FORCE_INLINE void DrawKnstTitleBarBlueModern()
-{
-    constexpr int BW = 48;
-    const int TH = window->get_title_bar_height();
-    const int w = window->get_window_event_handle().window_width;
-    const int h = window->get_window_event_handle().window_height;
-    const int gy = h - TH;
-    
-
-    const int mx = (int)window->m_mouse_x;
-    const int my = (int)window->m_mouse_y;
-    
-    const bool focused = window->get_window_event_handle().is_focused;
-    
-   
-    const bool in_titlebar = (my >= 0 && my <= TH);
-    
-  
-    const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
-    const bool hover_max = in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
-    const bool hover_min = in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
-
-    glEnable(GL_SCISSOR_TEST);
-
-   
-    glScissor(0, gy, w, TH);
-    glClearColor(
-        focused ? 0.155f : 0.135f,
-        focused ? 0.160f : 0.140f,
-        focused ? 0.170f : 0.150f,
-        1.0f
-    );
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    glScissor(0, gy, w, 2);
-    glClearColor(
-        focused ? 0.24f : 0.10f,
-        focused ? 0.50f : 0.20f,
-        focused ? 0.78f : 0.35f,
-        1.0f
-    );
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    constexpr int HP = 4;
-    if (hover_close) {
-        glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP * 2);
-        glClearColor(0.88f, 0.18f, 0.22f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_max) {
-        glScissor(w - BW * 2 + 1, gy + HP, BW - 2, TH - HP * 2);
-        glClearColor(0.20f, 0.21f, 0.23f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_min) {
-        glScissor(w - BW * 3 + 1, gy + HP, BW - 2, TH - HP * 2);
-        glClearColor(0.20f, 0.21f, 0.23f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-
-   
-    glClearColor(0.28f, 0.29f, 0.30f, 0.35f);
-    glScissor(w - BW, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(w - BW * 2, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    const int cy = gy + TH / 2;
-    
-   
-    glClearColor(
-        hover_min ? 1.0f : 0.84f,
-        hover_min ? 0.97f : 0.85f,
-        hover_min ? 0.97f : 0.88f,
-        1.0f
-    );
-    int cx = w - BW * 5 / 2;
-    glScissor(cx - 5, cy, 10, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    cx = w - BW * 3 / 2;
-    if (!window->get_window_event_handle().is_maximized) {
-        glClearColor(
-            hover_max ? 1.0f : 0.84f,
-            hover_max ? 0.97f : 0.85f,
-            hover_max ? 0.97f : 0.88f,
-            1.0f
-        );
-        glScissor(cx - 4, cy - 5, 8, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 4, 1, 8);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 8);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 8, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy - 6, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy - 6, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy + 5, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy + 5, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-    } else {
-        glClearColor(0.52f, 0.54f, 0.58f, 1.0f);
-        glScissor(cx - 1, cy - 5, 6, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 6);
-        glClear(GL_COLOR_BUFFER_BIT);
+    KNST_FORCE_INLINE void DrawKnstTitleBarBlueModern()
+    {
+        constexpr int BW = 48;
+        const int TH = window->get_title_bar_height();
+        const int w = window->get_window_event_handle().window_width;
+        const int h = window->get_window_event_handle().window_height;
+        const int gy = h - TH;
         
+
+        const int mx = (int)window->m_mouse_x;
+        const int my = (int)window->m_mouse_y;
+        
+        const bool focused = window->get_window_event_handle().is_focused;
+        
+    
+        const bool in_titlebar = (my >= 0 && my <= TH);
+        
+    
+        const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
+        const bool hover_max = in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
+        const bool hover_min = in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
+
+        glEnable(GL_SCISSOR_TEST);
+
+    
+        glScissor(0, gy, w, TH);
         glClearColor(
-            hover_max ? 1.0f : 0.84f,
-            hover_max ? 0.97f : 0.85f,
-            hover_max ? 0.97f : 0.88f,
+            focused ? 0.155f : 0.135f,
+            focused ? 0.160f : 0.140f,
+            focused ? 0.170f : 0.150f,
             1.0f
         );
-        glScissor(cx - 5, cy - 2, 7, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 1, 1, 6);
+
+        
+        glScissor(0, gy, w, 2);
+        glClearColor(
+            focused ? 0.24f : 0.10f,
+            focused ? 0.50f : 0.20f,
+            focused ? 0.78f : 0.35f,
+            1.0f
+        );
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 6, 1);
+
+        
+        constexpr int HP = 4;
+        if (hover_close) {
+            glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP * 2);
+            glClearColor(0.88f, 0.18f, 0.22f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_max) {
+            glScissor(w - BW * 2 + 1, gy + HP, BW - 2, TH - HP * 2);
+            glClearColor(0.20f, 0.21f, 0.23f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_min) {
+            glScissor(w - BW * 3 + 1, gy + HP, BW - 2, TH - HP * 2);
+            glClearColor(0.20f, 0.21f, 0.23f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+    
+        glClearColor(0.28f, 0.29f, 0.30f, 0.35f);
+        glScissor(w - BW, gy + 11, 1, TH - 22);
         glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(w - BW * 2, gy + 11, 1, TH - 22);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+    
+        const int cy = gy + TH / 2;
+        
+    
+        glClearColor(
+            hover_min ? 1.0f : 0.84f,
+            hover_min ? 0.97f : 0.85f,
+            hover_min ? 0.97f : 0.88f,
+            1.0f
+        );
+        int cx = w - BW * 5 / 2;
+        glScissor(cx - 5, cy, 10, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy - 1, 1, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 4, cy - 1, 1, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        
+        cx = w - BW * 3 / 2;
+        if (!window->get_window_event_handle().is_maximized) {
+            glClearColor(
+                hover_max ? 1.0f : 0.84f,
+                hover_max ? 0.97f : 0.85f,
+                hover_max ? 0.97f : 0.88f,
+                1.0f
+            );
+            glScissor(cx - 4, cy - 5, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        } else {
+            glClearColor(0.52f, 0.54f, 0.58f, 1.0f);
+            glScissor(cx - 1, cy - 5, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            
+            glClearColor(
+                hover_max ? 1.0f : 0.84f,
+                hover_max ? 0.97f : 0.85f,
+                hover_max ? 0.97f : 0.88f,
+                1.0f
+            );
+            glScissor(cx - 5, cy - 2, 7, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 1, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        
+        cx = w - BW / 2;
+        glClearColor(
+            hover_close ? 1.0f : 0.84f,
+            hover_close ? 0.97f : 0.85f,
+            hover_close ? 0.97f : 0.88f,
+            1.0f
+        );
+
+        
+        glScissor(cx - 5, cy - 5, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy - 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 3, cy - 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 2, cy - 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 1, cy - 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx, cy, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 1, cy + 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 2, cy + 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 3, cy + 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 4, cy + 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        
+        glScissor(cx + 4, cy - 5, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 3, cy - 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 2, cy - 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 1, cy - 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx, cy - 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 1, cy, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 2, cy + 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 3, cy + 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy + 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 5, cy + 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glDisable(GL_SCISSOR_TEST);
     }
 
+
+    KNST_FORCE_INLINE void DrawKnstTitleBarSunsetGlow()
+    {
+        constexpr int BW = 46;
+        const int TH = window->get_title_bar_height();
+        const int w = window->get_window_event_handle().window_width;
+        const int h = window->get_window_event_handle().window_height;
+        const int gy = h - TH;
+        
+        
+        const int mx = (int)window->m_mouse_x;
+        const int my = (int)window->m_mouse_y;
+        
+        const bool focused = window->get_window_event_handle().is_focused;
+        
+        
+        const bool in_titlebar = (my >= 0 && my <= TH);
+        
     
-    cx = w - BW / 2;
-    glClearColor(
-        hover_close ? 1.0f : 0.84f,
-        hover_close ? 0.97f : 0.85f,
-        hover_close ? 0.97f : 0.88f,
-        1.0f
-    );
+        const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
+        const bool hover_max= in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
+        const bool hover_min  =   in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
+
+        glEnable(GL_SCISSOR_TEST);
 
     
-    glScissor(cx - 5, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    glScissor(cx + 4, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 5, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glDisable(GL_SCISSOR_TEST);
-}
-
-
-KNST_FORCE_INLINE void DrawKnstTitleBarSunsetGlow()
-{
-    constexpr int BW = 46;
-    const int TH = window->get_title_bar_height();
-    const int w = window->get_window_event_handle().window_width;
-    const int h = window->get_window_event_handle().window_height;
-    const int gy = h - TH;
-    
-    
-    const int mx = (int)window->m_mouse_x;
-    const int my = (int)window->m_mouse_y;
-    
-    const bool focused = window->get_window_event_handle().is_focused;
-    
-    
-    const bool in_titlebar = (my >= 0 && my <= TH);
-    
-   
-    const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
-    const bool hover_max= in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
-    const bool hover_min  =   in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
-
-    glEnable(GL_SCISSOR_TEST);
-
-   
-    glScissor(0, gy, w, TH);
-    glClearColor(focused ? 0.90f : 0.85f, focused ? 0.78f : 0.74f, focused ? 0.68f : 0.64f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    glScissor(0, gy, w, 2);
-    glClearColor(focused ? 1.00f : 0.70f, focused ? 0.45f : 0.38f, focused ? 0.15f : 0.18f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    constexpr int HP = 4;
-    if (hover_close) {
-        glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.88f, 0.32f, 0.22f, 1.0f);
+        glScissor(0, gy, w, TH);
+        glClearColor(focused ? 0.90f : 0.85f, focused ? 0.78f : 0.74f, focused ? 0.68f : 0.64f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_max) {
-        glScissor(w - BW*2 + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.82f, 0.68f, 0.55f, 1.0f);
+
+    
+        glScissor(0, gy, w, 2);
+        glClearColor(focused ? 1.00f : 0.70f, focused ? 0.45f : 0.38f, focused ? 0.15f : 0.18f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_min) {
-        glScissor(w - BW*3 + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.82f, 0.68f, 0.55f, 1.0f);
+
+    
+        constexpr int HP = 4;
+        if (hover_close) {
+            glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.88f, 0.32f, 0.22f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_max) {
+            glScissor(w - BW*2 + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.82f, 0.68f, 0.55f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_min) {
+            glScissor(w - BW*3 + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.82f, 0.68f, 0.55f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        
+        glClearColor(0.60f, 0.40f, 0.22f, 0.35f);
+        glScissor(w - BW, gy + 11, 1, TH - 22);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
+        glScissor(w - BW*2, gy + 11, 1, TH - 22);
+        glClear(GL_COLOR_BUFFER_BIT);
 
     
-    glClearColor(0.60f, 0.40f, 0.22f, 0.35f);
-    glScissor(w - BW, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(w - BW*2, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    const int cy = gy + TH/2;
+        const int cy = gy + TH/2;
+        
     
-   
-    glClearColor(0.30f, 0.12f, 0.04f, 1.0f);
-    int cx = w - BW*5/2;
-    glScissor(cx - 5, cy, 10, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    cx = w - BW*3/2;
-    if (!window->get_window_event_handle().is_maximized) {
         glClearColor(0.30f, 0.12f, 0.04f, 1.0f);
-        glScissor(cx - 4, cy - 5, 8, 1);
+        int cx = w - BW*5/2;
+        glScissor(cx - 5, cy, 10, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 4, 1, 8);
+        glScissor(cx - 4, cy - 1, 1, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 8);
+        glScissor(cx + 4, cy - 1, 1, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 8, 1);
+
+        
+        cx = w - BW*3/2;
+        if (!window->get_window_event_handle().is_maximized) {
+            glClearColor(0.30f, 0.12f, 0.04f, 1.0f);
+            glScissor(cx - 4, cy - 5, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        } else {
+            glClearColor(0.55f, 0.32f, 0.15f, 1.0f);
+            glScissor(cx - 1, cy - 5, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glClearColor(0.30f, 0.12f, 0.04f, 1.0f);
+            glScissor(cx - 5, cy - 2, 7, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 1, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+    
+        cx = w - BW / 2;
+        glClearColor(
+            hover_close ? 1.0f : 0.30f,
+            hover_close ? 0.95f : 0.12f,
+            hover_close ? 0.90f : 0.04f,
+            1.0f
+        );
+
+
+        glScissor(cx - 5, cy - 5, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy - 6, 2, 1);
+        glScissor(cx - 4, cy - 4, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy - 6, 2, 1);
+        glScissor(cx - 3, cy - 3, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy + 5, 2, 1);
+        glScissor(cx - 2, cy - 2, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy + 5, 2, 1);
+        glScissor(cx - 1, cy - 1, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-    } else {
-        glClearColor(0.55f, 0.32f, 0.15f, 1.0f);
-        glScissor(cx - 1, cy - 5, 6, 1);
+        glScissor(cx, cy, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 6);
+        glScissor(cx + 1, cy + 1, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(0.30f, 0.12f, 0.04f, 1.0f);
-        glScissor(cx - 5, cy - 2, 7, 1);
+        glScissor(cx + 2, cy + 2, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 1, 1, 6);
+        glScissor(cx + 3, cy + 3, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 6, 1);
+        glScissor(cx + 4, cy + 4, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
+
+        
+        glScissor(cx + 4, cy - 5, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 3, cy - 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 2, cy - 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 1, cy - 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx, cy - 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 1, cy, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 2, cy + 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 3, cy + 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy + 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 5, cy + 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glDisable(GL_SCISSOR_TEST);
     }
 
-   
-    cx = w - BW / 2;
-    glClearColor(
-        hover_close ? 1.0f : 0.30f,
-        hover_close ? 0.95f : 0.12f,
-        hover_close ? 0.90f : 0.04f,
-        1.0f
-    );
 
 
-    glScissor(cx - 5, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
+    KNST_FORCE_INLINE void DrawKnstTitleBarWhiteModern()
+    {
+        constexpr int BW = 46;
+        const int TH = window->get_title_bar_height();
+        const int w = window->get_window_event_handle().window_width;
+        const int h = window->get_window_event_handle().window_height;
+        const int gy = h - TH;
+        
+        
+        const int mx = (int)window->m_mouse_x;
+        const int my = (int)window->m_mouse_y;
+        
+        const bool focused = window->get_window_event_handle().is_focused;
+        
     
-    glScissor(cx + 4, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 5, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
+        const bool in_titlebar = (my >= 0 && my <= TH);
+        
+        
+        const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
+        const bool hover_max   = in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
+        const bool hover_min   = in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
 
-    glDisable(GL_SCISSOR_TEST);
-}
+        glEnable(GL_SCISSOR_TEST);
 
-
-
-KNST_FORCE_INLINE void DrawKnstTitleBarWhiteModern()
-{
-    constexpr int BW = 46;
-    const int TH = window->get_title_bar_height();
-    const int w = window->get_window_event_handle().window_width;
-    const int h = window->get_window_event_handle().window_height;
-    const int gy = h - TH;
-    
-    
-    const int mx = (int)window->m_mouse_x;
-    const int my = (int)window->m_mouse_y;
-    
-    const bool focused = window->get_window_event_handle().is_focused;
-    
-   
-    const bool in_titlebar = (my >= 0 && my <= TH);
-    
-    
-    const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
-    const bool hover_max   = in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
-    const bool hover_min   = in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
-
-    glEnable(GL_SCISSOR_TEST);
-
-    
-    glScissor(0, gy, w, TH);
-    glClearColor(focused ? 0.95f : 0.88f, focused ? 0.95f : 0.88f, focused ? 0.97f : 0.90f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    glScissor(0, gy, w, 2);
-    glClearColor(focused ? 0.68f : 0.52f, focused ? 0.68f : 0.52f, focused ? 0.72f : 0.55f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    constexpr int HP = 4;
-    if (hover_close) {
-        glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.88f, 0.20f, 0.24f, 1.0f);
+        
+        glScissor(0, gy, w, TH);
+        glClearColor(focused ? 0.95f : 0.88f, focused ? 0.95f : 0.88f, focused ? 0.97f : 0.90f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_max) {
-        glScissor(w - BW*2 + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.78f, 0.78f, 0.82f, 1.0f);
+
+    
+        glScissor(0, gy, w, 2);
+        glClearColor(focused ? 0.68f : 0.52f, focused ? 0.68f : 0.52f, focused ? 0.72f : 0.55f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_min) {
-        glScissor(w - BW*3 + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.78f, 0.78f, 0.82f, 1.0f);
+
+        
+        constexpr int HP = 4;
+        if (hover_close) {
+            glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.88f, 0.20f, 0.24f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_max) {
+            glScissor(w - BW*2 + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.78f, 0.78f, 0.82f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_min) {
+            glScissor(w - BW*3 + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.78f, 0.78f, 0.82f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        
+        glClearColor(0.58f, 0.58f, 0.61f, 0.35f);
+        glScissor(w - BW, gy + 11, 1, TH - 22);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
+        glScissor(w - BW*2, gy + 11, 1, TH - 22);
+        glClear(GL_COLOR_BUFFER_BIT);
 
-    
-    glClearColor(0.58f, 0.58f, 0.61f, 0.35f);
-    glScissor(w - BW, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(w - BW*2, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    const int cy = gy + TH/2;
-    
-    
-    glClearColor(0.22f, 0.22f, 0.25f, 1.0f);
-    int cx = w - BW*5/2;
-    glScissor(cx - 5, cy, 10, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    cx = w - BW*3/2;
-    if (!window->get_window_event_handle().is_maximized) {
+        
+        const int cy = gy + TH/2;
+        
+        
         glClearColor(0.22f, 0.22f, 0.25f, 1.0f);
-        glScissor(cx - 4, cy - 5, 8, 1);
+        int cx = w - BW*5/2;
+        glScissor(cx - 5, cy, 10, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 4, 1, 8);
+        glScissor(cx - 4, cy - 1, 1, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 8);
+        glScissor(cx + 4, cy - 1, 1, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 8, 1);
+
+        
+        cx = w - BW*3/2;
+        if (!window->get_window_event_handle().is_maximized) {
+            glClearColor(0.22f, 0.22f, 0.25f, 1.0f);
+            glScissor(cx - 4, cy - 5, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        } else {
+            glClearColor(0.52f, 0.52f, 0.55f, 1.0f);
+            glScissor(cx - 1, cy - 5, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glClearColor(0.22f, 0.22f, 0.25f, 1.0f);
+            glScissor(cx - 5, cy - 2, 7, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 1, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        
+        cx = w - BW / 2;
+        glClearColor(
+            hover_close ? 1.0f : 0.22f,
+            hover_close ? 1.0f : 0.22f,
+            hover_close ? 1.0f : 0.25f,
+            1.0f
+        );
+
+        
+        glScissor(cx - 5, cy - 5, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy - 6, 2, 1);
+        glScissor(cx - 4, cy - 4, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy - 6, 2, 1);
+        glScissor(cx - 3, cy - 3, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy + 5, 2, 1);
+        glScissor(cx - 2, cy - 2, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy + 5, 2, 1);
+        glScissor(cx - 1, cy - 1, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-    } else {
-        glClearColor(0.52f, 0.52f, 0.55f, 1.0f);
-        glScissor(cx - 1, cy - 5, 6, 1);
+        glScissor(cx, cy, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 6);
+        glScissor(cx + 1, cy + 1, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(0.22f, 0.22f, 0.25f, 1.0f);
-        glScissor(cx - 5, cy - 2, 7, 1);
+        glScissor(cx + 2, cy + 2, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 1, 1, 6);
+        glScissor(cx + 3, cy + 3, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 6, 1);
+        glScissor(cx + 4, cy + 4, 2, 1);
         glClear(GL_COLOR_BUFFER_BIT);
+
+    
+        glScissor(cx + 4, cy - 5, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 3, cy - 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 2, cy - 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 1, cy - 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx, cy - 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 1, cy, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 2, cy + 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 3, cy + 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy + 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 5, cy + 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glDisable(GL_SCISSOR_TEST);
     }
 
-    
-    cx = w - BW / 2;
-    glClearColor(
-        hover_close ? 1.0f : 0.22f,
-        hover_close ? 1.0f : 0.22f,
-        hover_close ? 1.0f : 0.25f,
-        1.0f
-    );
-
-    
-    glScissor(cx - 5, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    glScissor(cx + 4, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 5, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glDisable(GL_SCISSOR_TEST);
-}
 
 
 
-KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
-{
-    constexpr int BW = 44;
-    const int TH = window->get_title_bar_height();
-    const int w = window->get_window_event_handle().window_width;
-    const int h = window->get_window_event_handle().window_height;
-    const int gy = h - TH;
-    
-    
-    const int mx = (int)window->m_mouse_x;
-    const int my = (int)window->m_mouse_y;
-    
-    const bool focused = window->get_window_event_handle().is_focused;
-    
-    
-    const bool in_titlebar = (my >= 0 && my <= TH);
-    
-    
-    const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
-    const bool hover_max   = in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
-    const bool hover_min   = in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
+    KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
+    {
+        constexpr int BW = 44;
+        const int TH = window->get_title_bar_height();
+        const int w = window->get_window_event_handle().window_width;
+        const int h = window->get_window_event_handle().window_height;
+        const int gy = h - TH;
+        
+        
+        const int mx = (int)window->m_mouse_x;
+        const int my = (int)window->m_mouse_y;
+        
+        const bool focused = window->get_window_event_handle().is_focused;
+        
+        
+        const bool in_titlebar = (my >= 0 && my <= TH);
+        
+        
+        const bool hover_close = in_titlebar && (mx >= w - BW) && (mx < w);
+        const bool hover_max   = in_titlebar && (mx >= w - BW * 2) && (mx < w - BW);
+        const bool hover_min   = in_titlebar && (mx >= w - BW * 3) && (mx < w - BW * 2);
 
-    glEnable(GL_SCISSOR_TEST);
+        glEnable(GL_SCISSOR_TEST);
 
-    
-    glScissor(0, gy, w, TH);
-    glClearColor(focused ? 0.10f : 0.07f, focused ? 0.12f : 0.08f, focused ? 0.18f : 0.12f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    glScissor(0, gy, w, 2);
-    glClearColor(focused ? 0.0f : 0.0f, focused ? 0.85f : 0.35f, focused ? 0.85f : 0.35f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    constexpr int HP = 4;
-    if (hover_close) {
-        glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.82f, 0.14f, 0.24f, 1.0f);
+        
+        glScissor(0, gy, w, TH);
+        glClearColor(focused ? 0.10f : 0.07f, focused ? 0.12f : 0.08f, focused ? 0.18f : 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_max) {
-        glScissor(w - BW*2 + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.14f, 0.17f, 0.24f, 1.0f);
+
+        
+        glScissor(0, gy, w, 2);
+        glClearColor(focused ? 0.0f : 0.0f, focused ? 0.85f : 0.35f, focused ? 0.85f : 0.35f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
-    if (hover_min) {
-        glScissor(w - BW*3 + 1, gy + HP, BW - 2, TH - HP*2);
-        glClearColor(0.14f, 0.17f, 0.24f, 1.0f);
+
+        
+        constexpr int HP = 4;
+        if (hover_close) {
+            glScissor(w - BW + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.82f, 0.14f, 0.24f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_max) {
+            glScissor(w - BW*2 + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.14f, 0.17f, 0.24f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        if (hover_min) {
+            glScissor(w - BW*3 + 1, gy + HP, BW - 2, TH - HP*2);
+            glClearColor(0.14f, 0.17f, 0.24f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
+        
+        glClearColor(0.0f, 0.32f, 0.32f, 0.40f);
+        glScissor(w - BW, gy + 11, 1, TH - 22);
         glClear(GL_COLOR_BUFFER_BIT);
-    }
+        glScissor(w - BW*2, gy + 11, 1, TH - 22);
+        glClear(GL_COLOR_BUFFER_BIT);
 
     
-    glClearColor(0.0f, 0.32f, 0.32f, 0.40f);
-    glScissor(w - BW, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(w - BW*2, gy + 11, 1, TH - 22);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-   
-    const int cy = gy + TH/2;
-    
-    
-    glClearColor(0.0f, 0.90f, 0.90f, 1.0f);
-    int cx = w - BW*5/2;
-    glScissor(cx - 5, cy, 10, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy - 1, 1, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    
-    cx = w - BW*3/2;
-    if (!window->get_window_event_handle().is_maximized) {
+        const int cy = gy + TH/2;
+        
+        
         glClearColor(0.0f, 0.90f, 0.90f, 1.0f);
-        glScissor(cx - 4, cy - 5, 8, 1);
+        int cx = w - BW*5/2;
+        glScissor(cx - 5, cy, 10, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 4, 1, 8);
+        glScissor(cx - 4, cy - 1, 1, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 8);
+        glScissor(cx + 4, cy - 1, 1, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 8, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy - 6, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy - 6, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 3, cy + 5, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 2, cy + 5, 2, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-    } else {
-        glClearColor(0.0f, 0.48f, 0.48f, 1.0f);
-        glScissor(cx - 1, cy - 5, 6, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx + 4, cy - 4, 1, 6);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glClearColor(0.0f, 0.90f, 0.90f, 1.0f);
-        glScissor(cx - 5, cy - 2, 7, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 5, cy - 1, 1, 6);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glScissor(cx - 4, cy + 4, 6, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
 
-   
-    cx = w - BW / 2;
-    glClearColor(
-        hover_close ? 1.0f : 0.0f,
-        hover_close ? 0.95f : 0.90f,
-        hover_close ? 0.95f : 0.90f,
-        1.0f
-    );
-
-   
-    glScissor(cx - 5, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 4, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
+        
+        cx = w - BW*3/2;
+        if (!window->get_window_event_handle().is_maximized) {
+            glClearColor(0.0f, 0.90f, 0.90f, 1.0f);
+            glScissor(cx - 4, cy - 5, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 8);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 8, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy - 6, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 3, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 2, cy + 5, 2, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        } else {
+            glClearColor(0.0f, 0.48f, 0.48f, 1.0f);
+            glScissor(cx - 1, cy - 5, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx + 4, cy - 4, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glClearColor(0.0f, 0.90f, 0.90f, 1.0f);
+            glScissor(cx - 5, cy - 2, 7, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 5, cy - 1, 1, 6);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glScissor(cx - 4, cy + 4, 6, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
 
     
-    glScissor(cx + 4, cy - 5, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 3, cy - 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 2, cy - 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx + 1, cy - 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx, cy - 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 1, cy, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 2, cy + 1, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 3, cy + 2, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 4, cy + 3, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glScissor(cx - 5, cy + 4, 2, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
+        cx = w - BW / 2;
+        glClearColor(
+            hover_close ? 1.0f : 0.0f,
+            hover_close ? 0.95f : 0.90f,
+            hover_close ? 0.95f : 0.90f,
+            1.0f
+        );
 
-    glDisable(GL_SCISSOR_TEST);
-}
+    
+        glScissor(cx - 5, cy - 5, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy - 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 3, cy - 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 2, cy - 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 1, cy - 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx, cy, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 1, cy + 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 2, cy + 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 3, cy + 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 4, cy + 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
 
+        
+        glScissor(cx + 4, cy - 5, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 3, cy - 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 2, cy - 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx + 1, cy - 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx, cy - 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 1, cy, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 2, cy + 1, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 3, cy + 2, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 4, cy + 3, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glScissor(cx - 5, cy + 4, 2, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glDisable(GL_SCISSOR_TEST);
+    }
+#endif
 
     KNST_FORCE_INLINE void MakeCurrent() {
         #if KNST_USING_PLATFORM_WINDOWS
@@ -952,7 +1007,12 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
             #endif
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
             eglMakeCurrent(s_egl_display, m_egl_surface, m_egl_surface, m_egl_context);
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                eglMakeCurrent(s_egl_display, m_egl_surface, m_egl_surface, m_egl_context);
+            #endif
         #endif
+        
     }
 
     KNST_FORCE_INLINE void ClearCurrent() {
@@ -966,7 +1026,12 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
             #endif
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
             eglMakeCurrent(s_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                eglMakeCurrent(s_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            #endif
         #endif
+        
     }
 
     KNST_FORCE_INLINE bool IsCurrent() const {
@@ -980,7 +1045,12 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
             #endif
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
             return eglGetCurrentContext() == m_egl_context;
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                return eglGetCurrentContext() == m_egl_context;
+            #endif
         #endif
+        
     }
 
     KNST_FORCE_INLINE void SetVSync(bool enabled) {
@@ -995,8 +1065,10 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
                 glXSwapIntervalEXT swapInterval = (glXSwapIntervalEXT)glXGetProcAddress((const GLubyte*)"glXSwapIntervalEXT");
                 if (swapInterval) swapInterval(s_glx_display, m_glx_drawable, enabled ? 1 : 0);
             #endif
-        #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-            eglSwapInterval(s_egl_display, enabled ? 1 : 0);
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                eglSwapInterval(s_egl_display, enabled ? 1 : 0);
+            #endif
         #endif
     }
 
@@ -1020,6 +1092,10 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
             #endif
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
             return (void*)eglGetProcAddress(name);
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                return (void*)eglGetProcAddress(name);
+            #endif
         #else
             return nullptr;
         #endif
@@ -1065,7 +1141,12 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
             #endif
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
             return (void*)m_egl_context;
+        #elif defined(KNST_USING_PLATFORM_ANDROID)
+            #ifdef KNST_PLATFORM_ANDROID_OPENGL
+                return (void*)m_egl_context;
+            #endif
         #endif
+        
     }
 
     KNST_FORCE_INLINE void* GetNativeDisplay() {
@@ -1093,6 +1174,11 @@ KNST_FORCE_INLINE void DrawKnstTitleBarFuturistic()
     #endif
 #elif KNST_USING_LINUX_PLATFORM_WAYLAND
     #include "linux/wayland/knst_linux_wayland_opengl_egl_support.hpp"
+#elif defined(KNST_USING_PLATFORM_ANDROID)
+    #ifdef KNST_PLATFORM_ANDROID_OPENGL
+        #include "android/knst_android_opengl_egl_support.hpp"
+    #endif
+
 #endif
 
 #endif
