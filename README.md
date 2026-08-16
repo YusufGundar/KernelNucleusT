@@ -382,7 +382,8 @@ build/./knst_app
 
 - Use the **Issues** page for bug reports and feature requests.
 - For any special requests or if you'd like to get in touch with me directly, you can reach me via email.
-
+- If you would like to help me
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/developeryk)
 
 
 ## 📄 License
