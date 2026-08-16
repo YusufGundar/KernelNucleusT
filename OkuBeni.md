@@ -84,7 +84,7 @@ Instance tabanlı, memory pool allocator. Thread-safe opsiyonu mevcuttur ayrıca
 ---
 ## Hedefler
 
-Gelecek için bi tür gui framework kütüphanesi tasarlamayı düşünüyorum  ayrıca regex destekli yapılar ve yine çapraz platform destekli dosya okuma işlemleri için temel yapılar eklemeyi düşünüyorum
+Gelecek için bi tür gui framework kütüphanesi tasarlamayı düşünüyorum ayrıca regex destekli yapılar ve yine çapraz platform destekli dosya okuma işlemleri için temel yapılar eklemeyi düşünüyorum , asıl büyük hedefim ise linuxda wayland için bir masaüstü ortamı geliştirmektir
 
 
 ---
