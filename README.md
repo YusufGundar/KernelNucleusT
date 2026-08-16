@@ -6,7 +6,7 @@ A modern C++17 library package. A high-performance, customizable, cross-platform
 
 ### Packaged Structures
 
-- **knst_window** -—-> Provides support for Window / Linux (X11 / Wayland) / Android <---
+- **knst_window** -—-> Provides support for (Window / Linux (X11 / Wayland) / Android) <----
 
 ---
 
