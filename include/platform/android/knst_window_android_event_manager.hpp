@@ -327,5 +327,6 @@ KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* e
     return 0;
 }
 
+
 #endif
 #endif // KNST_WINDOW_ANDROID_EVENT_MANAGER_HPP

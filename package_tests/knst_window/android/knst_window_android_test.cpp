@@ -110,7 +110,7 @@ void android_main(struct android_app* app) {
     
 
     knst_window_opengl_content content;
-    if (!content.Init(&window, false)) {
+    if (!content.Init(&window, false)) { // vsync false
         return;
     }
     
