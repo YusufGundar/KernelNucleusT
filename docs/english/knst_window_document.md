@@ -230,7 +230,7 @@ ___
 
 
 - You can create content with `knst_window_vulkan_content content`
-- With content.Init(`knst_window`), you give the address of your window with & to `knst_window` and connect your window to your content
+- With content.Init(`knst_window`), you give the address of your window with `knst_window` and connect your window to your content
 
 
 - You need to close your Vulkan content at the very end with `Destroy()`
