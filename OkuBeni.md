@@ -5,7 +5,7 @@ Modern C++17 kütüphane paketi. Yüksek performanslı, özelleştirilebilir , �
 ## İçerisinde 
 ### Paketli Yapılardan
 
-- knst_window  ---> Window / Linux(X11 / Wayland) / Android <---  Desteği sağlamaktadır
+- knst_window  ---> (Window / Linux(X11 / Wayland) / Android) <---  Desteği sağlamaktadır
 ___
 
 
