@@ -57,8 +57,8 @@
 
 //#define KNST_USING_PLATFORM_ANDROID    If you are using Android
 //
-//  --------> #define KNST_PLATFORM_ANDROID_OPENGL     If you are using Linux X11, you need to specify that additionally.
-//  --------> #define KNST_PLATFORM_ANDROID_VULKAN     If you are using Linux X11, you need to specify that additionally.
+//  --------> #define KNST_PLATFORM_ANDROID_OPENGL     If you are using Android, you need to specify that additionally.
+//  --------> #define KNST_PLATFORM_ANDROID_VULKAN     If you are using Android, you need to specify that additionally.
 
 
 

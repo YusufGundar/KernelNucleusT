@@ -119,11 +119,7 @@ private:
 
 public:
     
-    #if defined(KNST_USING_PLATFORM_ANDROID)
-        static void refresh_screens() noexcept;
-    #else
-        static void refresh_screens() noexcept;
-    #endif
+    static void refresh_screens() noexcept;
 
     static const knst_vector<knst_monitor>& get_monitor_list() noexcept {
         return m_monitor_list;

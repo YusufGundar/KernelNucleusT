@@ -44,9 +44,10 @@ class knst_window_opengl_content;
             JNIEnv* get() const { return env; }
             bool valid() const { return env != nullptr; }
         };
+        static void Init(struct android_app* app);
         static void shutdown();
     public:
-        static void Init(struct android_app* app);
+        
         static bool show();
         static bool hide();
         static void toggle();
@@ -1118,9 +1119,6 @@ public:
         KNST_FORCE_INLINE const wl_surface * get_wayland_surface_handle() const noexcept{
             return m_surface;
         }
-    #elif defined(KNST_USING_PLATFORM_ANDROID)
-
-        
 
     #endif
 
@@ -1178,9 +1176,6 @@ public:
     KNST_FORCE_INLINE knst_window(int width = KNST_DEFAULT, int height = KNST_DEFAULT,knst_c16string title = u"Knst_Window",int root_x = KNST_DEFAULT, int root_y = KNST_DEFAULT, 
         const knst_monitor& monitor = knst_monitor()){
 
-            
-
-
         }
 
     #endif
@@ -1199,13 +1194,7 @@ public:
     }
 
     KNST_FORCE_INLINE const bool& is_should_close()const noexcept{
-        
-        #if defined(KNST_USING_PLATFORM_ANDROID)
-            return m_should_close || (KnstWindowSources::m_app != nullptr && KnstWindowSources::m_app->destroyRequested != 0);
-        #else
-            return m_should_close;
-        #endif
-
+       return m_should_close;
         
     }
 
@@ -1223,7 +1212,7 @@ public:
 
 
 
-        void creation() noexcept;
+    void creation() noexcept;
 
 
     

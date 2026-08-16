@@ -6,82 +6,66 @@
 
 
 
-// Mouse action
-#define KNST_MOUSE_BUTTON_PRESS   13
-#define KNST_MOUSE_BUTTON_RELEASE 14
-//______________________________________
+#define KNST_MOUSE_BUTTON_LEFT          1
+#define KNST_MOUSE_BUTTON_MIDDLE        2
+#define KNST_MOUSE_BUTTON_RIGHT         3
+#define KNST_MOUSE_SCROLL_UP            4
+#define KNST_MOUSE_SCROLL_DOWN          5
 
 
-// Keyboard action
-#define KNST_KEY_PRESS            10
-#define KNST_KEY_RELEASE          11
-#define KNST_KEY_REPEAT           12
-//______________________________________
+#define KNST_WINDOW_FULL_SCREEN         8
+#define KNST_WINDOW_RESTORE             9
+#define KNST_WINDOW_MAXIMIZE            27
+#define KNST_WINDOW_MINIMIZE            28
 
 
-// Mouse buttons
-#define KNST_MOUSE_BUTTON_LEFT      1
-#define KNST_MOUSE_BUTTON_MIDDLE    2
-#define KNST_MOUSE_BUTTON_RIGHT     3
-#define KNST_MOUSE_SCROLL_UP        4
-#define KNST_MOUSE_SCROLL_DOWN      5
-//______________________________________
+#define KNST_KEY_PRESS                  10
+#define KNST_KEY_RELEASE                11
+#define KNST_KEY_REPEAT                 12
+#define KNST_KEYBOARD_EVENT             25
 
 
-#define KNST_KEYBOARD_EVENT       25
-#define KNST_MOUSE_EVENT          26
-#define KNST_UNKNOWN              0
+#define KNST_MOUSE_BUTTON_PRESS         13
+#define KNST_MOUSE_BUTTON_RELEASE       14
+#define KNST_MOUSE_SCROLL               15
+#define KNST_MOUSE_EVENT                26
 
 
-#define KNST_WINDOW_FULL_SCREEN      8
-#define KNST_WINDOW_RESTORE         9
-#define KNST_WINDOW_MAXIMIZE        27
-#define KNST_WINDOW_MINIMIZE        28
-
-#define KNST_DISCONNECT         33
-
-#define KNST_MOUSE_SCROLL         15
-
-#define KNST_MOTION_NOTIFY        16
-#define KNST_WINDOW_RESIZE        17
-#define KNST_WINDOW_MOVE          18
-#define KNST_CLOSE_WINDOW         19
-#define KNST_FOCUS_IN             20
-#define KNST_FOCUS_OUT            21
-#define KNST_ENTER_NOTIFY         22
-#define KNST_LEAVE_NOTIFY         23
-#define KNST_EXPOSE               24
+#define KNST_MOTION_NOTIFY              16
+#define KNST_WINDOW_RESIZE              17
+#define KNST_WINDOW_MOVE                18
+#define KNST_CLOSE_WINDOW               19
 
 
+#define KNST_FOCUS_IN                   20
+#define KNST_FOCUS_OUT                  21
+#define KNST_ENTER_NOTIFY               22
+#define KNST_LEAVE_NOTIFY               23
 
 
-
-#define KNST_CURSOR_NORMAL    29   
-#define KNST_CURSOR_HIDDEN    30
-  
-#define KNST_CURSOR_DISABLED  31  
+#define KNST_EXPOSE                     24
+#define KNST_DISCONNECT                 33
+#define KNST_UNKNOWN                    0
 
 
+#define KNST_CURSOR_NORMAL              29
+#define KNST_CURSOR_HIDDEN              30
+#define KNST_CURSOR_DISABLED            31
 
 
-#define KNST_FILE_DROP_ENTER    (1 << 13)  
-#define KNST_FILE_DROP_MOVE     (1 << 14) 
-#define KNST_FILE_DROP_LEAVE    (1 << 15) 
-#define KNST_FILE_DROP          (1 << 16) 
+#define KNST_FILE_DROP_ENTER            (1 << 13)   // 8192
+#define KNST_FILE_DROP_MOVE             (1 << 14)   // 16384
+#define KNST_FILE_DROP_LEAVE            (1 << 15)   // 32768
+#define KNST_FILE_DROP                  (1 << 16)   // 65536
 
 
+#define KNST_WINDOW_ATTRIB_DECORATED        110
+#define KNST_WINDOW_ATTRIB_RESIZABLE        111
+#define KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP    112
+#define KNST_WINDOW_ATTRIB_TRANSPARENT      113
 
 
-
-#define KNST_DEFAULT              -10000
-
-
-
-#define KNST_WINDOW_ATTRIB_DECORATED      110   
-#define KNST_WINDOW_ATTRIB_RESIZABLE      111   
-#define KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP  112   
-#define KNST_WINDOW_ATTRIB_TRANSPARENT    113   
-
+#define KNST_DEFAULT                    -10000
 
 
 
@@ -685,10 +669,6 @@
 
     #define KNST_MOBILE_TOUCH_EVENT    10017  
 
-   
-    #define KNST_MOBILE_KEY_EVENT      10018  
-
-   
     #define KNST_MOBILE_BACK_PRESS     10040  
     #define KNST_MOBILE_HOME_PRESS     10041  
     #define KNST_MOBILE_MENU_PRESS     10042  
