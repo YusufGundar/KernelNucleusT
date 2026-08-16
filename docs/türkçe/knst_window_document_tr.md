@@ -231,7 +231,7 @@ ___
 
 
 - `knst_window_vulkan_content content` ile content oluşturabilir
-- content.Init(`knst_window`) knst_window ' a pencerenizi & ile adresni verip contentinize pencerenizi bağlayabilirsiniz
+- content.Init(`knst_window`) knst_window ' a pencerenizi verip contentinize pencerenizi bağlayabilirsiniz
 
 
 - Vulkan contentinizi en son `Destroy()` ile kapatmanız gerekmektedir
