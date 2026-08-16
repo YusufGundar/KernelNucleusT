@@ -226,11 +226,7 @@ struct knst_window_event_system {
 
         #endif
 
-        #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            for (size_t i = 0; i < windows.size(); i++) {
-                windows[i]->call_redraw_callback();
-            };
-        #endif
+        
     }
 
 
@@ -397,11 +393,8 @@ struct knst_window_event_system {
 
             #endif
 
-            #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-                for (size_t i = 0; i < windows.size(); i++) {
-                    windows[i]->call_redraw_callback();
-                }
-            #endif
+            
+            
     }
 
 KNST_FORCE_INLINE static void timeout_pool_event(int timeout_ms = 16) noexcept {
@@ -587,11 +580,7 @@ KNST_FORCE_INLINE static void timeout_pool_event(int timeout_ms = 16) noexcept {
 
         #endif
 
-            #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-                for (size_t i = 0; i < windows.size(); i++) {
-                    windows[i]->call_redraw_callback();
-                }
-            #endif
+            
 
         
        

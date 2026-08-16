@@ -180,6 +180,8 @@ int main() {
     while (!window.is_should_close()) {
         knst_window_event_system::non_block_pool_event();
         
+        window.call_redraw_callback();
+
         const auto& handle = window.get_window_event_handle();
         
 
