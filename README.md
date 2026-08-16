@@ -91,7 +91,7 @@ An instance-based memory pool allocator. Thread-safe option is available. All fu
 
 ## Goals
 
-I plan to design a GUI framework library in the future, along with regex-supported structures and cross-platform file I/O primitives.
+I plan to design a GUI framework library for the future; I also intend to add structures with regex support and fundamental components for cross-platform file reading operations. However, my primary, major goal is to develop a desktop environment for Wayland on Linux.
 
 ---
 
