@@ -113,7 +113,7 @@ cmake --build build --config Release
 cmake -B build -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build --config Release
 
-# Çalıştır
+# Run
 build/knst_app.exe
 ```
 
@@ -133,7 +133,7 @@ cmake --build build
 cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
 
-# Çalıştır
+# Run
 build/knst_app.exe
 ```
 
@@ -154,7 +154,7 @@ cmake --build build
 cmake -B build -G Ninja -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
 
-# Çalıştır
+# Run
 build/knst_app.exe
 ```
 
@@ -183,7 +183,7 @@ cmake --build build
 cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
 
-# Çalıştır
+# Run
 build/./knst_app
 ```
 
@@ -201,7 +201,7 @@ cmake --build build
 cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
 cmake --build build
 
-# Çalıştır
+# Run
 build/./knst_app
 ```
 
