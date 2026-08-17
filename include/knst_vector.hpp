@@ -256,9 +256,14 @@ public:
         }
         m_size = 0;
     }
+    
+    T* data() noexcept {
+        return m_data;
+    }
     KNST_FORCE_INLINE const T* data() const noexcept {
         return m_data;
     }
+
     KNST_FORCE_INLINE void resize(uint32_t new_size) noexcept { // resize
         if (new_size < m_size) {
             
