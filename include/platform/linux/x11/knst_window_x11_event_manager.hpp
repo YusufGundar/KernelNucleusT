@@ -119,15 +119,33 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
 
         case XCB_CONFIGURE_NOTIFY: {
             xcb_configure_notify_event_t* config = (xcb_configure_notify_event_t*)ev;
-            window.m_knst_event.window_width = config->width;
-            window.m_knst_event.window_height = config->height;
-            window.m_knst_event.window_root_x = config->x;
-            window.m_knst_event.window_root_y = config->y;
-            window.m_knst_event.type = KNST_WINDOW_RESIZE;
-
-          
             
-           
+            int new_width = config->width;
+            int new_height = config->height;
+            
+            
+            int old_width = window.m_knst_event.window_width;
+            int old_height = window.m_knst_event.window_height;
+            
+            bool size_changed = (new_width != old_width) || (new_height != old_height);
+            
+            
+            bool pos_changed = (config->x != window.m_knst_event.window_root_x) || (config->y != window.m_knst_event.window_root_y);
+                            
+            
+            if (size_changed) {
+                window.m_knst_event.type = KNST_WINDOW_RESIZE;
+                window.m_knst_event.window_width = new_width;
+                window.m_knst_event.window_height = new_height;
+            } else if (pos_changed) {
+                window.m_knst_event.type = KNST_WINDOW_MOVE;
+                window.m_knst_event.window_root_x = config->x;
+                window.m_knst_event.window_root_y = config->y;
+            } else {
+                window.m_knst_event.type = KNST_UNKNOWN;
+                break;
+            }
+            
             break;
         }
 
