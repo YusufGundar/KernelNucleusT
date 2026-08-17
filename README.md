@@ -225,8 +225,9 @@ build/./knst_app
 ```json
 {
     "configurations": [
+       
         {
-            "name": "Android",
+            "name": "Android (OpenGL ES)",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
@@ -239,7 +240,8 @@ build/./knst_app
             ],
             "defines": [
                 "KNST_USING_PLATFORM_ANDROID",
-                "KNST_PLATFORM_ANDROID_OPENGL"
+                "KNST_PLATFORM_ANDROID_OPENGL",
+                "KNST_USING_OPENGL"
             ],
             "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
             "cStandard": "c11",
@@ -247,7 +249,66 @@ build/./knst_app
             "intelliSenseMode": "linux-clang-arm64"
         },
         {
-            "name": "Windows (MSVC)",
+            "name": "Android (Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_ANDROID",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-arm64"
+        },
+        {
+            "name": "Android (OpenGL ES + Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/EGL",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES3",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES2",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan",
+                "/opt/android-ndk/sources/android/native_app_glue"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_ANDROID",
+                "KNST_PLATFORM_ANDROID_OPENGL",
+                "KNST_USING_OPENGL",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-arm64"
+        },
+        {
+            "name": "Android (Headless - No Graphics)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
+                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_ANDROID",
+                "KNST_HEADLESS_MODE"
+            ],
+            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-clang-arm64"
+        },
+        {
+            "name": "Windows (MSVC - OpenGL)",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
@@ -271,7 +332,79 @@ build/./knst_app
             "intelliSenseMode": "windows-msvc-x64"
         },
         {
-            "name": "Windows (MinGW)",
+            "name": "Windows (MSVC - Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt",
+                "${env:VULKAN_SDK}/Include"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_VULKAN",
+                "_CRT_SECURE_NO_WARNINGS",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "cl.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Windows (MSVC - OpenGL + Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt",
+                "${env:VULKAN_SDK}/Include"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_WGL",
+                "KNST_USING_VULKAN",
+                "_CRT_SECURE_NO_WARNINGS",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "cl.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Windows (MSVC - Headless)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
+                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_HEADLESS_MODE",
+                "_CRT_SECURE_NO_WARNINGS",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "cl.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        },
+        {
+            "name": "Windows (MinGW - OpenGL)",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
@@ -283,7 +416,8 @@ build/./knst_app
             ],
             "defines": [
                 "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_OPENGL"
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_WGL"
             ],
             "compilerPath": "g++.exe",
             "cStandard": "c11",
@@ -291,7 +425,48 @@ build/./knst_app
             "intelliSenseMode": "windows-gcc-x64"
         },
         {
-            "name": "Linux (X11)",
+            "name": "Windows (MinGW - Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "C:/msys64/mingw64/include",
+                "C:/msys64/mingw64/include/vulkan",
+                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
+                "C:/mingw64/include"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        },
+        {
+            "name": "Windows (MinGW - OpenGL + Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "C:/msys64/mingw64/include",
+                "C:/msys64/mingw64/include/GL",
+                "C:/msys64/mingw64/include/vulkan",
+                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
+                "C:/mingw64/include"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_WGL",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        },
+        {
+            "name": "Linux X11 (OpenGL - GLX)",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
@@ -311,7 +486,105 @@ build/./knst_app
             "intelliSenseMode": "linux-gcc-x64"
         },
         {
-            "name": "Linux (Wayland)",
+            "name": "Linux X11 (OpenGL - EGL)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
+                "${workspaceFolder}/include/linux/x11"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_EGL"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux X11 (Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux X11 (OpenGL - GLX + Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
+                "${workspaceFolder}/include/linux/x11",
+                "/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_GLX",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux X11 (OpenGL - EGL + Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
+                "${workspaceFolder}/include/linux/x11",
+                "/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_EGL",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux X11 (Headless)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_HEADLESS_MODE"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux Wayland (OpenGL - EGL)",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
@@ -331,17 +604,57 @@ build/./knst_app
             "intelliSenseMode": "linux-gcc-x64"
         },
         {
-            "name": "Linux (Vulkan)",
+            "name": "Linux Wayland (Vulkan)",
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/include",
                 "/usr/include",
                 "/usr/include/x86_64-linux-gnu",
+                "${workspaceFolder}/include/linux/wayland",
+                "/usr/include/wayland-client",
                 "/usr/include/vulkan"
             ],
             "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
+                "KNST_USING_LINUX_PLATFORM_WAYLAND",
                 "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux Wayland (OpenGL - EGL + Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu",
+                "${workspaceFolder}/include/linux/wayland",
+                "/usr/include/wayland-client",
+                "/usr/include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_WAYLAND",
+                "KNST_USING_OPENGL",
+                "KNST_OPENGL_USING_EGL",
+                "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux Wayland (Headless)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "/usr/include"
+            ],
+            "defines": [
+                "KNST_USING_LINUX_PLATFORM_WAYLAND",
+                "KNST_HEADLESS_MODE"
             ],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "c11",
