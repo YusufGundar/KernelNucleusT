@@ -1,5 +1,8 @@
 # KernelNucleusT
 
+A lot of errors have been detected and are being fixed......
+
+
 A modern C++17 library package. A high-performance, customizable, cross-platform library package
 
 ## Included Components
