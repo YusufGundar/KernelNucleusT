@@ -1,3 +1,12 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: Starts the window's Vulkan resources.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
 #ifndef KNST_WINDOW_VULKAN_MANAGER_HPP
 #define KNST_WINDOW_VULKAN_MANAGER_HPP
 #pragma once
@@ -69,10 +78,7 @@ private:
         layerCount = 1;
     #endif
     
-    // ================================================
-    // ★★★ INSTANCE EXTENSIONS - SADECE SURFACE EXTENSIONS ★★★
-    // VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME BURADA OLMAZ!
-    // ================================================
+    //★★★★★★ VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME its important for gui framework★★★★★★ 
     const char* instanceExtensions[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
         m_surfaceExtension
@@ -89,7 +95,7 @@ private:
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = 2;  // ← 2! (3 değil)
+    createInfo.enabledExtensionCount = 2;
     createInfo.ppEnabledExtensionNames = instanceExtensions;
     createInfo.enabledLayerCount = layerCount;
     createInfo.ppEnabledLayerNames = validationLayers;
@@ -159,24 +165,24 @@ private:
     queueCreateInfo.queueCount = 1;
     queueCreateInfo.pQueuePriorities = &queuePriority;
     
-    // ================================================
-    // ★★★ DEVICE EXTENSIONS - VK_EXT_vertex_input_dynamic_state BURADA! ★★★
-    // ================================================
+  
+    // ★★★★★★ DEVICE EXTENSIONS - VK_EXT_vertex_input_dynamic_state  ★★★★★★
+    // If you do not get this add-on, the GUI framework will not work (for now). ★★★★★★★★★★★★★★★★★★★★★★★★ You can change it.You can change it.
     const char* deviceExtensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME
     };
     
-    // ================================================
-    // ★★★ DYNAMIC STATE FEATURE AKTİF ET ★★★
-    // ================================================
+    // ★★★★★★ ★★★★★★ ★★★★★★ 
+    // ★★★ We activate it. ★★★
+    // ★★★★★★ ★★★★★★ ★★★★★★ 
     VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT vertexInputDynState{};
     vertexInputDynState.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT;
     vertexInputDynState.vertexInputDynamicState = VK_TRUE;
     
     VkDeviceCreateInfo deviceCreateInfo = {};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.pNext = &vertexInputDynState;  // ★★★ FEATURE'U EKLE ★★★
+    deviceCreateInfo.pNext = &vertexInputDynState; //this feature
     deviceCreateInfo.queueCreateInfoCount = 1;
     deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
     deviceCreateInfo.enabledExtensionCount = 2;

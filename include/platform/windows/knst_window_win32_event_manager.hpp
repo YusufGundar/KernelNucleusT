@@ -1,3 +1,13 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: The event management mechanism in the Windows operating system is located in this file.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
+
 #ifndef KNST_WINDOW_WIN32_EVENT_MANAGER_HPP
 #define KNST_WINDOW_WIN32_EVENT_MANAGER_HPP
 #pragma once
@@ -313,7 +323,7 @@ case WM_SIZING: {
 
         window->m_knst_event.is_maximized = IsZoomed(hwnd);
         
-        // 🔥 RESIZE SIRASINDA RENDER AL
+      
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
             window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
         #endif
@@ -422,7 +432,7 @@ case WM_SYSKEYDOWN: {
     int scancode = (lParam >> 16) & 0xFF;
 
     if (window->m_knst_event.find_held_by_scancode(scancode)) {
-        return 0; // native autorepeat -> check_key_repeat zaten üretiyor
+        return 0; 
     }
 
     window->m_knst_event.add_held_key(vk, scancode, KnstWindowSources::get_current_time_ms());

@@ -1,3 +1,14 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: The event management mechanism in the linux(x11) operating system is located in this file.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
+
+
 #ifndef KNST_LINUX_X11_EVENT_MANAGER_HPP
 #define KNST_LINUX_X11_EVENT_MANAGER_HPP
 #pragma once

@@ -781,7 +781,7 @@ struct knst_held_key {
 #define KNST_MAX_HELD_KEYS 8
 #endif
 
-// knst_window_event private kısmında:
+// new event system private class user dont need
 knst_held_key m_held_keys[KNST_MAX_HELD_KEYS];
 
 KNST_FORCE_INLINE knst_held_key* find_held_by_scancode(int scancode) noexcept {
@@ -797,7 +797,7 @@ KNST_FORCE_INLINE knst_held_key* add_held_key(int key_code, int scancode, uint32
             return &hk;
         }
     }
-    return nullptr; // dizi doluysa (nadiren olur) sessizce yok say
+    return nullptr; // We disregard it.
 }
 
 KNST_FORCE_INLINE void remove_held_key(int scancode) noexcept {
@@ -828,7 +828,7 @@ KNST_FORCE_INLINE void remove_held_key(int scancode) noexcept {
         bool m_key_held = false;
         int m_last_scancode = 0;
 
-        // Ortak tuş-tekrar zamanlayıcısı — X11/Win32/Wayland/Android hepsi bunu kullanır.
+        // The repeat timer, however, may vary from system to system.
         uint32_t m_last_repeat_time = 0;
         bool m_repeat_initialized = false;
         static constexpr uint32_t KEY_REPEAT_DELAY = 150;
@@ -928,11 +928,10 @@ KNST_FORCE_INLINE void remove_held_key(int scancode) noexcept {
 
 
 };
+//=======================
+//category-specific
+//=======================
 
-// ============================================================
-// Kategoriye özel, allocation-free mini ring buffer.
-// N, 2'nin kuvveti olmalı (bitmask ile modulo'suz index hesabı için).
-// ============================================================
 #ifndef KNST_MOUSE_EVENT_SLOTS
     #define KNST_MOUSE_EVENT_SLOTS 8
 #endif
@@ -958,13 +957,12 @@ struct knst_event_mini_ring {
         data[head] = ev;
         head = (head + 1) & (N - 1);
         if (count < N) count++;
-        // count zaten N ise: en eski slotun üzerine yazılmış olur (head zaten o slotu gösteriyordu),
-        // hiçbir kaydırma/memmove gerekmez, maliyet her koşulda O(1) kalır.
+        
     }
 
     KNST_FORCE_INLINE size_t size() const noexcept { return count; }
 
-    // logical_index: 0 = bu frame'de gelen en eski event, size()-1 = en yeni event
+   
     KNST_FORCE_INLINE const knst_window_event& at(size_t logical_index) const noexcept {
         size_t start = (head + N - count) & (N - 1);
         return data[(start + logical_index) & (N - 1)];
@@ -973,7 +971,7 @@ struct knst_event_mini_ring {
     KNST_FORCE_INLINE void clear() noexcept {
         count = 0;
         head = 0;
-        // Diziye dokunulmuyor — bir sonraki push zaten üzerine yazacak.
+       
     }
 };
 
@@ -1123,20 +1121,20 @@ private:
     
     knst_window_event m_knst_event;
 
-    // === Tekil yeterli kategoriler (sadece son değer önemli, sürekli/az sayıda gelir) ===
+    // mutually sufficient categories
     knst_window_event m_resize_event;
     knst_window_event m_move_event;
     knst_window_event m_focus_event;
-    knst_window_event m_window_state_event;   // maximize/minimize/restore/fullscreen
+    knst_window_event m_window_state_event; 
     knst_window_event m_expose_event;
-    knst_window_event m_misc_event;           // nadir/diğer kategorilere girmeyenler
-    knst_window_event m_lifecycle_event;      // mobil: pause/resume/stop/save-state/low-memory/config-changed vb.
+    knst_window_event m_misc_event; 
+    knst_window_event m_lifecycle_event; 
 
-    // === Kritik, aynı frame'de art arda gelebilen kategoriler (mini ring) ===
+  
     knst_event_mini_ring<KNST_MOUSE_EVENT_SLOTS>    m_mouse_events;
     knst_event_mini_ring<KNST_KEYBOARD_EVENT_SLOTS> m_keyboard_events;
     knst_event_mini_ring<KNST_FILEDROP_EVENT_SLOTS> m_filedrop_events;
-    knst_event_mini_ring<KNST_TOUCH_EVENT_SLOTS>    m_touch_events;     // mobil dokunuş olayları
+    knst_event_mini_ring<KNST_TOUCH_EVENT_SLOTS>    m_touch_events;
 
     knst_c16string m_title;
 
@@ -1302,7 +1300,7 @@ public:
         m_touch_events.clear();
     }
 
-    // === Kategoriye özel push — event manager'lar doğrudan da çağırabilir ===
+  
     KNST_FORCE_INLINE void push_resize_event(const knst_window_event& ev) noexcept { m_resize_event = ev; }
     KNST_FORCE_INLINE void push_move_event(const knst_window_event& ev) noexcept { m_move_event = ev; }
     KNST_FORCE_INLINE void push_focus_event(const knst_window_event& ev) noexcept { m_focus_event = ev; }
@@ -1316,7 +1314,7 @@ public:
     KNST_FORCE_INLINE void push_filedrop_event(const knst_window_event& ev) noexcept { m_filedrop_events.push(ev); }
     KNST_FORCE_INLINE void push_touch_event(const knst_window_event& ev) noexcept { m_touch_events.push(ev); }
 
-    // === Tek çağrı noktası: type'a bakıp doğru kategoriye otomatik yönlendirir ===
+  
     KNST_FORCE_INLINE void dispatch_event(const knst_window_event& ev) noexcept {
         switch (ev.type) {
             case KNST_UNKNOWN:
@@ -1427,7 +1425,7 @@ public:
         dispatch_event(m_knst_event);
     }
 
-    // === Okuma erişimleri ===
+   
     KNST_FORCE_INLINE const knst_window_event& get_resize_event() const noexcept { return m_resize_event; }
     KNST_FORCE_INLINE const knst_window_event& get_move_event() const noexcept { return m_move_event; }
     KNST_FORCE_INLINE const knst_window_event& get_focus_event() const noexcept { return m_focus_event; }

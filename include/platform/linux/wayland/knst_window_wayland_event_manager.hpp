@@ -1,3 +1,12 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: This file contains the definitions of the methods I will use for event handling in Wayland; their implementations are in the "knst_window_wayland_event_helper.hpp" file.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
 #ifndef KNST_LINUX_WAYLAND_EVENT_MANAGER_HPP
 #define KNST_LINUX_WAYLAND_EVENT_MANAGER_HPP
 

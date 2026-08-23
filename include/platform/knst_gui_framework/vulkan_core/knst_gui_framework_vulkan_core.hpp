@@ -1,3 +1,15 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: This file contains the definitions of the Vulkan commands that the user will employ.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
+
+
+
 #ifndef KNST_GUI_FRAMEWORK_VULKAN_CORE_HPP
 #define KNST_GUI_FRAMEWORK_VULKAN_CORE_HPP
 #pragma once

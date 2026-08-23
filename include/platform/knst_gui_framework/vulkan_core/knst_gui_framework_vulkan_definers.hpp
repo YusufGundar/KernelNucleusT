@@ -1,3 +1,13 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: This file contains the implementations of the Vulkan commands that the user will employ.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
+
 
 void knst_gui_framework::Init(knst_window_vulkan_content *vk_content){ //önemli kaynaklar temizleniyor
     m_vk_content = vk_content;

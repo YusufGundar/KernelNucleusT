@@ -1,3 +1,12 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: The implementations of the functions to be used by the user in X11 are available here.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
 #ifndef KNST_WINDOW_X11_MANAGER_HPP
 #define KNST_WINDOW_X11_MANAGER_HPP
 #pragma once

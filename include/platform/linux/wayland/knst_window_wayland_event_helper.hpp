@@ -1,3 +1,12 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: The event management mechanism for the Linux (Wayland) operating system is located in this file; the functions defined here are implemented in this file.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
 #ifndef KNST_WINDOW_WAYLAND_EVENT_HELPER_HPP
 #define KNST_WINDOW_WAYLAND_EVENT_HELPER_HPP
 

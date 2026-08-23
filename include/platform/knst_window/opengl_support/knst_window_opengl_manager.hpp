@@ -1,3 +1,12 @@
+// ============================================================================
+//  KernelNucleusT - Modern C++ Library
+// ============================================================================
+//  Description: Starts the window's OpenGL resources.
+//  Copyright (c) 2026 Yusuf Gündar
+//  Licensed under the MIT License. See LICENSE file for details.
+// ============================================================================
+
+
 #ifndef KNST_WINDOW_OPENGL_MANAGER_HPP
 #define KNST_WINDOW_OPENGL_MANAGER_HPP
 #pragma once
