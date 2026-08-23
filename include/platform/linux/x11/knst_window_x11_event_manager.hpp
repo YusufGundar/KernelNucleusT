@@ -98,6 +98,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                 }
                 #endif
             }
+            window.dispatch_current_event();
             break;
         }
 
@@ -114,6 +115,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                 window.update_edge_cursor(motion->event_x, motion->event_y);
             #endif
 
+            window.dispatch_current_event();
             break;
         }
 
@@ -146,6 +148,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                 break;
             }
             
+            window.dispatch_current_event();
             break;
         }
 
@@ -153,9 +156,15 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
             xcb_client_message_event_t* msg = (xcb_client_message_event_t*)ev;
 
             if (msg->data.data32[0] == KnstWindowSources::m_wmDelete) {
-                window.m_knst_event.type = KNST_CLOSE_WINDOW;
+                window.should_close();
             }
-           
+                    
+           else if (msg->data.data32[0] == KnstWindowSources::m_wmSyncRequest) {
+                window.m_syncPendingValue.lo = msg->data.data32[2];
+                window.m_syncPendingValue.hi = (int32_t)msg->data.data32[3];
+                window.m_syncHasPendingValue = true;
+                window.m_syncRequestReceived = true;
+            }
             else if (msg->type == KnstWindowSources::m_XdndEnter) {
                
                 window.m_xdnd_source = msg->data.data32[0];
@@ -168,6 +177,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                 window.m_knst_event.type = KNST_FILE_DROP_ENTER;
                 window.m_knst_event.drop_files.clear(); 
                 window.m_knst_event.drop_count = 0;
+                window.dispatch_current_event();
             }
             else if (msg->type == KnstWindowSources::m_XdndPosition) {
                
@@ -201,6 +211,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                     (const char*)&status_ev
                 );
                 xcb_flush(KnstWindowSources::m_connection);
+                window.dispatch_current_event();
             }
             else if (msg->type == KnstWindowSources::m_XdndLeave) {
               
@@ -209,6 +220,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                
                 window.m_knst_event.drop_files.clear();
                 window.m_knst_event.drop_count = 0;
+                window.dispatch_current_event();
             }
             else if (msg->type == KnstWindowSources::m_XdndDrop) {
               
@@ -298,6 +310,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                         
                         
                         window.m_knst_event.type = KNST_FILE_DROP;
+                        window.dispatch_current_event();
                         
                         
                         xcb_client_message_event_t finished_ev{};
@@ -333,24 +346,28 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
         case XCB_FOCUS_IN: {
             window.m_knst_event.type = KNST_FOCUS_IN;
             window.m_knst_event.is_focused = true;
+            window.dispatch_current_event();
             break;
         }
 
         case XCB_FOCUS_OUT: {
             window.m_knst_event.type = KNST_FOCUS_OUT;
             window.m_knst_event.is_focused = false;
+            window.dispatch_current_event();
             break;
         }
 
         case XCB_ENTER_NOTIFY: {
             window.m_knst_event.type = KNST_ENTER_NOTIFY;
             window.m_knst_event.mouse_on_window = true;
+            window.dispatch_current_event();
             break;
         }
 
         case XCB_LEAVE_NOTIFY: {
             window.m_knst_event.type = KNST_LEAVE_NOTIFY;
             window.m_knst_event.mouse_on_window = false;
+            window.dispatch_current_event();
             break;
         }
 
@@ -358,52 +375,43 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
             xcb_expose_event_t* expose = (xcb_expose_event_t*)ev;
             if (expose->count == 0) {
                 window.m_knst_event.type = KNST_EXPOSE;
-                
+                window.dispatch_current_event();
             } else {
                 window.m_knst_event.type = KNST_UNKNOWN;
             }
             break;
         }
 
-        case XCB_KEY_PRESS: {
-            xcb_key_press_event_t* key = (xcb_key_press_event_t*)ev;
+    case XCB_KEY_PRESS: {
+        xcb_key_press_event_t* key = (xcb_key_press_event_t*)ev;
+        xcb_keysym_t keysym = xcb_key_symbols_get_keysym(KnstWindowSources::m_keysyms, key->detail, 0);
 
-            xcb_key_symbols_t* keysyms = KnstWindowSources::m_keysyms;
-            xcb_keysym_t keysym = xcb_key_symbols_get_keysym(keysyms, key->detail, 0);
+        if (window.m_knst_event.find_held_by_scancode(key->detail)) break; // native repeat, yut biz halletcez zaten
 
-            if (keysym == window.m_knst_event.m_last_key && window.m_knst_event.m_key_held) {
-                window.m_knst_event.key_action = KNST_KEY_REPEAT;
-            } else {
-                window.m_knst_event.key_action = KNST_KEY_PRESS;
-                window.m_knst_event.m_last_key = keysym;
-                window.m_knst_event.m_key_held = true;
-            }
+        window.m_knst_event.add_held_key(keysym, key->detail, KnstWindowSources::get_current_time_ms());
 
-            window.m_knst_event.type = KNST_KEYBOARD_EVENT;
-            window.m_knst_event.key_code = keysym;
-            window.m_knst_event.mods = key->state;
-            window.m_knst_event.scancode = key->detail;
-            break;
-        }
+        window.m_knst_event.type = KNST_KEYBOARD_EVENT;
+        window.m_knst_event.key_action = KNST_KEY_PRESS;
+        window.m_knst_event.key_code = keysym;
+        window.m_knst_event.mods = key->state;
+        window.m_knst_event.scancode = key->detail;
+        window.dispatch_current_event();
+        break;
+    }
 
-        case XCB_KEY_RELEASE: {
-            xcb_key_release_event_t* key = (xcb_key_release_event_t*)ev;
+    case XCB_KEY_RELEASE: {
+        xcb_key_release_event_t* key = (xcb_key_release_event_t*)ev;
+        xcb_keysym_t keysym = xcb_key_symbols_get_keysym(KnstWindowSources::m_keysyms, key->detail, 0);
 
-            xcb_key_symbols_t* keysyms = KnstWindowSources::m_keysyms;
-            xcb_keysym_t keysym = xcb_key_symbols_get_keysym(keysyms, key->detail, 0);
-
-            window.m_knst_event.type = KNST_KEYBOARD_EVENT;
-            window.m_knst_event.key_action = KNST_KEY_RELEASE;
-            window.m_knst_event.key_code = keysym;
-            window.m_knst_event.mods = key->state;
-            window.m_knst_event.scancode = key->detail;
-
-            if (keysym == window.m_knst_event.m_last_key) {
-                window.m_knst_event.m_key_held = false;
-                window.m_knst_event.m_last_key = 0;
-            }
-            break;
-        }
+        window.m_knst_event.type = KNST_KEYBOARD_EVENT;
+        window.m_knst_event.key_action = KNST_KEY_RELEASE;
+        window.m_knst_event.key_code = keysym;
+        window.m_knst_event.mods = key->state;
+        window.m_knst_event.scancode = key->detail;
+        window.m_knst_event.remove_held_key(key->detail);
+        window.dispatch_current_event();
+        break;
+    }
 
         case XCB_PROPERTY_NOTIFY: {
             xcb_property_notify_event_t* prop = (xcb_property_notify_event_t*)ev;
@@ -467,7 +475,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                     window.m_knst_event.is_full_screen = final_fullscreen;
                     window.m_knst_event.is_maximized    = final_maximized;
                     window.m_knst_event.is_minimized    = final_minimized;
-                    
+                    window.dispatch_current_event();
                    
                 }
             }

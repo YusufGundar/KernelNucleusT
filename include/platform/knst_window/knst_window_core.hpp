@@ -5,9 +5,13 @@
 
 class knst_window_opengl_content;
 
+#include <chrono>
+
+#if KNST_USING_LINUX_PLATFORM_X11
+    #include <xcb/sync.h>
+#endif
 
 #include "knst_display.hpp"
-
 
 
 
@@ -140,14 +144,11 @@ class KnstWindowSources{
             static inline xcb_atom_t m_XdndLeave = 0;
             static inline xcb_atom_t m_MOTIF_WM_HINTS = 0;
             static inline xcb_atom_t m_NET_WM_MOVERESIZE = 0;
-        #elif KNST_USING_LINUX_PLATFORM_WAYLAND
 
-           
-            static uint32_t get_current_time_ms() noexcept {
-                struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-            }
+            static inline xcb_atom_t m_wmSyncRequest = XCB_NONE;
+            static inline xcb_atom_t m_wmSyncRequestCounter = XCB_NONE;
+            #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+
             static inline struct zwlr_layer_shell_v1* layer_shell = nullptr;
             static inline uint32_t drag_enter_serial = 0;
             static inline struct wl_data_device_manager* data_device_manager = nullptr;
@@ -170,7 +171,7 @@ class KnstWindowSources{
             friend class knst_window_wayland_funcs;
             friend inline void knst_display::refresh_screens() noexcept;
             friend class knst_window_opengl_content;
-            static inline wl_display* wayland_display = nullptr;
+            
             static inline wl_registry * registery = nullptr;
             static inline wl_compositor * compositor = nullptr;
             static inline struct xdg_wm_base* wmBase = nullptr;
@@ -295,6 +296,11 @@ class KnstWindowSources{
     public:
 
 
+        KNST_FORCE_INLINE static uint32_t get_current_time_ms() noexcept {
+            using namespace std::chrono;
+            return (uint32_t)duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        }
+
         #if KNST_USING_PLATFORM_WINDOWS
 
             KNST_FORCE_INLINE static HINSTANCE& get_windows_native_instance_handle() noexcept{
@@ -317,6 +323,12 @@ class KnstWindowSources{
 
                 return m_xlib_display;
             }
+
+            
+
+        #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+
+            static inline wl_display* wayland_display = nullptr;
         
         #elif defined(KNST_USING_PLATFORM_ANDROID)
             KNST_FORCE_INLINE static android_app* get_android_app() noexcept{
@@ -376,6 +388,15 @@ class KnstWindowSources{
                     }
                     return atom;
                 };
+
+                auto c1 = xcb_intern_atom(m_connection, 0, strlen("_NET_WM_SYNC_REQUEST"), "_NET_WM_SYNC_REQUEST");
+                auto r1 = xcb_intern_atom_reply(m_connection, c1, nullptr);
+                if (r1) { m_wmSyncRequest = r1->atom; free(r1); }
+
+                auto c2 = xcb_intern_atom(m_connection, 0, strlen("_NET_WM_SYNC_REQUEST_COUNTER"), "_NET_WM_SYNC_REQUEST_COUNTER");
+                auto r2 = xcb_intern_atom_reply(m_connection, c2, nullptr);
+                if (r2) { m_wmSyncRequestCounter = r2->atom; free(r2); }
+
 
                 m_wmDelete = intern("WM_DELETE_WINDOW");
                 m_netMoveResizeWindow = intern("_NET_MOVERESIZE_WINDOW");
@@ -744,37 +765,74 @@ struct knst_window_event{
 
     private:
 
+
+
+    
+struct knst_held_key {
+    int key_code = 0;
+    int scancode = 0;
+    uint32_t last_key_time = 0;
+    uint32_t last_repeat_time = 0;
+    bool repeat_initialized = false;
+    bool active = false;
+};
+
+#ifndef KNST_MAX_HELD_KEYS
+#define KNST_MAX_HELD_KEYS 8
+#endif
+
+// knst_window_event private kısmında:
+knst_held_key m_held_keys[KNST_MAX_HELD_KEYS];
+
+KNST_FORCE_INLINE knst_held_key* find_held_by_scancode(int scancode) noexcept {
+    for (auto& hk : m_held_keys)
+        if (hk.active && hk.scancode == scancode) return &hk;
+    return nullptr;
+}
+
+KNST_FORCE_INLINE knst_held_key* add_held_key(int key_code, int scancode, uint32_t now) noexcept {
+    for (auto& hk : m_held_keys) {
+        if (!hk.active) {
+            hk = {key_code, scancode, now, now, false, true};
+            return &hk;
+        }
+    }
+    return nullptr; // dizi doluysa (nadiren olur) sessizce yok say
+}
+
+KNST_FORCE_INLINE void remove_held_key(int scancode) noexcept {
+    for (auto& hk : m_held_keys)
+        if (hk.active && hk.scancode == scancode) hk.active = false;
+}
+
+
     #if KNST_USING_PLATFORM_WINDOWS
         friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
     #elif KNST_USING_LINUX_PLATFORM_X11
         friend KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic_event_t* ev) noexcept;
-            
-       
-        
     #elif KNST_USING_LINUX_PLATFORM_WAYLAND
 
         friend class knst_window_wayland_funcs;
         friend class knst_window;
-        friend class knst_window_event_system;
-       
-        int m_last_scancode = 0;     
-       
-           
-        uint32_t m_last_repeat_time = 0;  
-        bool m_repeat_initialized = false;
-        
-      
-        static constexpr uint32_t KEY_REPEAT_DELAY = 400;     
-        static constexpr uint32_t KEY_REPEAT_INTERVAL = 30;   
-        
-        
-    #endif
 
+    #elif defined(KNST_USING_PLATFORM_ANDROID)
+
+        friend KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* event);
+
+    #endif
+    friend class knst_window_event_system;
+    friend class knst_window;
 
         uint32_t m_last_key_time = 0;
         int m_last_key = 0;   
         bool m_key_held = false;
-    
+        int m_last_scancode = 0;
+
+        // Ortak tuş-tekrar zamanlayıcısı — X11/Win32/Wayland/Android hepsi bunu kullanır.
+        uint32_t m_last_repeat_time = 0;
+        bool m_repeat_initialized = false;
+        static constexpr uint32_t KEY_REPEAT_DELAY = 150;
+        static constexpr uint32_t KEY_REPEAT_INTERVAL = 5;
 
     public:
 
@@ -871,6 +929,54 @@ struct knst_window_event{
 
 };
 
+// ============================================================
+// Kategoriye özel, allocation-free mini ring buffer.
+// N, 2'nin kuvveti olmalı (bitmask ile modulo'suz index hesabı için).
+// ============================================================
+#ifndef KNST_MOUSE_EVENT_SLOTS
+    #define KNST_MOUSE_EVENT_SLOTS 8
+#endif
+#ifndef KNST_KEYBOARD_EVENT_SLOTS
+    #define KNST_KEYBOARD_EVENT_SLOTS 8
+#endif
+#ifndef KNST_FILEDROP_EVENT_SLOTS
+    #define KNST_FILEDROP_EVENT_SLOTS 4
+#endif
+#ifndef KNST_TOUCH_EVENT_SLOTS
+    #define KNST_TOUCH_EVENT_SLOTS 8
+#endif
+
+template<size_t N>
+struct knst_event_mini_ring {
+    static_assert((N & (N - 1)) == 0, "KNST slot count must be a power of two");
+
+    knst_window_event data[N];
+    size_t count = 0;
+    size_t head = 0;
+
+    KNST_FORCE_INLINE void push(const knst_window_event& ev) noexcept {
+        data[head] = ev;
+        head = (head + 1) & (N - 1);
+        if (count < N) count++;
+        // count zaten N ise: en eski slotun üzerine yazılmış olur (head zaten o slotu gösteriyordu),
+        // hiçbir kaydırma/memmove gerekmez, maliyet her koşulda O(1) kalır.
+    }
+
+    KNST_FORCE_INLINE size_t size() const noexcept { return count; }
+
+    // logical_index: 0 = bu frame'de gelen en eski event, size()-1 = en yeni event
+    KNST_FORCE_INLINE const knst_window_event& at(size_t logical_index) const noexcept {
+        size_t start = (head + N - count) & (N - 1);
+        return data[(start + logical_index) & (N - 1)];
+    }
+
+    KNST_FORCE_INLINE void clear() noexcept {
+        count = 0;
+        head = 0;
+        // Diziye dokunulmuyor — bir sonraki push zaten üzerine yazacak.
+    }
+};
+
 #if KNST_USING_PLATFORM_WINDOWS
 
     #include "../windows/knst_display_win32.hpp"
@@ -906,6 +1012,7 @@ private:
 
         friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
         friend class knst_window_opengl_content;
+        friend class knst_window_event_system;
         HWND m_window;
         HCURSOR m_cursor = nullptr;
         WINDOWPLACEMENT m_prevPlacement = {};
@@ -932,13 +1039,16 @@ private:
         };
         knst_edge_zone m_hovered_edge = ZONE_NONE;
         Cursor m_current_x11_cursor = 0;
-
+        
 
         knst_edge_zone detect_edge_zone(int x, int y) const noexcept;
         uint32_t edge_to_moveresize_direction(knst_edge_zone zone) const noexcept;
         unsigned int edge_to_x11_cursor_shape(knst_edge_zone zone) const noexcept;
         void update_edge_cursor(int x, int y) noexcept;
         void start_move_or_resize(int root_x, int root_y, uint32_t direction) noexcept;
+       
+        
+
 
         
 
@@ -995,41 +1105,6 @@ private:
                 struct zwlr_layer_surface_v1* m_layer_surface = nullptr;
 
         
-            void check_key_repeat_timer() noexcept {
-        
-            if (!m_knst_event.m_key_held || m_knst_event.m_last_scancode == 0) {
-                return;
-            }
-            
-
-            uint32_t current_time = KnstWindowSources::get_current_time_ms();
-            
-            if (!m_knst_event.m_repeat_initialized) {
-               
-                if (current_time - m_knst_event.m_last_key_time >= m_knst_event.KEY_REPEAT_DELAY) {
-                    m_knst_event.type = KNST_KEYBOARD_EVENT;
-                    m_knst_event.key_action = KNST_KEY_REPEAT;
-                    m_knst_event.key_code = m_knst_event.m_last_key;
-                    m_knst_event.scancode = m_knst_event.m_last_scancode;
-                    
-                    m_knst_event.m_repeat_initialized = true;
-                    m_knst_event.m_last_repeat_time = current_time;
-                }
-            }
-            else {
-                
-                if (current_time - m_knst_event.m_last_repeat_time >= m_knst_event.KEY_REPEAT_INTERVAL) {
-                    m_knst_event.type = KNST_KEYBOARD_EVENT;
-                    m_knst_event.key_action = KNST_KEY_REPEAT;
-                    m_knst_event.key_code = m_knst_event.m_last_key;
-                    m_knst_event.scancode = m_knst_event.m_last_scancode;
-                    
-                    m_knst_event.m_last_repeat_time = current_time;
-                }
-            }
-        
-    }
-    
     #elif defined(KNST_USING_PLATFORM_ANDROID)
 
         friend class knst_window_opengl_content;
@@ -1048,9 +1123,25 @@ private:
     
     knst_window_event m_knst_event;
 
+    // === Tekil yeterli kategoriler (sadece son değer önemli, sürekli/az sayıda gelir) ===
+    knst_window_event m_resize_event;
+    knst_window_event m_move_event;
+    knst_window_event m_focus_event;
+    knst_window_event m_window_state_event;   // maximize/minimize/restore/fullscreen
+    knst_window_event m_expose_event;
+    knst_window_event m_misc_event;           // nadir/diğer kategorilere girmeyenler
+    knst_window_event m_lifecycle_event;      // mobil: pause/resume/stop/save-state/low-memory/config-changed vb.
+
+    // === Kritik, aynı frame'de art arda gelebilen kategoriler (mini ring) ===
+    knst_event_mini_ring<KNST_MOUSE_EVENT_SLOTS>    m_mouse_events;
+    knst_event_mini_ring<KNST_KEYBOARD_EVENT_SLOTS> m_keyboard_events;
+    knst_event_mini_ring<KNST_FILEDROP_EVENT_SLOTS> m_filedrop_events;
+    knst_event_mini_ring<KNST_TOUCH_EVENT_SLOTS>    m_touch_events;     // mobil dokunuş olayları
+
     knst_c16string m_title;
 
     bool m_should_close;
+    bool m_disconnected = false;
 
     float m_opacity;
 
@@ -1067,9 +1158,19 @@ private:
 
     bool m_draw_custom_title_bar;
 
+
+
 public:
 
 
+
+            #if KNST_USING_LINUX_PLATFORM_X11
+                 xcb_sync_counter_t m_syncCounter = XCB_NONE;
+                xcb_sync_int64_t m_syncPendingValue{0, 0};
+                bool m_syncHasPendingValue = false;
+                bool m_syncRequestReceived = false;
+            #endif
+    
     KNST_FORCE_INLINE const knst_c16string& get_clipboard() const noexcept{
         return clipboard_text;
     }
@@ -1186,7 +1287,166 @@ public:
 
     KNST_FORCE_INLINE void clear_temporary_events() noexcept{
         m_knst_event.clear();
+
+        m_resize_event.clear();
+        m_move_event.clear();
+        m_focus_event.clear();
+        m_window_state_event.clear();
+        m_expose_event.clear();
+        m_misc_event.clear();
+        m_lifecycle_event.clear();
+
+        m_mouse_events.clear();
+        m_keyboard_events.clear();
+        m_filedrop_events.clear();
+        m_touch_events.clear();
     }
+
+    // === Kategoriye özel push — event manager'lar doğrudan da çağırabilir ===
+    KNST_FORCE_INLINE void push_resize_event(const knst_window_event& ev) noexcept { m_resize_event = ev; }
+    KNST_FORCE_INLINE void push_move_event(const knst_window_event& ev) noexcept { m_move_event = ev; }
+    KNST_FORCE_INLINE void push_focus_event(const knst_window_event& ev) noexcept { m_focus_event = ev; }
+    KNST_FORCE_INLINE void push_window_state_event(const knst_window_event& ev) noexcept { m_window_state_event = ev; }
+    KNST_FORCE_INLINE void push_expose_event(const knst_window_event& ev) noexcept { m_expose_event = ev; }
+    KNST_FORCE_INLINE void push_misc_event(const knst_window_event& ev) noexcept { m_misc_event = ev; }
+    KNST_FORCE_INLINE void push_lifecycle_event(const knst_window_event& ev) noexcept { m_lifecycle_event = ev; }
+
+    KNST_FORCE_INLINE void push_mouse_event(const knst_window_event& ev) noexcept { m_mouse_events.push(ev); }
+    KNST_FORCE_INLINE void push_keyboard_event(const knst_window_event& ev) noexcept { m_keyboard_events.push(ev); }
+    KNST_FORCE_INLINE void push_filedrop_event(const knst_window_event& ev) noexcept { m_filedrop_events.push(ev); }
+    KNST_FORCE_INLINE void push_touch_event(const knst_window_event& ev) noexcept { m_touch_events.push(ev); }
+
+    // === Tek çağrı noktası: type'a bakıp doğru kategoriye otomatik yönlendirir ===
+    KNST_FORCE_INLINE void dispatch_event(const knst_window_event& ev) noexcept {
+        switch (ev.type) {
+            case KNST_UNKNOWN:
+                return;
+
+            case KNST_MOUSE_EVENT:
+            case KNST_MOUSE_SCROLL:
+            case KNST_MOTION_NOTIFY:
+            case KNST_ENTER_NOTIFY:
+            case KNST_LEAVE_NOTIFY:
+                push_mouse_event(ev);
+                return;
+
+            case KNST_KEYBOARD_EVENT:
+                push_keyboard_event(ev);
+                return;
+
+            case KNST_FILE_DROP:
+            case KNST_FILE_DROP_ENTER:
+            case KNST_FILE_DROP_MOVE:
+            case KNST_FILE_DROP_LEAVE:
+                push_filedrop_event(ev);
+                return;
+
+            case KNST_WINDOW_RESIZE:
+                push_resize_event(ev);
+                return;
+
+            case KNST_WINDOW_MOVE:
+                push_move_event(ev);
+                return;
+
+            case KNST_FOCUS_IN:
+            case KNST_FOCUS_OUT:
+                push_focus_event(ev);
+                return;
+
+            case KNST_WINDOW_MAXIMIZE:
+            case KNST_WINDOW_MINIMIZE:
+            case KNST_WINDOW_RESTORE:
+            case KNST_WINDOW_FULL_SCREEN:
+                push_window_state_event(ev);
+                return;
+
+            case KNST_EXPOSE:
+                push_expose_event(ev);
+                return;
+
+            #if defined(KNST_USING_PLATFORM_ANDROID)
+            case KNST_MOBILE_TOUCH_EVENT:
+                push_touch_event(ev);
+                return;
+
+            case KNST_MOBILE_BACK_PRESS:
+            case KNST_MOBILE_HOME_PRESS:
+            case KNST_MOBILE_MENU_PRESS:
+            case KNST_MOBILE_SEARCH_PRESS:
+            case KNST_MOBILE_APP_SWITCH:
+            case KNST_MOBILE_RECENT_APPS:
+            case KNST_MOBILE_VOLUME_UP:
+            case KNST_MOBILE_VOLUME_DOWN:
+            case KNST_MOBILE_VOLUME_MUTE:
+            case KNST_MOBILE_MEDIA_PLAY_PAUSE:
+            case KNST_MOBILE_MEDIA_STOP:
+            case KNST_MOBILE_MEDIA_NEXT:
+            case KNST_MOBILE_MEDIA_PREVIOUS:
+            case KNST_MOBILE_MEDIA_REWIND:
+            case KNST_MOBILE_MEDIA_FAST_FORWARD:
+            case KNST_MOBILE_MEDIA_RECORD:
+            case KNST_MOBILE_MEDIA_PAUSE:
+            case KNST_MOBILE_POWER:
+            case KNST_MOBILE_CAMERA:
+            case KNST_MOBILE_HELP:
+            case KNST_MOBILE_SETTINGS:
+            case KNST_MOBILE_SLEEP:
+            case KNST_MOBILE_WAKEUP:
+            case KNST_MOBILE_ASSIST:
+            case KNST_MOBILE_BOOKMARK:
+            case KNST_MOBILE_CALCULATOR:
+            case KNST_MOBILE_CALENDAR:
+            case KNST_MOBILE_CONTACTS:
+            case KNST_MOBILE_EXPLORER:
+            case KNST_MOBILE_MUSIC:
+                push_keyboard_event(ev);
+                return;
+
+            case KNST_WINDOW_LOST:
+            case KNST_LOW_MEMORY:
+            case KNST_APP_STARTED:
+            case KNST_APP_RESUMED:
+            case KNST_APP_PAUSED:
+            case KNST_APP_STOPPED:
+            case KNST_SAVE_STATE:
+            case KNST_CONFIG_CHANGED:
+            case KNST_CONTENT_RECT_CHANGED:
+            case KNST_INPUT_CHANGED:
+                push_lifecycle_event(ev);
+                return;
+            #endif
+
+            default:
+                push_misc_event(ev);
+                return;
+        }
+    }
+
+    KNST_FORCE_INLINE void dispatch_current_event() noexcept {
+        dispatch_event(m_knst_event);
+    }
+
+    // === Okuma erişimleri ===
+    KNST_FORCE_INLINE const knst_window_event& get_resize_event() const noexcept { return m_resize_event; }
+    KNST_FORCE_INLINE const knst_window_event& get_move_event() const noexcept { return m_move_event; }
+    KNST_FORCE_INLINE const knst_window_event& get_focus_event() const noexcept { return m_focus_event; }
+    KNST_FORCE_INLINE const knst_window_event& get_window_state_event() const noexcept { return m_window_state_event; }
+    KNST_FORCE_INLINE const knst_window_event& get_expose_event() const noexcept { return m_expose_event; }
+    KNST_FORCE_INLINE const knst_window_event& get_misc_event() const noexcept { return m_misc_event; }
+    KNST_FORCE_INLINE const knst_window_event& get_lifecycle_event() const noexcept { return m_lifecycle_event; }
+
+    KNST_FORCE_INLINE size_t get_mouse_event_count() const noexcept { return m_mouse_events.size(); }
+    KNST_FORCE_INLINE const knst_window_event& get_mouse_event(size_t i) const noexcept { return m_mouse_events.at(i); }
+
+    KNST_FORCE_INLINE size_t get_touch_event_count() const noexcept { return m_touch_events.size(); }
+    KNST_FORCE_INLINE const knst_window_event& get_touch_event(size_t i) const noexcept { return m_touch_events.at(i); }
+
+    KNST_FORCE_INLINE size_t get_keyboard_event_count() const noexcept { return m_keyboard_events.size(); }
+    KNST_FORCE_INLINE const knst_window_event& get_keyboard_event(size_t i) const noexcept { return m_keyboard_events.at(i); }
+
+    KNST_FORCE_INLINE size_t get_filedrop_event_count() const noexcept { return m_filedrop_events.size(); }
+    KNST_FORCE_INLINE const knst_window_event& get_filedrop_event(size_t i) const noexcept { return m_filedrop_events.at(i); }
 
 
     KNST_FORCE_INLINE void should_close() noexcept{
@@ -1196,6 +1456,10 @@ public:
     KNST_FORCE_INLINE const bool& is_should_close()const noexcept{
        return m_should_close;
         
+    }
+
+    KNST_FORCE_INLINE const bool& is_disconnected()const noexcept{
+       return m_disconnected;
     }
 
     KNST_FORCE_INLINE void set_user_data(void* data)noexcept{
@@ -1265,8 +1529,8 @@ public:
 
 };
 
+    
     #include "knst_window_event_system.hpp"
-
     #if KNST_USING_PLATFORM_WINDOWS
 
         #include "../windows/knst_window_win32_manager.hpp"

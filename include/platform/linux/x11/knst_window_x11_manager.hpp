@@ -20,10 +20,11 @@ inline void knst_window::creation() noexcept{
     xcb_screen_t* screen = iter.data;
 
     m_window = xcb_generate_id(KnstWindowSources::m_connection);
-    
-    uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
+
+
+    uint32_t mask = XCB_CW_BACK_PIXMAP | XCB_CW_EVENT_MASK;
     uint32_t values[2] = {
-        screen->white_pixel,
+        XCB_BACK_PIXMAP_NONE,
         XCB_EVENT_MASK_KEY_PRESS |
         XCB_EVENT_MASK_KEY_RELEASE |
         XCB_EVENT_MASK_BUTTON_PRESS |
@@ -32,7 +33,7 @@ inline void knst_window::creation() noexcept{
         XCB_EVENT_MASK_ENTER_WINDOW |
         XCB_EVENT_MASK_LEAVE_WINDOW |
         XCB_EVENT_MASK_EXPOSURE |
-        XCB_EVENT_MASK_STRUCTURE_NOTIFY |  
+        XCB_EVENT_MASK_STRUCTURE_NOTIFY |
         XCB_EVENT_MASK_FOCUS_CHANGE |
         XCB_EVENT_MASK_PROPERTY_CHANGE |
         XCB_EVENT_MASK_VISIBILITY_CHANGE
@@ -41,19 +42,19 @@ inline void knst_window::creation() noexcept{
     #ifdef KNST_DISABLE_TITLE_BAR
         xcb_create_window(
             KnstWindowSources::m_connection,
-            0,                          
+            XCB_COPY_FROM_PARENT,
             m_window,
             screen->root,
-            m_knst_event.window_root_x, m_knst_event.window_root_y,                   
-            m_knst_event.window_width, m_knst_event.window_height,                  
-            0,                          
+            m_knst_event.window_root_x, m_knst_event.window_root_y,
+            m_knst_event.window_width, m_knst_event.window_height,
+            0,
             XCB_WINDOW_CLASS_INPUT_OUTPUT,
             screen->root_visual,
             mask,
             values
         );
 
-     
+
         struct KnstMotifWmHints {
             uint32_t flags;
             uint32_t functions;
@@ -80,7 +81,7 @@ inline void knst_window::creation() noexcept{
 
         xcb_intern_atom_cookie_t normal_cookie = xcb_intern_atom(KnstWindowSources::m_connection, 0, strlen("_NET_WM_WINDOW_TYPE_NORMAL"), "_NET_WM_WINDOW_TYPE_NORMAL");
         xcb_intern_atom_reply_t* normal_reply = xcb_intern_atom_reply(KnstWindowSources::m_connection, normal_cookie, nullptr);
-        
+
         if (type_reply && normal_reply) {
             xcb_change_property(
                 KnstWindowSources::m_connection,
@@ -96,12 +97,12 @@ inline void knst_window::creation() noexcept{
 
         xcb_create_window(
             KnstWindowSources::m_connection,
-            0,                          
+            XCB_COPY_FROM_PARENT,
             m_window,
             screen->root,
-            m_knst_event.window_root_x, m_knst_event.window_root_y,                   
-            m_knst_event.window_width, m_knst_event.window_height,                  
-            0,                          
+            m_knst_event.window_root_x, m_knst_event.window_root_y,
+            m_knst_event.window_width, m_knst_event.window_height,
+            0,
             XCB_WINDOW_CLASS_INPUT_OUTPUT,
             screen->root_visual,
             mask,
@@ -120,21 +121,41 @@ inline void knst_window::creation() noexcept{
         8, title.length(), title.data()
     );
 
-    xcb_intern_atom_cookie_t protocols_cookie = xcb_intern_atom(KnstWindowSources::m_connection, 0, 12, "WM_PROTOCOLS");
-    xcb_intern_atom_reply_t* protocols_reply = xcb_intern_atom_reply(KnstWindowSources::m_connection, protocols_cookie, nullptr);
-    if (protocols_reply) {
-        xcb_change_property(
-            KnstWindowSources::m_connection,
-            XCB_PROP_MODE_REPLACE,
-            m_window,
-            protocols_reply->atom,   
-            XCB_ATOM_ATOM,           
-            32, 1, &KnstWindowSources::m_wmDelete
-        );
-        free(protocols_reply);
-    }
+  xcb_intern_atom_cookie_t protocols_cookie = xcb_intern_atom(KnstWindowSources::m_connection, 0, 12, "WM_PROTOCOLS");
+xcb_intern_atom_reply_t* protocols_reply = xcb_intern_atom_reply(KnstWindowSources::m_connection, protocols_cookie, nullptr);
+if (protocols_reply) {
+    xcb_atom_t protocols[2] = {
+        KnstWindowSources::m_wmDelete,
+        KnstWindowSources::m_wmSyncRequest
+    };
+    xcb_change_property(
+        KnstWindowSources::m_connection,
+        XCB_PROP_MODE_REPLACE,
+        m_window,
+        protocols_reply->atom,
+        XCB_ATOM_ATOM,
+        32, 2, protocols
+    );
+    free(protocols_reply);
+}
 
-   
+
+{
+    xcb_sync_int64_t initial{0, 0};
+    m_syncCounter = xcb_generate_id(KnstWindowSources::m_connection);
+    xcb_sync_create_counter(KnstWindowSources::m_connection, m_syncCounter, initial);
+
+    xcb_change_property(
+        KnstWindowSources::m_connection,
+        XCB_PROP_MODE_REPLACE,
+        m_window,
+        KnstWindowSources::m_wmSyncRequestCounter,
+        XCB_ATOM_CARDINAL,
+        64, 1, &m_syncCounter
+    );
+}  // The part that wasted eight hours was a glitch; if it hadn't frozen, it kept giving me a hard time, so I finally decided to shut it down. ı open after 
+
+
     knst_window_event_system::register_window(this);
 }
 
@@ -1328,7 +1349,6 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
     xcb_flush(conn);
 }
     
-
 
 
 #endif

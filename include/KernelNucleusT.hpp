@@ -13,6 +13,7 @@
 #include "knst_vector.hpp"
 
 #include "knst_image_loader.hpp"
+
 // _end structural
 
 
@@ -25,6 +26,15 @@
 #include "knst_window.hpp"
 
 // _end knst_window
+
+// knst_gui_framework
+#ifdef KNST_USING_VULKAN
+    #include "knst_obj_loader.hpp"
+    #include "knst_gui_framework.hpp"
+
+#endif
+// knst_gui_framework
+
 
 
 

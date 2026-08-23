@@ -128,20 +128,24 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                     if (mx >= w - KNST_BUTTON_WIDTH) {
                         window->should_close();
                         window->m_knst_event.type = KNST_CLOSE_WINDOW;
+                        window->dispatch_current_event();
                         return 0;
                     }
                     else if (mx >= w - KNST_BUTTON_WIDTH * 2 && mx < w - KNST_BUTTON_WIDTH) {
                         if (window->m_knst_event.is_maximized) window->restore();
                         else window->set_maximized();
+                        window->dispatch_current_event();
                         return 0;
                     }
                     else if (mx >= w - KNST_BUTTON_WIDTH * 3 && mx < w - KNST_BUTTON_WIDTH * 2) {
                         window->set_minimized();
+                        window->dispatch_current_event();
                         return 0;
                     }
                 }
             }
             #endif
+            window->dispatch_current_event();
             return 0;
         }
 
@@ -157,6 +161,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_x = pt.x;
                 window->m_knst_event.mouse_root_y = pt.y;
             }
+            window->dispatch_current_event();
             return 0;
 
         case WM_RBUTTONDOWN:
@@ -171,6 +176,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_x = pt.x;
                 window->m_knst_event.mouse_root_y = pt.y;
             }
+            window->dispatch_current_event();
             return 0;
 
         case WM_RBUTTONUP:
@@ -185,6 +191,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_x = pt.x;
                 window->m_knst_event.mouse_root_y = pt.y;
             }
+            window->dispatch_current_event();
             return 0;
 
         case WM_MBUTTONDOWN:
@@ -199,6 +206,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_x = pt.x;
                 window->m_knst_event.mouse_root_y = pt.y;
             }
+            window->dispatch_current_event();
             return 0;
 
         case WM_MBUTTONUP:
@@ -213,6 +221,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_x = pt.x;
                 window->m_knst_event.mouse_root_y = pt.y;
             }
+            window->dispatch_current_event();
             return 0;
 
         case WM_MOUSEWHEEL:
@@ -221,6 +230,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             window->m_knst_event.mouse_scroll_delta = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
+            window->dispatch_current_event();
             return 0;
 
         case WM_MOUSEMOVE:
@@ -247,11 +257,13 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             if (wParam & MK_CONTROL) window->m_knst_event.mods |= KNST_MOD_CONTROL;
             if (wParam & MK_SHIFT)   window->m_knst_event.mods |= KNST_MOD_SHIFT;
             if (wParam & MK_ALT)     window->m_knst_event.mods |= KNST_MOD_ALT;
+            window->dispatch_current_event();
             return 0;
 
         case WM_MOUSELEAVE:
             window->m_knst_event.type = KNST_LEAVE_NOTIFY;
             window->m_knst_event.mouse_on_window = false;
+            window->dispatch_current_event();
             return 0;
 
         case WM_ERASEBKGND:
@@ -262,69 +274,87 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 0;
 
         case WM_EXITSIZEMOVE: {
-            RECT rc;
-            GetWindowRect(hwnd, &rc);
+    RECT rc;
+    GetWindowRect(hwnd, &rc);
 
-            RECT clientRect;
-            GetClientRect(hwnd, &clientRect);
-            
-            window->m_knst_event.window_root_x = rc.left;
-            window->m_knst_event.window_root_y = rc.top;
-            window->m_knst_event.window_width  = clientRect.right - clientRect.left;
-            window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
+    RECT clientRect;
+    GetClientRect(hwnd, &clientRect);
+    
+    window->m_knst_event.window_root_x = rc.left;
+    window->m_knst_event.window_root_y = rc.top;
+    window->m_knst_event.window_width  = clientRect.right - clientRect.left;
+    window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
 
-            window->m_knst_event.is_maximized = IsZoomed(hwnd);
-            InvalidateRect(hwnd, NULL, FALSE);
-            return 0;
-        }
+    window->m_knst_event.is_maximized = IsZoomed(hwnd);
+    window->m_knst_event.type = KNST_WINDOW_RESIZE;
+    
+
+    
+    window->dispatch_current_event();
+    InvalidateRect(hwnd, NULL, FALSE);
+    return 0;
+}
         case WM_TIMER:
             return 0;
 
-        case WM_SIZING: {
-            RECT* rect = reinterpret_cast<RECT*>(lParam);
-            int w = rect->right - rect->left;
-            int h = rect->bottom - rect->top;
-            if (w > 0 && h > 0) {
-            
-                RECT clientRect;
-                GetClientRect(hwnd, &clientRect);
-                
-                window->m_knst_event.window_width  = clientRect.right - clientRect.left;
-                window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
-                window->m_knst_event.window_root_x = rect->left;
-                window->m_knst_event.window_root_y = rect->top;
-                window->m_knst_event.type = KNST_WINDOW_RESIZE;
+case WM_SIZING: {
+    RECT* rect = reinterpret_cast<RECT*>(lParam);
+    int w = rect->right - rect->left;
+    int h = rect->bottom - rect->top;
+    if (w > 0 && h > 0) {
+        RECT clientRect;
+        GetClientRect(hwnd, &clientRect);
+        
+        window->m_knst_event.window_width  = clientRect.right - clientRect.left;
+        window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
+        window->m_knst_event.window_root_x = rect->left;
+        window->m_knst_event.window_root_y = rect->top;
+        window->m_knst_event.type = KNST_WINDOW_RESIZE;
 
-                window->m_knst_event.is_maximized = IsZoomed(hwnd);
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
-            return TRUE;
-        }
+        window->m_knst_event.is_maximized = IsZoomed(hwnd);
+        
+        // 🔥 RESIZE SIRASINDA RENDER AL
+        #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
+            window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+        #endif
+        
+        window->dispatch_current_event();
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    return TRUE;
+}
 
         case WM_SIZE: {
+    RECT clientRect;
+    GetClientRect(hwnd, &clientRect);
+    
+    window->m_knst_event.window_width  = clientRect.right - clientRect.left;
+    window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
 
-            RECT clientRect;
-            GetClientRect(hwnd, &clientRect);
-            
-            window->m_knst_event.window_width  = clientRect.right - clientRect.left;
-            window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
+    bool now_maximized = IsZoomed(hwnd);
+    window->m_knst_event.is_maximized = now_maximized;
+    window->m_knst_event.is_minimized = (wParam == SIZE_MINIMIZED);
+    window->m_knst_event.is_full_screen = false;
 
-            bool now_maximized = IsZoomed(hwnd);
-            window->m_knst_event.is_maximized = now_maximized;
-            window->m_knst_event.is_minimized = (wParam == SIZE_MINIMIZED);
-            window->m_knst_event.is_full_screen = false;
-
-            if (wParam == SIZE_MINIMIZED) {
-                window->m_knst_event.type = KNST_WINDOW_MINIMIZE;
-            } else if (wParam == SIZE_MAXIMIZED) {
-                window->m_knst_event.type = KNST_WINDOW_MAXIMIZE;
-                InvalidateRect(hwnd, NULL, FALSE);
-            } else if (wParam == SIZE_RESTORED) {
-                window->m_knst_event.type = KNST_WINDOW_RESTORE;
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
-            return 0;
-        }
+    if (wParam == SIZE_MINIMIZED) {
+        window->m_knst_event.type = KNST_WINDOW_MINIMIZE;
+        window->dispatch_current_event();
+    } else if (wParam == SIZE_MAXIMIZED) {
+        window->m_knst_event.type = KNST_WINDOW_MAXIMIZE;
+        
+        
+        window->dispatch_current_event();
+        InvalidateRect(hwnd, NULL, FALSE);
+    } else if (wParam == SIZE_RESTORED) {
+        window->m_knst_event.type = KNST_WINDOW_RESTORE;
+        
+       
+        
+        window->dispatch_current_event();
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    return 0;
+}
 
         case WM_MOVE: {
             RECT rect;
@@ -334,6 +364,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
 
 
             window->m_knst_event.is_maximized = IsZoomed(hwnd);
+            window->m_knst_event.type = KNST_WINDOW_MOVE;
+            window->dispatch_current_event();
             return 0;
         }
 
@@ -360,6 +392,12 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 if (coversFullScreen && !window->m_knst_event.is_full_screen) {
                     window->m_knst_event.is_full_screen = true;
                     window->m_knst_event.type = KNST_WINDOW_FULL_SCREEN;
+                    window->dispatch_current_event();
+                }
+                else if (!coversFullScreen && window->m_knst_event.is_full_screen) {
+                    window->m_knst_event.is_full_screen = false;
+                    window->m_knst_event.type = KNST_WINDOW_RESTORE;
+                    window->dispatch_current_event();
                 }
 
                 window->m_knst_event.is_maximized = IsZoomed(hwnd);
@@ -369,42 +407,49 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
         case WM_SETFOCUS:
             window->m_knst_event.type = KNST_FOCUS_IN;
             window->m_knst_event.is_focused = true;
+            window->dispatch_current_event();
             return 0;
 
         case WM_KILLFOCUS:
             window->m_knst_event.type = KNST_FOCUS_OUT;
             window->m_knst_event.is_focused = false;
+            window->dispatch_current_event();
             return 0;
 
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
-            window->m_knst_event.type = KNST_KEYBOARD_EVENT;
-            if ((lParam & (1 << 30)) != 0) {
-                window->m_knst_event.key_action = KNST_KEY_REPEAT;
-            } else {
-                window->m_knst_event.key_action = KNST_KEY_PRESS;
-                window->m_knst_event.m_last_key = (int)wParam;
-                window->m_knst_event.m_key_held = true;
-            }
-            window->m_knst_event.key_code = (int)wParam;
-            window->m_knst_event.scancode = (lParam >> 16) & 0xFF;
-            window->m_knst_event.mods = 0;
-            if (GetKeyState(VK_CONTROL) & 0x8000) window->m_knst_event.mods |= KNST_MOD_CONTROL;
-            if (GetKeyState(VK_SHIFT)   & 0x8000) window->m_knst_event.mods |= KNST_MOD_SHIFT;
-            if (GetKeyState(VK_MENU)    & 0x8000) window->m_knst_event.mods |= KNST_MOD_ALT;
-            return 0;
+       case WM_KEYDOWN:
+case WM_SYSKEYDOWN: {
+    int vk = (int)wParam;
+    int scancode = (lParam >> 16) & 0xFF;
 
-        case WM_KEYUP:
-        case WM_SYSKEYUP:
-            window->m_knst_event.type = KNST_KEYBOARD_EVENT;
-            window->m_knst_event.key_action = KNST_KEY_RELEASE;
-            window->m_knst_event.key_code = (int)wParam;
-            window->m_knst_event.scancode = (lParam >> 16) & 0xFF;
-            if ((int)wParam == window->m_knst_event.m_last_key) {
-                window->m_knst_event.m_key_held = false;
-                window->m_knst_event.m_last_key = 0;
-            }
-            return 0;
+    if (window->m_knst_event.find_held_by_scancode(scancode)) {
+        return 0; // native autorepeat -> check_key_repeat zaten üretiyor
+    }
+
+    window->m_knst_event.add_held_key(vk, scancode, KnstWindowSources::get_current_time_ms());
+
+    window->m_knst_event.type = KNST_KEYBOARD_EVENT;
+    window->m_knst_event.key_action = KNST_KEY_PRESS;
+    window->m_knst_event.key_code = vk;
+    window->m_knst_event.scancode = scancode;
+    window->m_knst_event.mods = 0;
+    if (GetKeyState(VK_CONTROL) & 0x8000) window->m_knst_event.mods |= KNST_MOD_CONTROL;
+    if (GetKeyState(VK_SHIFT)   & 0x8000) window->m_knst_event.mods |= KNST_MOD_SHIFT;
+    if (GetKeyState(VK_MENU)    & 0x8000) window->m_knst_event.mods |= KNST_MOD_ALT;
+    window->dispatch_current_event();
+    return 0;
+}
+
+case WM_KEYUP:
+case WM_SYSKEYUP: {
+    int scancode = (lParam >> 16) & 0xFF;
+    window->m_knst_event.type = KNST_KEYBOARD_EVENT;
+    window->m_knst_event.key_action = KNST_KEY_RELEASE;
+    window->m_knst_event.key_code = (int)wParam;
+    window->m_knst_event.scancode = scancode;
+    window->m_knst_event.remove_held_key(scancode);
+    window->dispatch_current_event();
+    return 0;
+}
 
         case WM_NCACTIVATE: {
             #ifdef KNST_DISABLE_TITLE_BAR
@@ -420,6 +465,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             EndPaint(hwnd, &ps);
+            window->dispatch_current_event();
             #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
                window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
             #endif
@@ -450,11 +496,12 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             }
             
             DragFinish(hDrop);
+            window->dispatch_current_event();
             return 0;
         }
 
         case WM_CLOSE:
-            window->m_knst_event.type = KNST_CLOSE_WINDOW;
+            window->should_close();
             return 0;
 
         case WM_DESTROY:
@@ -469,6 +516,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
 
             return DefWindowProcW(hwnd, msg, wParam, lParam);
     }
+
 
 #endif
 #endif // KNST_WINDOW_WIN32_EVENT_MANAGER_HPP

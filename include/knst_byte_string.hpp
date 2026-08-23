@@ -541,8 +541,55 @@ public:
     }
 
     KNST_FORCE_INLINE basic_byte_string& append(const basic_byte_string& other) noexcept {
-        return append(other.data(), other.length());
+        return append(static_cast<const unsigned char*>(other.data()), other.length());
     }
+
+
+KNST_FORCE_INLINE void push_back(unsigned char value) noexcept {
+    uint32_t old_len = length();
+    uint32_t new_len = old_len + 1;
+    
+    if (is_heap()) {
+        if (new_len + 1 > heap_data.m_capacity) {
+            uint32_t new_cap = (new_len + 1) * 2;
+            void* new_heap = m_allocator.allocate(new_cap);
+            if (!new_heap) return;
+            
+            memcpy(new_heap, heap_data.m_real_data, old_len);
+            static_cast<unsigned char*>(new_heap)[old_len] = value;
+            static_cast<unsigned char*>(new_heap)[new_len] = '\0';
+            
+            m_allocator.deallocate(heap_data.m_real_data, heap_data.m_capacity);
+            heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
+            heap_data.m_length = new_len;
+            heap_data.m_capacity = new_cap;
+        } else {
+            heap_data.m_real_data[old_len] = value;
+            heap_data.m_real_data[new_len] = '\0';
+            heap_data.m_length = new_len;
+        }
+    } else {
+        uint32_t sso_len = get_sso_length();
+        if (sso_len + 1 <= KNST_SSO_BUFFER_LENGTH) {
+            stack_data.m_real_data[sso_len] = value;
+            stack_data.m_real_data[sso_len + 1] = '\0';
+            set_stack_mode(sso_len + 1);
+        } else {
+            uint32_t new_cap = (new_len + 1) * 2;
+            void* new_heap = m_allocator.allocate(new_cap);
+            if (!new_heap) return;
+            
+            memcpy(new_heap, stack_data.m_real_data, sso_len);
+            static_cast<unsigned char*>(new_heap)[sso_len] = value;
+            static_cast<unsigned char*>(new_heap)[new_len] = '\0';
+            
+            heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
+            heap_data.m_length = new_len;
+            heap_data.m_capacity = new_cap;
+            set_heap_mode();
+        }
+    }
+}
 
 
     const KNST_FORCE_INLINE unsigned char* data() const noexcept{
@@ -550,6 +597,82 @@ public:
         return is_heap() ? get_real_heap_m_data() : this->stack_data.m_real_data;
 
     }
+
+
+
+KNST_FORCE_INLINE void resize(uint32_t new_size) noexcept {
+    resize(new_size, 0);
+}
+
+KNST_FORCE_INLINE void resize(uint32_t new_size, unsigned char fill_value) noexcept {
+    uint32_t old_len = length();
+    
+    if (new_size == old_len) return;
+    
+    if (new_size < old_len) {
+        if (is_heap()) {
+            if (new_size <= KNST_SSO_BUFFER_LENGTH) {
+                unsigned char temp[KNST_SSO_BUFFER_CAPACITY];
+                memcpy(temp, heap_data.m_real_data, new_size);
+                temp[new_size] = '\0';
+                
+                m_allocator.deallocate(heap_data.m_real_data, heap_data.m_capacity);
+                set_stack_mode(new_size);
+                memcpy(stack_data.m_real_data, temp, new_size);
+                stack_data.m_real_data[new_size] = '\0';
+            } else {
+                heap_data.m_real_data[new_size] = '\0';
+                heap_data.m_length = new_size;
+            }
+        } else {
+            stack_data.m_real_data[new_size] = '\0';
+            set_stack_mode(new_size);
+        }
+    } else {
+        if (is_heap()) {
+            if (new_size + 1 > heap_data.m_capacity) {
+                uint32_t new_cap = (new_size + 1) * 2;
+                void* new_heap = m_allocator.allocate(new_cap);
+                if (!new_heap) return;
+                
+                memcpy(new_heap, heap_data.m_real_data, old_len);
+                std::fill_n(static_cast<unsigned char*>(new_heap) + old_len, new_size - old_len, fill_value);
+                static_cast<unsigned char*>(new_heap)[new_size] = '\0';
+                
+                m_allocator.deallocate(heap_data.m_real_data, heap_data.m_capacity);
+                heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
+                heap_data.m_length = new_size;
+                heap_data.m_capacity = new_cap;
+            } else {
+                std::fill_n(heap_data.m_real_data + old_len, new_size - old_len, fill_value);
+                heap_data.m_real_data[new_size] = '\0';
+                heap_data.m_length = new_size;
+            }
+        } else {
+            if (new_size <= KNST_SSO_BUFFER_LENGTH) {
+                std::fill_n(stack_data.m_real_data + old_len, new_size - old_len, fill_value);
+                stack_data.m_real_data[new_size] = '\0';
+                set_stack_mode(new_size);
+            } else {
+                uint32_t new_cap = (new_size + 1) * 2;
+                void* new_heap = m_allocator.allocate(new_cap);
+                if (!new_heap) return;
+                
+                memcpy(new_heap, stack_data.m_real_data, old_len);
+                std::fill_n(static_cast<unsigned char*>(new_heap) + old_len, new_size - old_len, fill_value);
+                static_cast<unsigned char*>(new_heap)[new_size] = '\0';
+                
+                heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
+                heap_data.m_length = new_size;
+                heap_data.m_capacity = new_cap;
+                set_heap_mode();
+            }
+        }
+    }
+}
+
+
+
 
     static KNST_FORCE_INLINE basic_byte_string take_ownership(unsigned char* data, uint32_t size) noexcept {
     basic_byte_string result;
@@ -824,6 +947,42 @@ public:
     }
 
 
+KNST_FORCE_INLINE bool reserve(uint32_t new_capacity) noexcept {
+    if (new_capacity <= capacity()) {
+        return true;
+    }
+    
+    
+    if (is_heap()) {
+        void* new_heap = m_allocator.reallocate(
+            heap_data.m_real_data,
+            new_capacity
+        );
+        if (!new_heap) return false;
+        
+        heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
+        heap_data.m_capacity = new_capacity;
+        set_heap_mode();
+        
+    } else {
+       
+        uint32_t old_len = get_sso_length();
+        
+        void* new_heap = m_allocator.allocate(new_capacity);
+        if (!new_heap) return false;
+        
+
+        memcpy(new_heap, stack_data.m_real_data, old_len);
+        static_cast<unsigned char*>(new_heap)[old_len] = '\0';
+      
+        heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
+        heap_data.m_length = old_len;
+        heap_data.m_capacity = new_capacity;
+        set_heap_mode();
+    }
+    
+    return true;
+}
     KNST_FORCE_INLINE bool operator<(const char* str) const noexcept {
         if (!str) return false;
         uint32_t this_len = length();
@@ -1012,10 +1171,10 @@ public:
         result.append(rhs.data(), rhs.length());
         return result;
     }
-
+    
     friend KNST_FORCE_INLINE basic_byte_string operator+(const basic_byte_string& lhs, const char* rhs) noexcept {
         basic_byte_string result(lhs);
-        if (rhs) result.append(reinterpret_cast<const unsigned char*>(rhs), strlen(rhs));
+        if (rhs) result.append(reinterpret_cast<const unsigned char*>(rhs), static_cast<uint32_t>(strlen(rhs)));
         return result;
     }
 

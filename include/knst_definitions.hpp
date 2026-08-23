@@ -66,7 +66,7 @@
             #define KNST_USING_PLATFORM_WINDOWS 0
             #define KNST_USING_LINUX_PLATFORM_X11 0
             #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
-            
+            #define KNST_USING_LINUX_PLATFORM_ANDROID 1
             #define KNST_LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, "KNST", __VA_ARGS__)  
             #define KNST_LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, "KNST", __VA_ARGS__)
             #define KNST_LOG_WARN(...) __android_log_print(ANDROID_LOG_WARN, "KNST", __VA_ARGS__)  
@@ -101,10 +101,11 @@
         #define KNST_USING_PLATFORM_WINDOWS 1
         #define KNST_USING_LINUX_PLATFORM_X11 0
         #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
+        #define KNST_USING_LINUX_PLATFORM_ANDROID 0
     #elif defined(__linux__)
         #define KNST_USING_PLATFORM_LINUX 1
         #define KNST_USING_PLATFORM_WINDOWS 0
-
+        #define KNST_USING_LINUX_PLATFORM_ANDROID 0
 
         #if defined(KNST_LINUX_PLATFORM_X11)
             #define KNST_USING_LINUX_PLATFORM_X11 1

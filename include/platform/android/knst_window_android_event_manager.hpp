@@ -12,28 +12,33 @@ KNST_FORCE_INLINE void cmd_callback(struct android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_INPUT_CHANGED:
             window->m_knst_event.type = KNST_INPUT_CHANGED;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_INIT_WINDOW:
             window->m_knst_event.type = KNST_EXPOSE;
             window->m_knst_event.window_width = ANativeWindow_getWidth(app->window);
             window->m_knst_event.window_height = ANativeWindow_getHeight(app->window);
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_TERM_WINDOW:
             window->m_knst_event.type = KNST_WINDOW_LOST;
             window->m_knst_event.window_width = 0;
             window->m_knst_event.window_height = 0;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_WINDOW_RESIZED:
             window->m_knst_event.type = KNST_WINDOW_RESIZE;
             window->m_knst_event.window_width = ANativeWindow_getWidth(app->window);
             window->m_knst_event.window_height = ANativeWindow_getHeight(app->window);
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_WINDOW_REDRAW_NEEDED:
             window->m_knst_event.type = KNST_EXPOSE;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_CONTENT_RECT_CHANGED:
@@ -42,15 +47,19 @@ KNST_FORCE_INLINE void cmd_callback(struct android_app* app, int32_t cmd) {
             window->m_knst_event.content_top = app->contentRect.top;
             window->m_knst_event.content_right = app->contentRect.right;
             window->m_knst_event.content_bottom = app->contentRect.bottom;
+            window->dispatch_current_event();
             break;
                     
         case APP_CMD_GAINED_FOCUS:
             window->m_knst_event.is_focused = true;
-            window->m_knst_event.type = KNST_EXPOSE;
+            window->m_knst_event.type = KNST_FOCUS_IN;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_LOST_FOCUS:
             window->m_knst_event.is_focused = false;
+            window->m_knst_event.type = KNST_FOCUS_OUT;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_CONFIG_CHANGED: {
@@ -79,22 +88,25 @@ KNST_FORCE_INLINE void cmd_callback(struct android_app* app, int32_t cmd) {
             
             window->m_knst_event.screen_width_dp = AConfiguration_getScreenWidthDp(config);
             window->m_knst_event.screen_height_dp = AConfiguration_getScreenHeightDp(config);
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            window->dispatch_current_event();
             break;
         }
         
         case APP_CMD_LOW_MEMORY:
             window->m_knst_event.type = KNST_LOW_MEMORY;
             window->m_knst_event.is_low_memory = true;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_START:
             window->m_knst_event.type = KNST_APP_STARTED;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_RESUME:
             window->m_knst_event.type = KNST_APP_RESUMED;
             window->m_knst_event.is_focused = true;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_SAVE_STATE:
@@ -108,19 +120,24 @@ KNST_FORCE_INLINE void cmd_callback(struct android_app* app, int32_t cmd) {
                     window->m_knst_event.saved_state_size = app->savedStateSize;
                 }
             }
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_PAUSE:
             window->m_knst_event.type = KNST_APP_PAUSED;
             window->m_knst_event.is_focused = false;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_STOP:
             window->m_knst_event.type = KNST_APP_STOPPED;
+            window->dispatch_current_event();
             break;
             
         case APP_CMD_DESTROY:
             window->m_knst_event.type = KNST_CLOSE_WINDOW;
+            window->should_close();
+            window->dispatch_current_event();
             break;
             
         default:
@@ -175,6 +192,7 @@ KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* e
                 break;
         }
         
+        window->dispatch_current_event();
         return 1;
     }
     
@@ -189,34 +207,50 @@ KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* e
             window->m_knst_event.type = KNST_MOBILE_VOLUME_UP;
             window->m_knst_event.key_code = keyCode;
             window->m_knst_event.key_action = KNST_KEY_PRESS;
+            window->dispatch_current_event();
             return 0;
         }
         else if (keyCode == AKEYCODE_VOLUME_DOWN && action == AKEY_EVENT_ACTION_DOWN) {
             window->m_knst_event.type = KNST_MOBILE_VOLUME_DOWN;
             window->m_knst_event.key_code = keyCode;
             window->m_knst_event.key_action = KNST_KEY_PRESS;
+            window->dispatch_current_event();
             return 0;
         }
         else if (keyCode == AKEYCODE_VOLUME_MUTE && action == AKEY_EVENT_ACTION_DOWN) {
             window->m_knst_event.type = KNST_MOBILE_VOLUME_MUTE;
             window->m_knst_event.key_code = keyCode;
             window->m_knst_event.key_action = KNST_KEY_PRESS;
+            window->dispatch_current_event();
             return 0;
         }
         
        
+      
+        if (action == AKEY_EVENT_ACTION_DOWN &&
+            keyCode == window->m_knst_event.m_last_key &&
+            window->m_knst_event.m_key_held) {
+            return 1;
+        }
+
         window->m_knst_event.type = KNST_KEYBOARD_EVENT;
         window->m_knst_event.key_code = keyCode;
         window->m_knst_event.scancode = AKeyEvent_getScanCode(event);
         
         if (action == AKEY_EVENT_ACTION_DOWN) {
-            if (AKeyEvent_getRepeatCount(event) > 0) {
-                window->m_knst_event.key_action = KNST_KEY_REPEAT;
-            } else {
-                window->m_knst_event.key_action = KNST_KEY_PRESS;
-            }
+            window->m_knst_event.key_action = KNST_KEY_PRESS;
+            window->m_knst_event.m_last_key = keyCode;
+            window->m_knst_event.m_last_scancode = window->m_knst_event.scancode;
+            window->m_knst_event.m_key_held = true;
+            window->m_knst_event.m_last_key_time = KnstWindowSources::get_current_time_ms();
+            window->m_knst_event.m_repeat_initialized = false;
         } else if (action == AKEY_EVENT_ACTION_UP) {
             window->m_knst_event.key_action = KNST_KEY_RELEASE;
+            if (keyCode == window->m_knst_event.m_last_key) {
+                window->m_knst_event.m_key_held = false;
+                window->m_knst_event.m_last_key = 0;
+                window->m_knst_event.m_last_scancode = 0;
+            }
         } else {
             window->m_knst_event.key_action = 0;
         }
@@ -321,6 +355,7 @@ KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* e
             }
         }
         
+        window->dispatch_current_event();
         return 1;
     }
     

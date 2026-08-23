@@ -330,7 +330,238 @@ public:
         return false;
     }
 
+
+    KNST_FORCE_INLINE iterator insert(const_iterator pos, const T& value) noexcept {
+        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        
+        if (index > m_size) {
+            push_back(value);
+            return iterator(m_data + m_size - 1);
+        }
+        
+        if (m_size >= m_capacity) {
+            uint32_t new_cap = m_capacity == 0 ? 4 : m_capacity * 2;
+            if (!reserve(new_cap)) {
+                return end();
+            }
+        }
+        
+        for (uint32_t i = m_size; i > index; i--) {
+            new (m_data + i) T(std::move(m_data[i - 1]));
+            m_data[i - 1].~T();
+        }
+        
+        new (m_data + index) T(value);
+        m_size++;
+        
+        return iterator(m_data + index);
+    }
+    
+
+    KNST_FORCE_INLINE iterator insert(const_iterator pos, T&& value) noexcept {
+        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        
+        if (index > m_size) {
+            push_back(std::move(value));
+            return iterator(m_data + m_size - 1);
+        }
+        
+        if (m_size >= m_capacity) {
+            uint32_t new_cap = m_capacity == 0 ? 4 : m_capacity * 2;
+            if (!reserve(new_cap)) {
+                return end();
+            }
+        }
+        
+        for (uint32_t i = m_size; i > index; i--) {
+            new (m_data + i) T(std::move(m_data[i - 1]));
+            m_data[i - 1].~T();
+        }
+        
+        new (m_data + index) T(std::move(value));
+        m_size++;
+        
+        return iterator(m_data + index);
+    }
+    
    
+    KNST_FORCE_INLINE iterator insert(const_iterator pos, uint32_t count, const T& value) noexcept {
+        if (count == 0) return iterator(const_cast<T*>(pos.ptr));
+        
+        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        
+        if (index > m_size) {
+            for (uint32_t i = 0; i < count; i++) {
+                push_back(value);
+            }
+            return iterator(m_data + m_size - count);
+        }
+        
+        if (m_size + count > m_capacity) {
+            uint32_t new_cap = m_capacity;
+            while (new_cap < m_size + count) {
+                new_cap = new_cap == 0 ? 4 : new_cap * 2;
+            }
+            if (!reserve(new_cap)) {
+                return end();
+            }
+        }
+        
+        for (uint32_t i = m_size + count - 1; i >= index + count; i--) {
+            new (m_data + i) T(std::move(m_data[i - count]));
+            m_data[i - count].~T();
+        }
+        
+        for (uint32_t i = 0; i < count; i++) {
+            new (m_data + index + i) T(value);
+        }
+        
+        m_size += count;
+        
+        return iterator(m_data + index);
+    }
+    
+   
+    template<typename InputIt>
+    KNST_FORCE_INLINE iterator insert(const_iterator pos, InputIt first, InputIt last) noexcept {
+        if (first == last) return iterator(const_cast<T*>(pos.ptr));
+        
+        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        uint32_t count = 0;
+        
+        for (InputIt it = first; it != last; ++it) {
+            count++;
+        }
+        
+        if (count == 0) return iterator(const_cast<T*>(pos.ptr));
+        
+        if (index > m_size) {
+            for (InputIt it = first; it != last; ++it) {
+                push_back(*it);
+            }
+            return iterator(m_data + m_size - count);
+        }
+        
+        if (m_size + count > m_capacity) {
+            uint32_t new_cap = m_capacity;
+            while (new_cap < m_size + count) {
+                new_cap = new_cap == 0 ? 4 : new_cap * 2;
+            }
+            if (!reserve(new_cap)) {
+                return end();
+            }
+        }
+        
+        for (uint32_t i = m_size + count - 1; i >= index + count; i--) {
+            new (m_data + i) T(std::move(m_data[i - count]));
+            m_data[i - count].~T();
+        }
+        
+        uint32_t i = 0;
+        for (InputIt it = first; it != last; ++it, ++i) {
+            new (m_data + index + i) T(*it);
+        }
+        
+        m_size += count;
+        
+        return iterator(m_data + index);
+    }
+    
+
+    KNST_FORCE_INLINE iterator insert(const_iterator pos, std::initializer_list<T> list) noexcept {
+        return insert(pos, list.begin(), list.end());
+    }
+    
+ 
+    KNST_FORCE_INLINE iterator insert(uint32_t index, const T& value) noexcept {
+        if (index >= m_size) {
+            push_back(value);
+            return iterator(m_data + m_size - 1);
+        }
+        return insert(const_iterator(m_data + index), value);
+    }
+    
+    KNST_FORCE_INLINE iterator insert(uint32_t index, T&& value) noexcept {
+        if (index >= m_size) {
+            push_back(std::move(value));
+            return iterator(m_data + m_size - 1);
+        }
+        return insert(const_iterator(m_data + index), std::move(value));
+    }
+    
+    KNST_FORCE_INLINE iterator insert(uint32_t index, uint32_t count, const T& value) noexcept {
+        if (index >= m_size) {
+            for (uint32_t i = 0; i < count; i++) {
+                push_back(value);
+            }
+            return iterator(m_data + m_size - count);
+        }
+        return insert(const_iterator(m_data + index), count, value);
+    }
+
+
+KNST_FORCE_INLINE void erase_at(uint32_t index) noexcept {
+    if (index >= m_size) return;
+    
+    m_data[index].~T();
+    
+    for (uint32_t i = index; i < m_size - 1; i++) {
+        new (m_data + i) T(std::move(m_data[i + 1]));
+        m_data[i + 1].~T();
+    }
+    
+    m_size--;
+}
+
+// ============================================================
+// ★ assign METODLARI ★
+// ============================================================
+
+// Tüm vector'ü count adet value ile doldur
+KNST_FORCE_INLINE void assign(uint32_t count, const T& value) noexcept {
+    // Mevcut elemanları temizle
+    clear();
+    
+    // Yeterli kapasite yoksa reserve et
+    if (count > m_capacity) {
+        reserve(count);
+    }
+    
+    // Yeni elemanları ekle
+    for (uint32_t i = 0; i < count; i++) {
+        new (m_data + i) T(value);
+        m_size++;
+    }
+}
+
+// İki iterator arasındaki değerlerle doldur
+template<typename InputIt>
+KNST_FORCE_INLINE void assign(InputIt first, InputIt last) noexcept {
+    // Mevcut elemanları temizle
+    clear();
+    
+    // Kaç eleman olduğunu say
+    uint32_t count = 0;
+    for (InputIt it = first; it != last; ++it) {
+        count++;
+    }
+    
+    // Yeterli kapasite yoksa reserve et
+    if (count > m_capacity) {
+        reserve(count);
+    }
+    
+    // Yeni elemanları ekle
+    for (InputIt it = first; it != last; ++it) {
+        new (m_data + m_size) T(*it);
+        m_size++;
+    }
+}
+
+// initializer_list ile doldur
+KNST_FORCE_INLINE void assign(std::initializer_list<T> list) noexcept {
+    assign(list.begin(), list.end());
+}
     KNST_FORCE_INLINE bool shrink_to_fit() noexcept {
        
         if (m_size == m_capacity) return true;

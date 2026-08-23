@@ -4,7 +4,7 @@
 
 
 #include "platform/knst_window/knst_window_identifiers.hpp"
-
+#include <chrono>
 #if KNST_USING_PLATFORM_WINDOWS
 
     KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept; 

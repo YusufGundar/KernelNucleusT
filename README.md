@@ -8,6 +8,9 @@ A modern C++17 library package. A high-performance, customizable, cross-platform
 
 - **knst_window** -—-> Provides support for (Window / Linux (X11 / Wayland) / Android) <----
 
+
+- in the development stage (knst_gui_framework) --->(Window / Linux(X11 / Wayland) / Android) <---  Supported by Vulkan infrastructure.
+
 ---
 
 ### Core Structures

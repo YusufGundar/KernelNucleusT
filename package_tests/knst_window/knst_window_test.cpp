@@ -14,12 +14,8 @@
 //  -------->   #define KNST_OPENGL_USING_EGL     If you are using Linux X11, you need to specify that additionally.
 //  -------->   #define KNST_OPENGL_USING_GLX     If you are using Linux X11, you need to specify that additionally.
 
-
-
-#include "../../glad_3_3/include/glad/glad.h" // glad path
+#include "../../glad_3_3/include/glad/glad.h"
 #include "../../include/KernelNucleusT.hpp"
-
-
 
 
 const char* vertexShaderSource = R"(
@@ -79,21 +75,41 @@ struct RenderState {
     knst_window_opengl_content* content;
     GLuint shaderProgram;
     GLuint VAO, VBO;
+    
+    bool keyW, keyA, keyS, keyD;
+    float posX, posY;
+    std::chrono::steady_clock::time_point lastFrameTime;
 };
 
 
 void render_frame(knst_window& window, void* user_data) {
     RenderState* rs = static_cast<RenderState*>(user_data);
     
-    rs->content->BeginFrame();
+    auto now = std::chrono::steady_clock::now();
+    float dt = std::chrono::duration<float>(now - rs->lastFrameTime).count();
+    rs->lastFrameTime = now;
+    dt = std::min(dt, 0.05f);
     
+    const float MOVE_SPEED = 2.0f;
+    
+    if (rs->keyW) rs->posY += MOVE_SPEED * dt;
+    if (rs->keyS) rs->posY -= MOVE_SPEED * dt;
+    if (rs->keyA) rs->posX -= MOVE_SPEED * dt;
+    if (rs->keyD) rs->posX += MOVE_SPEED * dt;
+    
+    rs->content->BeginFrame();
     
     glClearColor(0.2f, 0.2f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
-   
     glUseProgram(rs->shaderProgram);
     glBindVertexArray(rs->VAO);
+    
+    GLint posLoc = glGetUniformLocation(rs->shaderProgram, "uPos");
+    if (posLoc != -1) {
+        glUniform2f(posLoc, rs->posX, rs->posY);
+    }
+    
     glDrawArrays(GL_TRIANGLES, 0, 3);
     
     rs->content->SwapBuffers();
@@ -101,9 +117,7 @@ void render_frame(knst_window& window, void* user_data) {
 
 int main() {
     
-    
     KnstWindowSources::Init();
-
 
     for (size_t i = 0; i < knst_display::get_monitor_list().size(); i++) {
         const auto& mon = knst_display::get_monitor_list()[i];
@@ -117,17 +131,11 @@ int main() {
         std::cout << "DPI: " << mon.dpi_scale << std::endl;
     }
 
-   
-    knst_window window(800, 600, u"Trangle Test");
+    knst_window window(800, 600, u"Triangle Test");
     window.creation();
     
-
     window.set_drag_drop_status(true);
     
-    //int width,height; //  image (bmp) loader example for change cursor
-    //knst_byte_string bmp_data = knst_image_loader::load_bmp("/home/knst_user/Desktop/KernelNucleusT/icon_example/cpp_logo.bmp",&width,&height,KNST_BITMAP_64_64 | KNST_BITMAP_OUTPUT_RGBA);
-    //window.set_bmp_cursor(bmp_data,width,height);
-
     window.show();
     
     knst_window_opengl_content content;
@@ -145,9 +153,30 @@ int main() {
     
     GLuint shaderProgram = CreateShaderProgram(vertexShaderSource, fragmentShaderSource);
     
+    const char* vertexShaderSourceWithUniform = R"(
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+        layout (location = 1) in vec3 aColor;
+        out vec3 vColor;
+        uniform vec2 uPos;
+        void main() {
+            gl_Position = vec4(aPos.x + uPos.x, aPos.y + uPos.y, aPos.z, 1.0);
+            vColor = aColor;
+        }
+    )";
+    
+    const char* fragmentShaderSourceSame = R"(
+        #version 330 core
+        in vec3 vColor;
+        out vec4 FragColor;
+        void main() {
+            FragColor = vec4(vColor, 1.0);
+        }
+    )";
+    
+    GLuint shaderProgramWithUniform = CreateShaderProgram(vertexShaderSourceWithUniform, fragmentShaderSourceSame);
     
     float vertices[] = {
-        
         -0.5f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f,
          0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,
          0.0f,  0.5f, 0.0f,  0.0f, 0.0f, 1.0f
@@ -158,7 +187,6 @@ int main() {
     glGenBuffers(1, &VBO);
     
     glBindVertexArray(VAO);
-    
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     
@@ -170,86 +198,105 @@ int main() {
     
     RenderState rs;
     rs.content = &content;
-    rs.shaderProgram = shaderProgram;
+    rs.shaderProgram = shaderProgramWithUniform;
     rs.VAO = VAO;
     rs.VBO = VBO;
+    rs.keyW = false;
+    rs.keyA = false;
+    rs.keyS = false;
+    rs.keyD = false;
+    rs.posX = 0.0f;
+    rs.posY = 0.0f;
+    rs.lastFrameTime = std::chrono::steady_clock::now();
     
     window.set_user_data(&rs);
     window.set_redraw_callback(render_frame);
     
-    while (!window.is_should_close()) {
+    while (true) {
         knst_window_event_system::non_block_pool_event();
         
         window.call_redraw_callback();
-
-        const auto& handle = window.get_window_event_handle();
         
-
-
-
-
-        if(handle.type == KNST_KEYBOARD_EVENT){
-
-            if(handle.key_action == KNST_KEY_PRESS && handle.key_code == KNST_KEY_C && (handle.mods & KNST_MOD_CONTROL)) {
+        for (size_t i = 0; i < window.get_keyboard_event_count(); i++) {
+            const auto& handle = window.get_keyboard_event(i);
+            
+            bool isDown = (handle.key_action == KNST_KEY_PRESS);
+            bool isUp = (handle.key_action == KNST_KEY_RELEASE);
+            
+            if (handle.key_action == KNST_KEY_PRESS && handle.key_code == KNST_KEY_C && (handle.mods & KNST_MOD_CONTROL)) {
                 window.set_clipboard(u"What's up Boss");
             }
-            else if(handle.key_action == KNST_KEY_PRESS && handle.key_code == KNST_KEY_V && (handle.mods & KNST_MOD_CONTROL)) {
+            else if (handle.key_action == KNST_KEY_PRESS && handle.key_code == KNST_KEY_V && (handle.mods & KNST_MOD_CONTROL)) {
                 window.request_clipboard();
                 std::cout << "copied text : " << window.get_clipboard() << std::endl;
             }
-            else if(handle.key_code == KNST_KEY_W){
-                std::cout << ".The 'W' key was triggered." << std::endl;
+            else if (isDown || isUp) {
+                if (handle.key_code == KNST_KEY_W) {
+                    rs.keyW = isDown;
+                    if (isDown) std::cout << "W pressed" << std::endl;
+                    else std::cout << "W released" << std::endl;
+                }
+                else if (handle.key_code == KNST_KEY_A) {
+                    rs.keyA = isDown;
+                    if (isDown) std::cout << "A pressed" << std::endl;
+                    else std::cout << "A released" << std::endl;
+                }
+                else if (handle.key_code == KNST_KEY_S) {
+                    rs.keyS = isDown;
+                    if (isDown) std::cout << "S pressed" << std::endl;
+                    else std::cout << "S released" << std::endl;
+                }
+                else if (handle.key_code == KNST_KEY_D) {
+                    rs.keyD = isDown;
+                    if (isDown) std::cout << "D pressed" << std::endl;
+                    else std::cout << "D released" << std::endl;
+                }
+                else if (handle.key_code == KNST_KEY_SPACE && isDown) {
+                    std::cout << "SPACE pressed" << std::endl;
+                }
             }
-            else if (handle.key_code == KNST_KEY_A){
-                std::cout << ".The 'A' key was triggered." << std::endl;
-            }
-            else if (handle.key_code == KNST_KEY_D){
-                std::cout << ".The 'D' key was triggered." << std::endl;
-            }
-            else if (handle.key_code == KNST_KEY_S){
-                std::cout << ".The 'S' key was triggered." << std::endl;
-            }
-            else if (handle.key_code == KNST_KEY_SPACE){
-                std::cout << ".The 'SPACE' key was triggered." << std::endl;
-            }
-
         }
-        else if(handle.type == KNST_MOUSE_EVENT){
-
-            if(handle.mouse_button == KNST_MOUSE_BUTTON_LEFT){
-                std::cout << ".'Left' mouse button triggered."<< std::endl;
+        
+        for (size_t i = 0; i < window.get_mouse_event_count(); i++) {
+            const auto& handle = window.get_mouse_event(i);
+            
+            if (handle.type == KNST_MOUSE_EVENT && handle.mouse_button == KNST_MOUSE_BUTTON_LEFT) {
+                std::cout << "Left mouse button triggered" << std::endl;
                 std::cout << "mouse x :" << handle.mouse_x << " mouse y:" << handle.mouse_y << std::endl;
             }
-            else if(handle.mouse_button == KNST_MOUSE_BUTTON_RIGHT) {
-                std::cout << ".'Right' mouse button triggered."<< std::endl;
+            else if (handle.type == KNST_MOUSE_EVENT && handle.mouse_button == KNST_MOUSE_BUTTON_RIGHT) {
+                std::cout << "Right mouse button triggered" << std::endl;
                 std::cout << "mouse x :" << handle.mouse_x << " mouse y:" << handle.mouse_y << std::endl;
             }
-
         }
-        else if(handle.type == KNST_CLOSE_WINDOW || handle.type == KNST_DISCONNECT){
+        
+        for (size_t i = 0; i < window.get_filedrop_event_count(); i++) {
+            const auto& handle = window.get_filedrop_event(i);
+            
+            if (handle.type == KNST_FILE_DROP) {
+                std::cout << "file drop" << std::endl;
+                for (auto file : handle.drop_files) {
+                    std::cout << file << std::endl;
+                }
+            }
+            else if (handle.type == KNST_FILE_DROP_LEAVE) {
+                std::cout << "file leave" << std::endl;
+            }
+        }
+        
+        if (window.is_should_close()){
             content.Shutdown();
             window.destroy();
             window.should_close();
-        }
-        else if(handle.type == KNST_FILE_DROP){
-            std::cout << "file drop"<<std::endl;
-            for(auto file : window.get_window_event_handle().drop_files){
-                std::cout << file << std::endl;
-            }
-        }
-        else if(handle.type == KNST_FILE_DROP_LEAVE){
-            std::cout << "file leave"<<std::endl;
+            break;
         }
         
-
         window.clear_temporary_events();
     }
     
-   
-    glDeleteProgram(shaderProgram);
+    glDeleteProgram(rs.shaderProgram);
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    
     
     KnstWindowSources::CleanUp();
     

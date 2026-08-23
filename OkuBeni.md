@@ -6,6 +6,11 @@ Modern C++17 kütüphane paketi. Yüksek performanslı, özelleştirilebilir , �
 ### Paketli Yapılardan
 
 - knst_window  ---> (Window / Linux(X11 / Wayland) / Android) <---  Desteği sağlamaktadır
+
+- geliştirme aşamasında (knst_gui_framework) --->(Window / Linux(X11 / Wayland) / Android) <---  Desteği
+
+
+
 ___
 
 
@@ -432,6 +437,26 @@ build/./knst_app
             "defines": [
                 "KNST_USING_PLATFORM_WINDOWS",
                 "KNST_USING_VULKAN"
+            ],
+            "compilerPath": "g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        },
+        { // version path example
+            "name": "Windows (MinGW - Vulkan)",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/glad_3_3/include",
+                "C:/msys64/mingw64/include",
+                "C:/VulkanSDK/1.4.350.0/Include",
+                "C:/VulkanSDK/1.4.350.0/Include/vulkan"
+            ],
+            "defines": [
+                "KNST_USING_PLATFORM_WINDOWS",
+                "KNST_USING_VULKAN"
+                
             ],
             "compilerPath": "g++.exe",
             "cStandard": "c11",

@@ -304,6 +304,7 @@ elseif(UNIX AND NOT APPLE AND NOT ANDROID)
             xcb-util 
             xext 
             xfixes 
+            xcb-sync
             xi 
             xrandr 
             xcursor
@@ -462,7 +463,7 @@ if(ENABLE_VULKAN AND NOT ANDROID)
             
             set(VULKAN_LIBS ${VULKAN_LIBRARY})
             set(VULKAN_INCLUDES ${VULKAN_INCLUDE_DIR})
-            message(STATUS "✓ Vulkan: Found at ${VULKAN_INCLUDE_DIR}")
+            message(STATUS "✓ Vulkan: Found at ${VULKAN_INCLUDE_DIR}") // we need vulkan broo if you need knst_gui_framework
         endif()
     endif()
 endif()

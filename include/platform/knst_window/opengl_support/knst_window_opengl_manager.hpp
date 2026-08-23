@@ -252,7 +252,7 @@ public:
             } else {
                 glDisable(GL_SCISSOR_TEST);
             }
-
+            
 
             #if KNST_USING_PLATFORM_WINDOWS
                 ::SwapBuffers(m_hdc);
@@ -268,7 +268,28 @@ public:
                 eglSwapBuffers(s_egl_display, m_egl_surface);
             #endif
         
-        
+            #if KNST_USING_LINUX_PLATFORM_X11
+                if (window->m_syncHasPendingValue) {
+                    xcb_sync_int64_t value = window->m_syncPendingValue;
+                    value.lo += 1;
+                    if (value.lo == 0) value.hi += 1;
+                    
+                    xcb_sync_set_counter(
+                        KnstWindowSources::get_native_x11_connection_handle(),
+                        window->m_syncCounter,
+                        value
+                    );
+                    
+                    
+                    if (window->m_syncRequestReceived) {
+                        xcb_flush(KnstWindowSources::get_native_x11_connection_handle());
+                        window->m_syncRequestReceived = false;
+                    }
+                    
+                    window->m_syncHasPendingValue = false;
+                    window->m_syncPendingValue = value;
+                }
+            #endif
 
     
         

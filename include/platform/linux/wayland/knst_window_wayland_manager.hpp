@@ -24,9 +24,11 @@ inline void knst_window::creation() noexcept
     toplevel = xdg_surface_get_toplevel(xdgSurface);
     knst_byte_string title(m_title);
     xdg_toplevel_set_title(toplevel, reinterpret_cast<const char*>(title.data()));
+    xdg_toplevel_set_app_id(toplevel, "KernelNucleusT");
     xdg_surface_add_listener(xdgSurface, &knst_window_wayland_funcs::xdgSurfaceListener, this);
     xdg_toplevel_add_listener(toplevel, &knst_window_wayland_funcs::xdgToplevelListener, this);
     wl_surface_commit(m_surface);
+    
     
     knst_window_event_system::register_window(this);
 }
