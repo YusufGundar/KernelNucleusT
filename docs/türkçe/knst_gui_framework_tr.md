@@ -1,0 +1,1 @@
+### detaylı dökümantasyon şimdilik yok ilerde gelecektir

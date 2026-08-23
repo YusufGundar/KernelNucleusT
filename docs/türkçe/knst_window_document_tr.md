@@ -51,125 +51,272 @@ Kurucu sadece bilgileri  alıp saklamaktadır, asıl pencere oluşturma işlemi 
 
 - block_pool_event ---> event geldiğinde, döner
 - non_block_pool_event ---> event varsa alır ve döner, yoksa direkt döner
-- timeout_pool_event ---> verdiğiniz süre kadar bekler, sonrasında event var alır, yoksa direkt döner
 
 📌 **NOT:** Bu yapılar `knst_window_event_system` içerisinde public, static şekilde bulunur, sadece çağırmanız yeterlidir çoklu pencere uygulamalarında uygun olan pencereye, doğru event iletilicektir
 
 - Eğer event nesnesinin `type`'ı KNST_UNKNOWN ise döngüde türü tespit edilememiştir
 
-- Event nesnesi bu 3 döngüden sonra `knst_window` sınıfından oluşturduğunuz nesnenin içindeki `m_knst_event (private)` nesnesinin içini doldurur sizde `window.get_window_event_handle()` ile bu m_knst_event nesnesine const olarak erişip içerisindeki değeleri kontrol edebilirsiniz , bu yapının gerçek bi örneği bu şekildedir:
+
+# Knst Event Sistemi — Kullanım Kılavuzu
+
+Bu kısımda`knst_window` / `knst_window_event_system` event sisteminin
+uygulama tarafından nasıl kullanılacağını , platform
+içi implementasyon detayları (X11/Win32/Wayland/Android) bilmeniz gerekmez, sizin yapmanız gereken bu yapıyı kullanmanız arka planda herşeyi kütüphane kendisi ayarlıyacakstır
+
+---
+
+## 1. Kurulum ve Ana Döngü İskeleti
 
 ```cpp
-    #if defined(KNST_USING_PLATFORM_ANDROID)
+int main() {
+    KnstWindowSources::Init();
 
-        int pointer_count = 0; // ekrana aynı anda basan parmak sayısı (çoklu dokunmatik)
-        float pointer_x[10] = {0}; // her bir parmağın X koordinatı (piksel cinsinden)
-        float pointer_y[10] = {0}; // her bir parmağın Y koordinatı (piksel cinsinden)
-        int pointer_id[10] = {0}; // her bir parmağın benzersiz ID'si (parmak takibi için)
-        int touch_action = 0; // dokunmatik olay tipi bastı , çekti , haraket etti , iptal gibi
-        int content_left = 0; // pencere içeriğinin sol kenarı
-        int content_top = 0; // pencere içeriğinin üst kenarı
-        int content_right = 0; // pencere içeriğinin sağ kenarı
-        int content_bottom = 0; // pencere içeriğinin alt kenarı
-        int orientation = 0; // ekran yönü dikey = 0 , yatay = 1 gibi
-        char language[4] = {0}; // sistem dili
-        char country[4] = {0}; // sistem ülke kodu
-        bool is_night_mode = false; // gece modu durumu
-        bool is_low_memory = false; // cihazın bellek durumu
-        float density = 1.0f; // dpi oranı
-        int screen_width_dp = 0; // ekran genişliği (dp cinsinden)
-        int screen_height_dp = 0; // ekran yüksekliği (dp cinsinden)
-        void* saved_state = nullptr; // uygulama kapanırken kaydedilen veri bloğu
-        size_t saved_state_size = 0; // kaydedilen veri bloğunun boyutu (byte)
+    knst_window window(1280, 720, "Başlık");
+    window.creation();
 
-    #endif
+    // ... render backend init (Vulkan/OpenGL) ...
 
-        int type = 0; // gelen eventin türü
-        int key_code = 0; // hangi tuş olduğu       
-        int scancode = 0; // donanımdaki gerçek kodu
-        int key_action = 0; // tuş durumu basma , çekme , tekrarlama / press , release , repeat bilgileri
-        int mods = 0; // bir tuş basıldığınla hangi tuşunda o tuşla beraber basılı olduğu bilgisi
-        bool is_focused = 0; // pencerenin focus durumu
-        bool mouse_on_window = 0; // mousenin pencerenin içinde olup olmadığı durumu
-        int mouse_x = 0; // mousenin penceredeki x konumu
-        int mouse_y = 0; // mousenin penceredeki y konumu
-        int mouse_root_x = 0; // mousenin monitördeki x konumu
-        int mouse_root_y = 0; // mousenin monitördeki y konumu
-        int mouse_button = 0; // mouse tuş durumu sol , sağ / left , right          
-        int mouse_action = 0; // mouse durumu tıklama , bırakma / press , release
-        int mouse_scroll_delta = 0; // mouse tekerleği durumu 'pozitifse yukarı' 'negatifse aşağı'
-        int window_width = 0; // pencerenin genişliği
-        int window_height = 0; // pencerenin yüksekliği
-        int window_root_x = 0; // pencerenin monitördeki x konumu
-        int window_root_y = 0; // pencerenin monitördeki y konumu
-        bool is_full_screen = false; // pencerenin full_screen durumu
-        bool is_minimized = false; // pencerenin minimize durumu
-        bool is_maximized = false; // pencerenin maximize durumu
+    window.set_user_data(&renderState);
+    window.set_redraw_callback(my_render_frame);
 
-        knst_vector<knst_c16string>drop_files; // drag drop özelliği açıksa dosyaların yolları burda saklanır
-        uint32_t drop_count = 0; // drag drop ile kaç dosya bırakıldığı
+    window.show();
 
-        // Bunu window nesnesinden 'clear_temporary_events()' ile çağırırsınız
-        KNST_FORCE_INLINE void clear()noexcept{
-            key_code = 0;
-            scancode = 0;
-            key_action = 0;
-            mouse_button = 0;
-            mouse_action = 0;
-            mouse_scroll_delta = 0;
-            type = 0;        
-        }
+    while (true) {
+        knst_window_event_system::non_block_pool_event(); // 1) native event'leri çek
+        window.call_redraw_callback();                     // 2) render/güncelleme
 
+        // 3) bu frame'de gelen event'leri oku (aşağıya bak)
+
+        if (window.is_should_close()) break;
+
+        window.clear_temporary_events();                   // 4) buffer'ları temizle
+    }
+
+    // ... destroy ...
+    KnstWindowSources::CleanUp();
+}
 ```
+
+Her frame'de bu 4 adım **sırayla** ve **tam olarak bu sırada** çalışmalı.
+Adım 4'ü atlarsan ring buffer'lar dolup taşmaya devam eder (eski event
+üzerine yazılır, veri kaybı olmaz ama mantıksal karışıklık olur) eğer gerçekten tutarlı bi event mekanizması istiyorsanız bu şekilde yapmanızı öneririm.
+
+---
+
+## 2. Poll Fonksiyonları: `non_block_pool_event()` vs `block_pool_event()`
+
+| Fonksiyon | Ne zaman kullanılır |
+|---|---|
+| `non_block_pool_event()` | Oyun/render loop — her frame native kuyruğu boşaltır, event yoksa hemen döner. |
+| `block_pool_event()` | Pencere minimize/arka plandayken CPU yakmamak istediğinde — en az 1 event gelene kadar bekler. |
+
+İkisi de aynı iş: native platform kuyruğunu boşaltır, her event'i doğru
+pencereye yönlendirir, `check_key_repeat()`'i tüm pencereler için çalıştırır. -- burda çapraz platformdaki tutarlılığı sağlamak için böyle bir yöntem seçtim
+
+---
+
+## 3. Event Kategorileri ve Okuma Şekli
+
+Event sistemi gelen event'leri type'a göre otomatik ikiye ayırır:
+
+### 3.1 Tekil (single-slot) kategoriler
+Sadece **son değer** önemlidir, üzerine yazılır. Aynı frame'de 50 kere
+resize gelse bile sonuncusu geçerlidir.
+
+```cpp
+const auto& resize = window.get_resize_event();
+if (resize.type == KNST_WINDOW_RESIZE) {
+    // resize.window_width / resize.window_height
+}
+
+const auto& focus = window.get_focus_event();
+const auto& winState = window.get_window_state_event(); // maximize/minimize/restore/fullscreen
+const auto& expose = window.get_expose_event();
+const auto& move = window.get_move_event();
+const auto& misc = window.get_misc_event();
+const auto& lifecycle = window.get_lifecycle_event(); // sadece Android
+```
+
+> ⚠️ `type` alanı her frame `clear_temporary_events()` ile sıfırlanır
+> (`0` = `KNST_UNKNOWN`). O yüzden okumadan önce `type` kontrolü yap —
+> event gelmediyse eski veri kalmaz, `type == 0` olur.
+
+### 3.2 Ring buffer kategoriler
+Aynı frame'de art arda birden fazla gelebilir (örn. bir frame'de hem W
+basılıp hem D bırakılabilir). Sırayla, kaybetmeden okunmalı:
+
+```cpp
+// Klavye
+for (size_t i = 0; i < window.get_keyboard_event_count(); i++) {
+    const auto& ev = window.get_keyboard_event(i);
+    // ev.key_code, ev.key_action (PRESS/RELEASE/REPEAT), ev.scancode, ev.mods
+}
+
+// Mouse
+for (size_t i = 0; i < window.get_mouse_event_count(); i++) {
+    const auto& ev = window.get_mouse_event(i);
+    // ev.mouse_action, ev.mouse_button, ev.mouse_x/y, ev.mouse_scroll_delta
+}
+
+// Dosya sürükle-bırak
+for (size_t i = 0; i < window.get_filedrop_event_count(); i++) {
+    const auto& ev = window.get_filedrop_event(i);
+    // ev.drop_files, ev.drop_count
+}
+
+// Dokunma (sadece Android)
+for (size_t i = 0; i < window.get_touch_event_count(); i++) {
+    const auto& ev = window.get_touch_event(i);
+    // ev.pointer_x[i], ev.pointer_y[i], ev.touch_action
+}
+```
+
+Ring buffer'lar sabit boyutlu (`KNST_KEYBOARD_EVENT_SLOTS` = 8 gibi),
+allocation yapmaz. Bir frame'de slot sayısından fazla event gelirse en
+eski event üzerine yazılır — pratikte klavye/mouse için bu limite
+ulaşmak neredeyse imkânsızdır, ayrıca bu event slot değerini makroylada değiştirebilirsiniz.
+
+---
+
+## 4. Klavye Durumunu (Basılı mı?) Kendi Tarafında Tutmak
+
+**Önemli:** Event sistemi sana sadece "bu frame'de ne oldu" bilgisini
+verir (`PRESS`/`RELEASE`/`REPEAT`), "şu an tuş basılı mı" bilgisini
+**vermez** — bu internal state (`m_key_held` vb.) private'dır.
+
+Sürekli hareket (WASD ile döndürme/yürütme gibi) istiyorsan, kendi
+`bool` flag'lerini tutup PRESS/RELEASE ile güncelle:
+
+```cpp
+struct RenderState {
+    bool keyW = false, keyA = false, keyS = false, keyD = false;
+    // ...
+};
+
+// main loop içinde:
+for (size_t i = 0; i < window.get_keyboard_event_count(); i++) {
+    const auto& ev = window.get_keyboard_event(i);
+    bool isDown = (ev.key_action == KNST_KEY_PRESS);
+    bool isUp   = (ev.key_action == KNST_KEY_RELEASE);
+
+    if (isDown || isUp) {
+        if (ev.key_code == KNST_KEY_D) rs.keyD = isDown;
+        else if (ev.key_code == KNST_KEY_A) rs.keyA = isDown;
+        else if (ev.key_code == KNST_KEY_W) rs.keyW = isDown;
+        else if (ev.key_code == KNST_KEY_S) rs.keyS = isDown;
+    }
+}
+```
+
+`KNST_KEY_REPEAT` action'ını bu mantıkta **kullanma** — sürekli hareket
+için gereksiz, sadece metin girişi (input field, konsol vb.) gibi
+"karakter tekrarı" gereken yerlerde işine yarar.
+
+---
+
+## 5. Sürekli Hareketi Frame Rate'ten Bağımsız Yapmak (dt bazlı)
+
+Tuş durumunu (`keyW` vb.) event loop'ta günceller, gerçek hareketi ise
+**render callback'inde, geçen süreye (delta time) göre** uygularsın —
+event/repeat sıklığına değil:
+
+```cpp
+void render_frame(knst_window& window, void* user_data) {
+    RenderState* rs = static_cast<RenderState*>(user_data);
+
+    auto now = std::chrono::steady_clock::now();
+    float dt = std::chrono::duration<float>(now - rs->lastFrameTime).count();
+    rs->lastFrameTime = now;
+    dt = std::min(dt, 0.05f); // ani sıçramalara karşı (alt-tab, donma vb.)
+
+    const float ROT_SPEED = 2.0f; // radyan/saniye
+
+    if (rs->keyD) rs->rotb += ROT_SPEED * dt;
+    if (rs->keyA) rs->rotb -= ROT_SPEED * dt;
+    if (rs->keyW) rs->rota += ROT_SPEED * dt;
+    if (rs->keyS) rs->rota -= ROT_SPEED * dt;
+
+    mesh.SetRotation(rs->rota, rs->rotb, rs->rotc);
+    // ... render devamı ...
+}
+```
+
+Bu yaklaşım hem 60fps'te hem 144fps'te aynı gerçek hızda çalışır ve OS
+autorepeat gecikmesinden (delay/interval) tamamen bağımsızdır.
+
+---
+
+## 6. Key Repeat Ayarları (Metin Girişi İçin)
+
+Sadece karakter tekrarı gereken senaryolar (input box, konsol) için
+`knst_window_core.hpp` içindeki ortak sabitler geçerlidir:
+
+```cpp
+static constexpr uint32_t KEY_REPEAT_DELAY = 150;    // ilk repeat'e kadar bekleme (ms)
+static constexpr uint32_t KEY_REPEAT_INTERVAL = 5;   // sonraki repeat'ler arası (ms)
+```
+
+Bu ayarlar **tüm platformlar için tek yerden** kontrol edilir
+(`check_key_repeat()`), platform bazlı ayrı ayar gerekmez.
+
+> Not: `INTERVAL`'i frame süresinin (örn. 60fps'te ~16ms) altına çekmenin
+> pratik faydası yoktur — repeat kontrolü zaten frame başına 1 kez
+> (`non_block_pool_event()` içinde) çalışır.
+
+---
+
+## 7. Frame Sonu Temizliği
+
+```cpp
+window.clear_temporary_events();
+```
+
+Bu çağrı:
+- Tekil event'leri sıfırlar (`type = 0`)
+- Ring buffer'ların `count`/`head` değerlerini sıfırlar (veri silinmez,
+  bir sonraki `push` zaten üzerine yazar)
+
+**Bu çağrıyı unutursan:** `get_keyboard_event_count()` gibi fonksiyonlar
+önceki frame'lerin event'lerini de tekrar tekrar döndürmeye devam eder
+(ring buffer temizlenmediği için "sayaç" hep aynı kalır) — bu da input'un
+"iki kere basılmış gibi" işlenmesine yol açar.
+
+---
+
+## 8. Hızlı Referans — Tipik Kullanım Şablonu
+
+```cpp
+while (true) {
+    knst_window_event_system::non_block_pool_event();
+    window.call_redraw_callback();
+
+    // Klavye durumu güncelle (PRESS/RELEASE)
+    for (size_t i = 0; i < window.get_keyboard_event_count(); i++) {
+        const auto& ev = window.get_keyboard_event(i);
+        // ... rs.keyX = (ev.key_action == KNST_KEY_PRESS) ...
+    }
+
+    // Resize kontrolü
+    const auto& resize = window.get_resize_event();
+    if (resize.type == KNST_WINDOW_RESIZE) {
+        // swapchain'i güncelle
+    }
+
+    // Dosya bırakma
+    for (size_t i = 0; i < window.get_filedrop_event_count(); i++) {
+        // ...
+    }
+
+    if (window.is_should_close()) break;
+
+    window.clear_temporary_events();
+}
+```
+
 
 ⚠️: Yine bir uyarı daha Linux(Wayland) için .Pencere içerisindeki Bvent nesnesindeki `window_root_y`, `window_root_x`, `mouse_root_x`,`mouse_root_y` gibi global değerler asla dolmayacaktır , detaylar için araştırabilirsiniz waylandın compositorü güvenlik nedeniyle çoğu şeyi engelleyebiliyor
 
 ⚠️: Android tarafındada yine mouse action maximized durumları vs defaulttur yani siz belirleyemezsiniz  ayrıca mouse eventi yerine touch eventleri gelmektedir 
-
-#### Tavsiyem şu yöndedir: ####
-- While döngüsünün koşulunu `!window.is_should_close()` ile kontrol etmenizdir bu sayede pencere içerisinde kapanma veya bağlantı sorunları yaşandığında örneğin `window.should_close()` yapıp pencerenin kapanmasını yani while döngüsünden çıkmasını sağlayabilirsiniz
-
-- Ayrıca önemli bir bilgi daha `KNST_CLOSE_WINDOW` makrosu pencerenin çarpı tuşuna veya kapanması gerektiğinde gelirken `KNST_DISCONNECT` Linux (X11) de event nesnesi alma sırasında başarısız olursa gelmektedir ayrıca önemli bir bilgi daha:
-
-⚠️: `KNST_DISCONNECT` eventi Linux(Wayland)'da uygulamanız açıkken bilgisiyar uyku moduna alınıp sonrasında tekrar açıldığında uygulamanıza `KNST_DISCONNECT` eventi gelmektedir, eğer bu durumda uygulamanızın kapanmamasını istiyorsanız `KNST_DISCONNECT` bu eventi ayrı olarak kontrol edip yapılarınızı tekrardan başlatmanız gerekmektedir
-
-#### Basit bir uygulama örneği vericek olursam : ####
-
-```cpp
-#include <iostream>
-#include "../../include/KernelNucleusT.hpp"
-
-int main(){
-
-    KnstWindowSources::Init(); // Kütüphane başlangıcı
-
-    knst_window window(800,600,u"Triangle Test"); // kurucu çağırılır
-
-    window.creation_and_show(); // pencere gerçekten oluşturulur
-
-    while(!window.is_should_close()){ // pencere kapanma durumu sorgulanır
-
-        knst_window_event_system::block_pool_event(); // sadece event geldiğinde tetiklenir
-
-        if(window.get_window_event_handle().type == KNST_CLOSE_WINDOW || window.get_window_event_handle().type == KNST_DISCONNECT){ // kapanma veya bağlantı kesilmeyi algılanınca kendisini kapatır
-
-            window.destroy();
-            window.should_close();
-              
-        }        
-        
-        window.clear_temporary_events(); // geçici eventler temizlenir
-
-    }
-
-    KnstWindowSources::CleanUp(); // global kaynaklar temizlenir
-
-    std::cout << "Cleaning all sources..." << std::endl;
-    return 0;
-}
-```
-
-- Basit bir örneği işte böyle gözükmektedir
 
 
 ### Pencere Özelleştirme: ###
@@ -233,8 +380,9 @@ ___
 - `knst_window_vulkan_content content` ile content oluşturabilir
 - content.Init(`knst_window`) knst_window ' a pencerenizi verip contentinize pencerenizi bağlayabilirsiniz
 
-
 - Vulkan contentinizi en son `Destroy()` ile kapatmanız gerekmektedir
+
+- Bu kısım kütüphanedeki knst_gui_framework ile beraber kullanılacaktır isterseniz kendinizde ayrı olarak kullanabilirsiniz 
 
 
 ## Android ##
@@ -285,7 +433,7 @@ ___
 ```
 ___
 
-### knst_image_loader ---> İstediğiniz yoldaki resim dosyasını okuyabilir (şimdilik sadece .bmp)
+### knst_image_loader ---> İstediğiniz yoldaki resim dosyasını okuyabilir (şimdilik sadece bmp ve png)
 
 - Kod içerisinden gerçek örnek
 ```cpp

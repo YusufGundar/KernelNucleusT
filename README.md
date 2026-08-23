@@ -48,6 +48,23 @@ This philosophy applies to all current and future libraries within the package.
 - **Event handling mechanism similar to the operating system's event model**
 - **Security — Has successfully passed a limited but rigorous set of tests**
 
+
+## knst_gui_framework (Early Beta)
+
+**A Highly Customizable Vulkan Render Engine**
+
+- Allows you to create 2D and 3D graphics and build any application with `high performance`
+
+- The library gives you the ability to customize every stage, either through configs or through our setter functions, allowing you to customize each stage as you like
+
+- Offers the ability to use Vulkan's new features, making it a good choice both for those who already know advanced Vulkan and for those who don't know it at all
+
+- It includes structures such as an obj loader, and features like model loading and texture loading
+
+- You can customize it however you like, depending on the project you're planning to build
+
+- I'm of course thinking about continuing development, still in an early access stage, but for now I'm planning to take a long break. If you have any questions, you can reach out to me privately. In its current state, I don't recommend using it in large projects, but you can look at the example and try it out yourself
+
 ---
 
 ## knst_c16string

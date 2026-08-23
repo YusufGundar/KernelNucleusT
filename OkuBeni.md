@@ -18,7 +18,7 @@ ___
 - knst_byte_array
 - knst_vector
 - knst_memory
-- knst_image_loader ---> şimdilik sadece `BMP` desteği mevcuttur
+- knst_image_loader ---> şimdilik sadece `BMP ve PNG` desteği mevcuttur
 
 Sınıfları içerisinde bulundurmaktadır
 
@@ -49,6 +49,24 @@ Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir
 - **işletim sisteminin event mantığına benzer bir şekilde eventleri yakalar ve işleme imkanı sunar**
 - **Güvenlik** — Sınırlı sayıdaki , testlerden başarıyla geçmiştir
 
+
+## knst_gui_framework (Erken Beta)
+
+**Çok Özelleştirilebilir Vulkan Render Moturudur**
+
+- 2D , 3D Grafiklerini oluşturup `yüksek performanslı` şekilde herhangi bir uygulama yapmanıza olanak sağlar
+
+- Kütüphanede her aşamayı özelleştirme imkanınız mevcuttur , her aşamayı istediğiniz gibi ya configler le yada setter fonksiyonlarımız ile özelleştireme imkanı sunar
+
+- Vulkanın yeni özelliklerini kullanma imkanı sunar , hem ileri seviye vulkan bilen hemde , hiç bilmeyenler için doğru tercihtir
+
+- İçerisinde obj loader gibi yapılar vardır , model yükleme texture yükleme gibi özellikler vardır
+
+- Yapmayı düşündüğünüz projeye göre istediğiniz gibi özelleştirebilirsiniz
+
+- Daha çok erken erişim aşamasında geliştirmeyi elbette düşünüyorum ancak şimdilik , büyük bir ara vermeyi düşünüyorum , eğer sormak istediğiniz sorunuz varsa özelden ulaşabilirsiniz , bu haliyle büyük projelerde kullanmanızı önermiyorum , ancak örneğe bakıp kendiniz deneyebilirsiniz
+
+---
 
 ## knst_c16string
 
