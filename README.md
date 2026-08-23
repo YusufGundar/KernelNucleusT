@@ -18,7 +18,7 @@ A modern C++17 library package. A high-performance, customizable, cross-platform
 - **knst_byte_array**
 - **knst_vector**
 - **knst_memory**
-- **knst_image_loader** —-> Currently only `BMP` format is supported
+- **knst_image_loader** —-> Currently only `BMP , PNG` format is supported
 
 These classes are included within the package.
 
