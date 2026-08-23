@@ -1,7 +1,0 @@
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/knst_app.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/edit_cache.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/rebuild_cache.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/list_install_components.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/install.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/install/local.dir
-/home/knst_tester/Desktop/KernelNucleusT/build/CMakeFiles/install/strip.dir
