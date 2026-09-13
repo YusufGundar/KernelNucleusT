@@ -1,5 +1,3 @@
-#ifndef KNST_DISPLAY_ANDROID_HPP
-#define KNST_DISPLAY_ANDROID_HPP
 #pragma once
 
 #if defined(KNST_USING_PLATFORM_ANDROID)
@@ -55,4 +53,3 @@ inline void knst_display::refresh_screens() noexcept {
 }
 
 #endif
-#endif // KNST_DISPLAY_ANDROID_HPP

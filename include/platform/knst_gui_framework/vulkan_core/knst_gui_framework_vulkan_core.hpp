@@ -1,17 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: This file contains the definitions of the Vulkan commands that the user will employ.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-
-
-#ifndef KNST_GUI_FRAMEWORK_VULKAN_CORE_HPP
-#define KNST_GUI_FRAMEWORK_VULKAN_CORE_HPP
 #pragma once
 
 
@@ -20,7 +6,12 @@
 
 class knst_gui_framework {
 
+
+
+
 private:
+
+    
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
@@ -69,23 +60,18 @@ void UpdateDescriptorSetInternal(VkDescriptorSet set, const knst_texture& textur
     knst_vector<VkSemaphore> m_imageAvailableSemaphores;
     knst_vector<VkSemaphore> m_renderFinishedSemaphores;
     knst_vector<VkFence> m_inFlightFences;
-    std::vector<VkFence> m_imagesInFlight;
+    knst_vector<VkFence> m_imagesInFlight;
     uint32_t m_currentFrame = 0;
     uint32_t m_currentImageIndex = 0;
 
   
-    bool m_surfacePropsCached = false;
+  
     VkSurfaceFormatKHR m_cachedSurfaceFormat{};
     VkPresentModeKHR m_cachedVsyncPresentMode = VK_PRESENT_MODE_FIFO_KHR;
     VkPresentModeKHR m_cachedImmediatePresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
    
     bool m_swapchainReady = false;
-
-   
-    uint32_t m_lastRequestedWidth = 0;
-    uint32_t m_lastRequestedHeight = 0;
-    std::chrono::steady_clock::time_point m_lastSizeChangeTime;
 
     
     knst_vector<VkBuffer> m_vertexBuffers;
@@ -147,6 +133,24 @@ void UpdateDescriptorSetInternal(VkDescriptorSet set, const knst_texture& textur
     bool CheckVertexInputDynamicSupport();
     
 public:
+
+        ~knst_gui_framework() {
+        // Kullanıcı Destroy() çağırmayı unuttuysa temizle.
+        // Destroy() zaten idempotent (her yerde VK_NULL_HANDLE check var),
+        // manuel çağrılmışsa ikinci çağrı no-op olur.
+        if (m_vk_content && m_vk_content->GetDevice() != VK_NULL_HANDLE) {
+            Destroy();
+        }
+    }
+
+    knst_gui_framework() = default;
+    knst_gui_framework(const knst_gui_framework&) = delete;
+    knst_gui_framework& operator=(const knst_gui_framework&) = delete;
+    knst_gui_framework(knst_gui_framework&&) = delete;
+    knst_gui_framework& operator=(knst_gui_framework&&) = delete;
+
+
+
    bool CreateImageResources(VkImage& image, VkDeviceMemory& memory, VkImageView& imageView,VkFormat format, VkImageUsageFlags usage,VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT); 
                                               
                                               
@@ -185,22 +189,55 @@ public:
     bool CreateRenderPass(const KnstRenderPassConfig& config);
 
    
-    static knst_byte_string ReadShaderFile(const std::string& filename) {
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-        if (!file.is_open()) {
-            return knst_byte_string();
-        }
-        
-        size_t fileSize = (size_t)file.tellg();
-        unsigned char* data = new unsigned char[fileSize + 1];
-        
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(data), fileSize);
-        file.close();
-        
-        data[fileSize] = '\0';
-        
-        return knst_byte_string::take_ownership(data, static_cast<uint32_t>(fileSize));
+       static knst_byte_string ReadShaderFile(const knst_c16string& filename) {
+        #if KNST_USING_PLATFORM_WINDOWS
+            HANDLE hFile = CreateFileW(
+                reinterpret_cast<LPCWSTR>(filename.data()),
+                GENERIC_READ, FILE_SHARE_READ, NULL,
+                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hFile == INVALID_HANDLE_VALUE) return knst_byte_string();
+
+            LARGE_INTEGER fileSizeLI;
+            if (!GetFileSizeEx(hFile, &fileSizeLI) || fileSizeLI.QuadPart <= 0) {
+                CloseHandle(hFile);
+                return knst_byte_string();
+            }
+            size_t fileSize = (size_t)fileSizeLI.QuadPart;
+
+            unsigned char* data = new unsigned char[fileSize + 1];
+            DWORD bytesRead = 0;
+            BOOL ok = ReadFile(hFile, data, (DWORD)fileSize, &bytesRead, NULL);
+            CloseHandle(hFile);
+
+            if (!ok || bytesRead != fileSize) {
+                delete[] data;
+                return knst_byte_string();
+            }
+            data[fileSize] = '\0';
+            return knst_byte_string::take_ownership(data, static_cast<uint32_t>(fileSize));
+        #else
+            knst_byte_string pathBytes(filename);
+            int fd = open((const char*)pathBytes.data(), O_RDONLY);
+            if (fd < 0) return knst_byte_string();
+
+            struct stat st;
+            if (fstat(fd, &st) != 0 || st.st_size <= 0) {
+                close(fd);
+                return knst_byte_string();
+            }
+            size_t fileSize = (size_t)st.st_size;
+
+            unsigned char* data = new unsigned char[fileSize + 1];
+            ssize_t bytesRead = read(fd, data, fileSize);
+            close(fd);
+
+            if (bytesRead < 0 || (size_t)bytesRead != fileSize) {
+                delete[] data;
+                return knst_byte_string();
+            }
+            data[fileSize] = '\0';
+            return knst_byte_string::take_ownership(data, static_cast<uint32_t>(fileSize));
+        #endif
     }
 
 
@@ -381,4 +418,3 @@ public:
 
 #include "knst_gui_framework_vulkan_definers.hpp"
 
-#endif

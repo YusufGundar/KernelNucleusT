@@ -1,14 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: The implementations of the functions to be used by the user in X11 are available here.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-#ifndef KNST_WINDOW_X11_MANAGER_HPP
-#define KNST_WINDOW_X11_MANAGER_HPP
 #pragma once
 
 
@@ -160,7 +149,7 @@ if (protocols_reply) {
         m_window,
         KnstWindowSources::m_wmSyncRequestCounter,
         XCB_ATOM_CARDINAL,
-        64, 1, &m_syncCounter
+        32, 1, &m_syncCounter
     );
 }  // The part that wasted eight hours was a glitch; if it hadn't frozen, it kept giving me a hard time, so I finally decided to shut it down. ı open after 
 
@@ -654,6 +643,7 @@ inline void knst_window::set_bmp_cursor(
     if (!cursor) return;
     
    
+   
     xcb_change_window_attributes(
         KnstWindowSources::m_connection,
         m_window,
@@ -661,8 +651,9 @@ inline void knst_window::set_bmp_cursor(
         &cursor
     );
     xcb_flush(KnstWindowSources::m_connection);
-}
 
+    XFreeCursor(display, cursor);
+}
 
 
 inline void knst_window::reset_cursor() noexcept {
@@ -729,11 +720,12 @@ inline void knst_window::set_cursor_mode(int mode) noexcept {
     
     if (mode == KNST_CURSOR_NORMAL) {
         
+        uint32_t cursor_value = XCB_NONE;
         xcb_change_window_attributes(
             conn,
             m_window,
             XCB_CW_CURSOR,
-            nullptr  
+            &cursor_value
         );
         
         
@@ -1361,4 +1353,3 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
 
 
 #endif
-#endif // KNST_WINDOW_X11_MANAGER_HPP

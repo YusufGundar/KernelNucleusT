@@ -1,15 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: Wayland is used to retrieve monitor and screen information.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-#ifndef KNST_DISPLAY_WAYLAND_HPP
-#define KNST_DISPLAY_WAYLAND_HPP
 #pragma once
 
 #if KNST_USING_LINUX_PLATFORM_WAYLAND
@@ -42,4 +30,3 @@
                 }
 
                 #endif 
-                #endif // KNST_DISPLAY_WAYLAND_HPP

@@ -1,5 +1,3 @@
-#ifndef KNST_ANDROID_OPENGL_EGL_SUPPORT_HPP
-#define KNST_ANDROID_OPENGL_EGL_SUPPORT_HPP
 #pragma once
 
 #if defined(KNST_USING_PLATFORM_ANDROID) && defined(KNST_PLATFORM_ANDROID_OPENGL)
@@ -158,4 +156,3 @@ inline bool knst_window_opengl_content::Init(knst_window* window_p, bool vsync) 
 }
 
 #endif 
-#endif // KNST_ANDROID_OPENGL_EGL_SUPPORT_HPP

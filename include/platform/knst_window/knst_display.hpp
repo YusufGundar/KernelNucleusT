@@ -1,5 +1,3 @@
-#ifndef KNST_DISPLAY_HPP
-#define KNST_DISPLAY_HPP
 #pragma once
 
 #include <cmath>
@@ -135,4 +133,3 @@ public:
     }
 };
 
-#endif // KNST_DISPLAY_HPP

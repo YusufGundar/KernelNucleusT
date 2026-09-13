@@ -1,5 +1,3 @@
-#ifndef KNST_WINDOW_IDENTIFIERS_HPP
-#define KNST_WINDOW_IDENTIFIERS_HPP
 #pragma once
 
 
@@ -865,4 +863,3 @@
 
 #endif
 
-#endif // KNST_WINDOW_IDENTIFIERS_HPP

@@ -1,16 +1,5 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: The implementations of the functions to be used by the user in Windows are available here.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-#ifndef KNST_WINDOW_WIN32_MANAGER_HPP
-#define KNST_WINDOW_WIN32_MANAGER_HPP
 #pragma once
+
 
 #if KNST_USING_PLATFORM_WINDOWS
 
@@ -164,6 +153,10 @@ private:
 
 
 inline void knst_window::creation() noexcept {
+    RECT adjust_rect = { 0, 0, m_knst_event.window_width, m_knst_event.window_height };
+    AdjustWindowRectEx(&adjust_rect, WS_OVERLAPPEDWINDOW, FALSE, 0);
+    int outer_width = adjust_rect.right - adjust_rect.left;
+    int outer_height = adjust_rect.bottom - adjust_rect.top;
 
     #ifdef KNST_DISABLE_TITLE_BAR
 
@@ -174,8 +167,8 @@ inline void knst_window::creation() noexcept {
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            m_knst_event.window_width,
-            m_knst_event.window_height,
+            outer_width,
+            outer_height,
             nullptr,
             nullptr,
             KnstWindowSources::m_hInstance,
@@ -192,8 +185,8 @@ inline void knst_window::creation() noexcept {
             WS_OVERLAPPEDWINDOW,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            m_knst_event.window_width,
-            m_knst_event.window_height,
+            outer_width,
+            outer_height,
             nullptr,
             nullptr,
             KnstWindowSources::m_hInstance,
@@ -228,7 +221,28 @@ inline void knst_window::show() noexcept {
 
 inline void knst_window::destroy() noexcept {
     knst_window_event_system::unregister_window(this);
+    if (m_drop_target) {
+        set_drag_drop_status(false);
+    }
+    if (m_icon_big) {
+        DestroyIcon(m_icon_big);
+        m_icon_big = nullptr;
+    }
+    if (m_cursor) {
+        DestroyCursor(m_cursor);
+        m_cursor = nullptr;
+    }
+    m_system_cursor = nullptr;
     if (m_window) {
+        POINT* min_prop = (POINT*)GetPropW(m_window, L"KnstMinSize");
+        if (min_prop) { delete min_prop; RemovePropW(m_window, L"KnstMinSize"); }
+        POINT* max_prop = (POINT*)GetPropW(m_window, L"KnstMaxSize");
+        if (max_prop) { delete max_prop; RemovePropW(m_window, L"KnstMaxSize"); }
+        int* max_w = (int*)GetPropW(m_window, L"KnstMaxSizeWidth");
+        if (max_w) { delete max_w; RemovePropW(m_window, L"KnstMaxSizeWidth"); }
+        int* max_h = (int*)GetPropW(m_window, L"KnstMaxSizeHeight");
+        if (max_h) { delete max_h; RemovePropW(m_window, L"KnstMaxSizeHeight"); }
+
         RemoveClipboardFormatListener(m_window);
         DestroyWindow(m_window);
         m_window = nullptr;
@@ -448,13 +462,12 @@ inline void knst_window::focus() noexcept {
 }
 
 
-
 inline void knst_window::set_cursor(uint16_t cursor_type) noexcept {
     if (!m_window) return;
     
     HCURSOR hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(cursor_type));
     if (hCursor) {
-        SetClassLongPtrW(m_window, GCLP_HCURSOR, (LONG_PTR)hCursor);
+        m_system_cursor = hCursor;
         SetCursor(hCursor);
     }
 }
@@ -465,11 +478,18 @@ if (!m_window) return;
    
     if (width < 0) width = m_knst_event.window_width;
     if (height < 0) height = m_knst_event.window_height;
+
+   
+    DWORD style = (DWORD)GetWindowLongPtrW(m_window, GWL_STYLE);
+    RECT adjust_rect = { 0, 0, width, height };
+    AdjustWindowRectEx(&adjust_rect, style, FALSE, 0);
+    int outer_width = adjust_rect.right - adjust_rect.left;
+    int outer_height = adjust_rect.bottom - adjust_rect.top;
     
     SetWindowPos(
         m_window, nullptr,
         0, 0,
-        width, height,
+        outer_width, outer_height,
         SWP_NOMOVE | SWP_NOZORDER
     );
     
@@ -684,13 +704,15 @@ inline void knst_window::apply_bmp_icon(const knst_byte_string& data, int width,
         );
         
         if (hIcon) {
+            if (m_icon_big) DestroyIcon(m_icon_big);
+            m_icon_big = hIcon;
             SendMessageW(m_window, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
             SendMessageW(m_window, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
         }
     }
   
     else if (data.length() == (size_t)width * height * 3) {
-        std::vector<uint8_t> bgra_data(width * height * 4);
+        knst_vector<uint8_t> bgra_data(width * height * 4);
         for (int i = 0; i < width * height; i++) {
             bgra_data[i * 4 + 0] = pixel_data[i * 3 + 2];  // B
             bgra_data[i * 4 + 1] = pixel_data[i * 3 + 1];  // G
@@ -707,6 +729,8 @@ inline void knst_window::apply_bmp_icon(const knst_byte_string& data, int width,
         );
         
         if (hIcon) {
+            if (m_icon_big) DestroyIcon(m_icon_big);
+            m_icon_big = hIcon;
             SendMessageW(m_window, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
             SendMessageW(m_window, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
         }
@@ -824,32 +848,23 @@ inline void knst_window::set_bmp_cursor(
     }
     
     m_cursor = hCursor;
-    SetClassLongPtrW(m_window, GCLP_HCURSOR, (LONG_PTR)hCursor);
+    m_system_cursor = nullptr;
     SetCursor(hCursor);
     
 }
-
 
 inline void knst_window::reset_cursor() noexcept {
     
     if (!m_window) return;
     
-   
-    HCURSOR hDefault = LoadCursor(nullptr, IDC_ARROW);
-    SetClassLongPtrW(m_window, GCLP_HCURSOR, (LONG_PTR)hDefault);
-    SetCursor(hDefault);
-    
+    m_system_cursor = nullptr;
     if (m_cursor) {
         DestroyCursor(m_cursor);
         m_cursor = nullptr;
     }
-   
 
-
-
+    SetCursor(LoadCursor(nullptr, IDC_ARROW));
 }
-
-
 
 
 
@@ -869,8 +884,8 @@ inline void knst_window::set_minimum_size(int width, int height) noexcept {
     if (!(style & WS_THICKFRAME)) {
         style |= WS_THICKFRAME;
         SetWindowLongPtrW(m_window, GWL_STYLE, style);
-        SetWindowPos(m_window, nullptr, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        SetWindowPos(m_window, nullptr, 0, 0, 0, 0,SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            
     }
     
     MINMAXINFO mmi = {};
@@ -878,6 +893,8 @@ inline void knst_window::set_minimum_size(int width, int height) noexcept {
     mmi.ptMinTrackSize.y = height;
     
     
+    POINT* old_min = (POINT*)GetPropW(m_window, L"KnstMinSize");
+    if (old_min) delete old_min;
     SetPropW(m_window, L"KnstMinSize", (HANDLE)new POINT{width, height});
     
     RECT rect;
@@ -888,8 +905,8 @@ inline void knst_window::set_minimum_size(int width, int height) noexcept {
     if (currentWidth < width || currentHeight < height) {
         int newWidth = std::max(currentWidth, width);
         int newHeight = std::max(currentHeight, height);
-        SetWindowPos(m_window, nullptr, 0, 0, newWidth, newHeight,
-            SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(m_window, nullptr, 0, 0, newWidth, newHeight,SWP_NOMOVE | SWP_NOZORDER);
+            
     }
 }
 
@@ -910,13 +927,27 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
     
-    if (width != KNST_DEFAULT && height != KNST_DEFAULT) {
+       if (width != KNST_DEFAULT && height != KNST_DEFAULT) {
+        POINT* old_max = (POINT*)GetPropW(m_window, L"KnstMaxSize");
+        if (old_max) delete old_max;
+        int* old_w = (int*)GetPropW(m_window, L"KnstMaxSizeWidth");
+        if (old_w) { delete old_w; RemovePropW(m_window, L"KnstMaxSizeWidth"); }
+        int* old_h = (int*)GetPropW(m_window, L"KnstMaxSizeHeight");
+        if (old_h) { delete old_h; RemovePropW(m_window, L"KnstMaxSizeHeight"); }
         SetPropW(m_window, L"KnstMaxSize", (HANDLE)new POINT{width, height});
     } else if (width != KNST_DEFAULT) {
+        int* old_w = (int*)GetPropW(m_window, L"KnstMaxSizeWidth");
+        if (old_w) delete old_w;
         SetPropW(m_window, L"KnstMaxSizeWidth", (HANDLE)new int{width});
+        POINT* old_max = (POINT*)GetPropW(m_window, L"KnstMaxSize");
+        if (old_max) { delete old_max; RemovePropW(m_window, L"KnstMaxSize"); }
         RemovePropW(m_window, L"KnstMaxSizeHeight");
     } else if (height != KNST_DEFAULT) {
+        int* old_h = (int*)GetPropW(m_window, L"KnstMaxSizeHeight");
+        if (old_h) delete old_h;
         SetPropW(m_window, L"KnstMaxSizeHeight", (HANDLE)new int{height});
+        POINT* old_max = (POINT*)GetPropW(m_window, L"KnstMaxSize");
+        if (old_max) { delete old_max; RemovePropW(m_window, L"KnstMaxSize"); }
         RemovePropW(m_window, L"KnstMaxSizeWidth");
     }
 }
@@ -925,4 +956,3 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
 
 
 #endif
-#endif // KNST_WINDOW_WIN32_MANAGER_HPP

@@ -1,5 +1,14 @@
-#ifndef KNST_MACROS_HPP
-#define KNST_MACROS_HPP
+/*
+----------------------------
+knst_definitions.hpp
+----------------------------
+
+    Here, it is determined whether the general macros in the library are defined, and the necessary includes are performed
+
+*/
+
+
+
 #pragma once
 #include <cstdint> 
 
@@ -125,4 +134,3 @@
 
 
 
-#endif // KNST_MACROS_HPP

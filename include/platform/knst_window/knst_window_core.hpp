@@ -1,5 +1,3 @@
-#ifndef KNST_WINDOW_CORE_HPP
-#define KNST_WINDOW_CORE_HPP
 #pragma once
 
 
@@ -638,7 +636,16 @@ class KnstWindowSources{
 
             #elif KNST_USING_LINUX_PLATFORM_WAYLAND
     
-              
+                // === EKLENEN: wl_output proxy'lerini temizle (leak fix) ===
+                for (auto& mon : knst_display::m_monitor_list) {
+                    if (mon.output) {
+                        wl_output_destroy(mon.output);
+                        mon.output = nullptr;
+                    }
+                }
+                knst_display::m_monitor_list.clear();
+                // === SON ===
+
                 if (pointer)
                 {
                     wl_pointer_destroy(pointer);
@@ -653,7 +660,24 @@ class KnstWindowSources{
                 if (xkb_ctx) { xkb_context_unref(xkb_ctx); xkb_ctx = nullptr; }
                 keyboard_focus_window = nullptr;
 
-
+                // === EKLENEN: Wayland pointer proxy'lerini temizle (leak fix) ===
+                if (locked_pointer) {
+                    zwp_locked_pointer_v1_destroy(locked_pointer);
+                    locked_pointer = nullptr;
+                }
+                if (confined_pointer) {
+                    zwp_confined_pointer_v1_destroy(confined_pointer);
+                    confined_pointer = nullptr;
+                }
+                if (pointer_constraints) {
+                    zwp_pointer_constraints_v1_destroy(pointer_constraints);
+                    pointer_constraints = nullptr;
+                }
+                if (relative_pointer_manager) {
+                    zwp_relative_pointer_manager_v1_destroy(relative_pointer_manager);
+                    relative_pointer_manager = nullptr;
+                }
+                // === SON ===
 
                 if (cursor_surface)
                 {
@@ -928,9 +952,11 @@ KNST_FORCE_INLINE void remove_held_key(int scancode) noexcept {
 
 
 };
-//=======================
+
+
+//=======================**
 //category-specific
-//=======================
+//=======================**
 
 #ifndef KNST_MOUSE_EVENT_SLOTS
     #define KNST_MOUSE_EVENT_SLOTS 8
@@ -1011,8 +1037,11 @@ private:
         friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
         friend class knst_window_opengl_content;
         friend class knst_window_event_system;
+
         HWND m_window;
-        HCURSOR m_cursor = nullptr;
+        HCURSOR m_cursor = nullptr;          
+        HCURSOR m_system_cursor = nullptr; 
+        HICON m_icon_big = nullptr;
         WINDOWPLACEMENT m_prevPlacement = {};
         LONG m_prevStyle = 0;
         IDropTarget* m_drop_target = nullptr;
@@ -1279,6 +1308,16 @@ public:
 
     #endif
 
+  
+    knst_window(const knst_window&) = delete;
+    knst_window& operator=(const knst_window&) = delete;
+
+        KNST_FORCE_INLINE knst_window(knst_window&& other) noexcept;
+
+
+
+        KNST_FORCE_INLINE knst_window& operator=(knst_window&& other) noexcept;
+
     KNST_FORCE_INLINE const knst_window_event& get_window_event_handle() const noexcept{
         return m_knst_event;
     }
@@ -1529,6 +1568,137 @@ public:
 
     
     #include "knst_window_event_system.hpp"
+
+
+
+    KNST_FORCE_INLINE knst_window::knst_window(knst_window&& other) noexcept
+        : m_mouse_x(other.m_mouse_x), m_mouse_y(other.m_mouse_y),
+          m_input_transparent(other.m_input_transparent),
+          m_knst_event(other.m_knst_event),
+          m_resize_event(other.m_resize_event), m_move_event(other.m_move_event),
+          m_focus_event(other.m_focus_event), m_window_state_event(other.m_window_state_event),
+          m_expose_event(other.m_expose_event), m_misc_event(other.m_misc_event),
+          m_lifecycle_event(other.m_lifecycle_event),
+          m_mouse_events(other.m_mouse_events), m_keyboard_events(other.m_keyboard_events),
+          m_filedrop_events(other.m_filedrop_events), m_touch_events(other.m_touch_events),
+          m_title(std::move(other.m_title)),
+          m_should_close(other.m_should_close), m_disconnected(other.m_disconnected),
+          m_opacity(other.m_opacity), m_user_data(other.m_user_data),
+          m_redraw_callback(other.m_redraw_callback),
+          clipboard_text(std::move(other.clipboard_text)),
+          m_drag_drop_enabled(other.m_drag_drop_enabled),
+          m_custom_title_bar_height(other.m_custom_title_bar_height),
+          m_draw_custom_title_bar(other.m_draw_custom_title_bar)
+    {
+        #if KNST_USING_PLATFORM_WINDOWS
+            m_window = other.m_window; other.m_window = nullptr;
+            m_cursor = other.m_cursor; other.m_cursor = nullptr;
+            m_system_cursor = other.m_system_cursor; other.m_system_cursor = nullptr;
+            m_icon_big = other.m_icon_big; other.m_icon_big = nullptr;
+            m_prevPlacement = other.m_prevPlacement;
+            m_prevStyle = other.m_prevStyle;
+            m_drop_target = other.m_drop_target; other.m_drop_target = nullptr;
+            if (m_window) SetWindowLongPtrW(m_window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        #elif KNST_USING_LINUX_PLATFORM_X11
+            m_window = other.m_window; other.m_window = 0;
+            m_xdnd_source = other.m_xdnd_source;
+            m_xdnd_selected_type = other.m_xdnd_selected_type;
+            m_xdnd_version = other.m_xdnd_version;
+            m_hovered_edge = other.m_hovered_edge;
+            m_current_x11_cursor = other.m_current_x11_cursor; other.m_current_x11_cursor = 0;
+            m_syncCounter = other.m_syncCounter; other.m_syncCounter = XCB_NONE;
+            m_syncPendingValue = other.m_syncPendingValue;
+            m_syncHasPendingValue = other.m_syncHasPendingValue;
+            m_syncRequestReceived = other.m_syncRequestReceived;
+        #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+            m_surface = other.m_surface; other.m_surface = nullptr;
+            xdgSurface = other.xdgSurface; other.xdgSurface = nullptr;
+            toplevel = other.toplevel; other.toplevel = nullptr;
+            m_resize_edge = other.m_resize_edge;
+            m_pointer_serial = other.m_pointer_serial;
+            m_pointer_pressed = other.m_pointer_pressed;
+            m_pending_cursor_data = std::move(other.m_pending_cursor_data);
+            m_pending_cursor_w = other.m_pending_cursor_w;
+            m_pending_cursor_h = other.m_pending_cursor_h;
+            m_pending_cursor_hot_x = other.m_pending_cursor_hot_x;
+            m_pending_cursor_hot_y = other.m_pending_cursor_hot_y;
+            m_has_pending_cursor = other.m_has_pending_cursor;
+            m_using_custom_cursor = other.m_using_custom_cursor;
+            m_always_on_top = other.m_always_on_top;
+            m_layer_surface = other.m_layer_surface; other.m_layer_surface = nullptr;
+            for (auto*& w : s_windows) { if (w == &other) w = this; }
+        #endif
+
+        knst_window_event_system::unregister_window(&other);
+        knst_window_event_system::register_window(this);
+    }
+
+    KNST_FORCE_INLINE knst_window& knst_window::operator=(knst_window&& other) noexcept {
+        if (this == &other) return *this;
+        destroy();
+
+        m_mouse_x = other.m_mouse_x; m_mouse_y = other.m_mouse_y;
+        m_input_transparent = other.m_input_transparent;
+        m_knst_event = other.m_knst_event;
+        m_resize_event = other.m_resize_event; m_move_event = other.m_move_event;
+        m_focus_event = other.m_focus_event; m_window_state_event = other.m_window_state_event;
+        m_expose_event = other.m_expose_event; m_misc_event = other.m_misc_event;
+        m_lifecycle_event = other.m_lifecycle_event;
+        m_mouse_events = other.m_mouse_events; m_keyboard_events = other.m_keyboard_events;
+        m_filedrop_events = other.m_filedrop_events; m_touch_events = other.m_touch_events;
+        m_title = std::move(other.m_title);
+        m_should_close = other.m_should_close; m_disconnected = other.m_disconnected;
+        m_opacity = other.m_opacity; m_user_data = other.m_user_data;
+        m_redraw_callback = other.m_redraw_callback;
+        clipboard_text = std::move(other.clipboard_text);
+        m_drag_drop_enabled = other.m_drag_drop_enabled;
+        m_custom_title_bar_height = other.m_custom_title_bar_height;
+        m_draw_custom_title_bar = other.m_draw_custom_title_bar;
+
+        #if KNST_USING_PLATFORM_WINDOWS
+            m_window = other.m_window; other.m_window = nullptr;
+            m_cursor = other.m_cursor; other.m_cursor = nullptr;
+            m_system_cursor = other.m_system_cursor; other.m_system_cursor = nullptr;
+            m_icon_big = other.m_icon_big; other.m_icon_big = nullptr;
+            m_prevPlacement = other.m_prevPlacement;
+            m_prevStyle = other.m_prevStyle;
+            m_drop_target = other.m_drop_target; other.m_drop_target = nullptr;
+            if (m_window) SetWindowLongPtrW(m_window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        #elif KNST_USING_LINUX_PLATFORM_X11
+            m_window = other.m_window; other.m_window = 0;
+            m_xdnd_source = other.m_xdnd_source;
+            m_xdnd_selected_type = other.m_xdnd_selected_type;
+            m_xdnd_version = other.m_xdnd_version;
+            m_hovered_edge = other.m_hovered_edge;
+            m_current_x11_cursor = other.m_current_x11_cursor; other.m_current_x11_cursor = 0;
+            m_syncCounter = other.m_syncCounter; other.m_syncCounter = XCB_NONE;
+            m_syncPendingValue = other.m_syncPendingValue;
+            m_syncHasPendingValue = other.m_syncHasPendingValue;
+            m_syncRequestReceived = other.m_syncRequestReceived;
+        #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+            m_surface = other.m_surface; other.m_surface = nullptr;
+            xdgSurface = other.xdgSurface; other.xdgSurface = nullptr;
+            toplevel = other.toplevel; other.toplevel = nullptr;
+            m_resize_edge = other.m_resize_edge;
+            m_pointer_serial = other.m_pointer_serial;
+            m_pointer_pressed = other.m_pointer_pressed;
+            m_pending_cursor_data = std::move(other.m_pending_cursor_data);
+            m_pending_cursor_w = other.m_pending_cursor_w;
+            m_pending_cursor_h = other.m_pending_cursor_h;
+            m_pending_cursor_hot_x = other.m_pending_cursor_hot_x;
+            m_pending_cursor_hot_y = other.m_pending_cursor_hot_y;
+            m_has_pending_cursor = other.m_has_pending_cursor;
+            m_using_custom_cursor = other.m_using_custom_cursor;
+            m_always_on_top = other.m_always_on_top;
+            m_layer_surface = other.m_layer_surface; other.m_layer_surface = nullptr;
+            for (auto*& w : s_windows) { if (w == &other) w = this; }
+        #endif
+
+        knst_window_event_system::unregister_window(&other);
+        knst_window_event_system::register_window(this);
+        return *this;
+    }
+
     #if KNST_USING_PLATFORM_WINDOWS
 
         #include "../windows/knst_window_win32_manager.hpp"
@@ -1549,5 +1719,3 @@ public:
     #endif
 
     
-
-#endif // KNST_WINDOW_CORE_HPP

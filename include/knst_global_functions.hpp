@@ -1,5 +1,13 @@
-#ifndef KNST_GLOBAL_FUNCTIONS_HPP
-#define KNST_GLOBAL_FUNCTIONS_HPP
+/*
+----------------------------
+knst_global_functions.hpp
+----------------------------
+
+    It contains common functions for the core structures in the library
+    
+*/
+
+
 #pragma once
 
 #include "knst_memory.hpp" 
@@ -420,7 +428,7 @@ class knst_iterator{
     // Basic Operators
 
     KNST_FORCE_INLINE reference operator*() const noexcept {return *ptr;}
-    KNST_FORCE_INLINE pointer operator->() const noexcept {return *ptr;}
+    KNST_FORCE_INLINE pointer operator->() const noexcept {return ptr;}
 
     KNST_FORCE_INLINE knst_iterator& operator++() noexcept {++ptr; return *this;}
     KNST_FORCE_INLINE knst_iterator operator++(int) noexcept {auto tmp = *this; ++ptr; return tmp;}
@@ -487,4 +495,3 @@ public:
 };
 
 
-#endif // KNST_GLOBAL_FUNCTIONS_HPP

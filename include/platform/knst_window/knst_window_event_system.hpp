@@ -1,6 +1,7 @@
-#ifndef KNST_WINDOW_EVENT_SYSTEM_HPP
-#define KNST_WINDOW_EVENT_SYSTEM_HPP
 #pragma once
+
+
+KNST_FORCE_INLINE static size_t get_window_count() noexcept;
 
 #if KNST_USING_PLATFORM_WINDOWS
     #include "../windows/knst_window_win32_event_manager.hpp"
@@ -54,7 +55,9 @@ struct knst_window_event_system {
 
     public:
 
-        
+       KNST_FORCE_INLINE static size_t get_window_count() noexcept {
+            return windows.size();
+    }
             
 
        KNST_FORCE_INLINE static void check_key_repeat(knst_window& window) noexcept {
@@ -93,16 +96,10 @@ struct knst_window_event_system {
     KNST_FORCE_INLINE static void block_pool_event() noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             MSG msg;
-            // İlk mesajı bloklayarak bekle (bu fonksiyonun "block" sözleşmesi bu).
             if (GetMessageW(&msg, nullptr, 0, 0)) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
-            // Kuyrukta o an bekleyen TÜM diğer mesajları da bu frame'de boşalt.
-            // Tek mesajla yetinmek (eski davranış) mesajların kuyrukta birikip
-            // frame başına bir tane sızmasına, dolayısıyla girdi/çizimde
-            // "takıla takıla" hissine yol açıyordu — X11/Wayland zaten kuyruğu
-            // tamamen boşaltıyor, Windows'u da aynı ritme getiriyoruz.
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
@@ -237,11 +234,6 @@ struct knst_window_event_system {
     KNST_FORCE_INLINE static void non_block_pool_event() noexcept {
         #if KNST_USING_PLATFORM_WINDOWS
             MSG msg;
-            // Kuyrukta o an bekleyen TÜM mesajları bu frame'de boşalt.
-            // Önceki hâlde sadece 1 mesaj işleniyordu (if yerine while
-            // olmalıydı) — bu da yoğun girdi/çizim trafiğinde mesajların
-            // kuyrukta birikip frame başına tek tek sızmasına, dolayısıyla
-            // gözle görülür "takılma"ya sebep oluyordu.
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
@@ -428,8 +420,3 @@ struct knst_window_event_system {
 
 };
 
-
-
-
-
-#endif // KNST_WINDOW_EVENT_SYSTEM_HPP

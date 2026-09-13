@@ -1,20 +1,6 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: The event management mechanism in the linux(x11) operating system is located in this file.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-
-#ifndef KNST_LINUX_X11_EVENT_MANAGER_HPP
-#define KNST_LINUX_X11_EVENT_MANAGER_HPP
 #pragma once
 
 #if KNST_USING_LINUX_PLATFORM_X11
-
 
 
 KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic_event_t* ev) noexcept {
@@ -133,6 +119,7 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
         case XCB_CONFIGURE_NOTIFY: {
             xcb_configure_notify_event_t* config = (xcb_configure_notify_event_t*)ev;
             
+           
             int new_width = config->width;
             int new_height = config->height;
             
@@ -146,22 +133,30 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
             bool pos_changed = (config->x != window.m_knst_event.window_root_x) || (config->y != window.m_knst_event.window_root_y);
                             
             
+           if (size_changed || pos_changed) {
+           
+            if (pos_changed) {
+                window.m_knst_event.window_root_x = config->x;
+                window.m_knst_event.window_root_y = config->y;
+            }
+
             if (size_changed) {
                 window.m_knst_event.type = KNST_WINDOW_RESIZE;
                 window.m_knst_event.window_width = new_width;
                 window.m_knst_event.window_height = new_height;
-            } else if (pos_changed) {
-                window.m_knst_event.type = KNST_WINDOW_MOVE;
-                window.m_knst_event.window_root_x = config->x;
-                window.m_knst_event.window_root_y = config->y;
             } else {
-                window.m_knst_event.type = KNST_UNKNOWN;
-                break;
+                window.m_knst_event.type = KNST_WINDOW_MOVE;
             }
-            
+
             window.dispatch_current_event();
-            break;
+            free(ev);
+            return;
+        } else {
+            window.m_knst_event.type = KNST_UNKNOWN;
+            free(ev);
+            return;
         }
+                }
 
         case XCB_CLIENT_MESSAGE: {
             xcb_client_message_event_t* msg = (xcb_client_message_event_t*)ev;
@@ -276,9 +271,9 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                     const char* data = (const char*)xcb_get_property_value(reply);
                     int len = xcb_get_property_value_length(reply);
 
-                    if (notify->selection == KnstWindowSources::m_XdndSelection) {
+                        if (notify->selection == KnstWindowSources::m_XdndSelection) {
                         
-                        std::string uriList(data, len);
+                        knst_byte_string uriList(data, (uint32_t)len);
                         
                         
                         window.m_knst_event.drop_files.clear();
@@ -287,12 +282,12 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
                        
                         knst_vector<knst_c16string> files;
                         
-                        size_t pos = 0;
+                        uint32_t pos = 0;
                         while (pos < uriList.length()) {
-                            size_t end = uriList.find('\n', pos);
-                            if (end == std::string::npos) end = uriList.length();
+                            uint32_t end = pos;
+                            while (end < uriList.length() && uriList[end] != '\n') end++;
                             
-                            std::string uri = uriList.substr(pos, end - pos);
+                            std::string uri(reinterpret_cast<const char*>(uriList.data() + pos), end - pos);
                            
                             if (!uri.empty() && uri.back() == '\r') uri.pop_back();
                             
@@ -382,22 +377,23 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
             break;
         }
 
-        case XCB_EXPOSE: {
-            xcb_expose_event_t* expose = (xcb_expose_event_t*)ev;
-            if (expose->count == 0) {
-                window.m_knst_event.type = KNST_EXPOSE;
-                window.dispatch_current_event();
-            } else {
-                window.m_knst_event.type = KNST_UNKNOWN;
-            }
-            break;
+             case XCB_EXPOSE: {
+        xcb_expose_event_t* expose = (xcb_expose_event_t*)ev;
+        if (expose->count == 0) {
+            window.m_knst_event.type = KNST_EXPOSE;
+            window.dispatch_current_event();
+        } else {
+            window.m_knst_event.type = KNST_UNKNOWN;
         }
+        break;
+    }
+    
 
     case XCB_KEY_PRESS: {
         xcb_key_press_event_t* key = (xcb_key_press_event_t*)ev;
         xcb_keysym_t keysym = xcb_key_symbols_get_keysym(KnstWindowSources::m_keysyms, key->detail, 0);
 
-        if (window.m_knst_event.find_held_by_scancode(key->detail)) break; // native repeat, yut biz halletcez zaten
+        if (window.m_knst_event.find_held_by_scancode(key->detail)) break; 
 
         window.m_knst_event.add_held_key(keysym, key->detail, KnstWindowSources::get_current_time_ms());
 
@@ -553,4 +549,3 @@ KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic
 
 #endif
 
-#endif //KNST_LINUX_X11_EVENT_MANAGER_HPP

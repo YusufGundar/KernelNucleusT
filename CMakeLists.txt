@@ -463,7 +463,7 @@ if(ENABLE_VULKAN AND NOT ANDROID)
             
             set(VULKAN_LIBS ${VULKAN_LIBRARY})
             set(VULKAN_INCLUDES ${VULKAN_INCLUDE_DIR})
-            message(STATUS "✓ Vulkan: Found at ${VULKAN_INCLUDE_DIR}") // we need vulkan broo if you need knst_gui_framework
+            message(STATUS "✓ Vulkan: Found at ${VULKAN_INCLUDE_DIR}") # we need vulkan broo if you need knst_gui_framework
         endif()
     endif()
 endif()
@@ -479,7 +479,7 @@ if(ANDROID)
     )
 else()
     set(SOURCES
-        package_tests/knst_window/knst_window_test.cpp
+        package_tests/knst_gui_framework/knst_gui_frame_work_test.cpp
         ${PROTOCOL_SOURCES}
         ${GLAD_SOURCES}
     )

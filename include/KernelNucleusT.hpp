@@ -1,9 +1,20 @@
-#ifndef KERNEL_NUCLEUS_STRUCTS_HPP
-#define KERNEL_NUCLEUS_STRUCTS_HPP
+/*
+----------------------------
+KernelNucleusT.hpp
+----------------------------
+
+    It is the file where all the library's core and bundled structures are included together
+
+*/
+
+
+
+
 #pragma once
 
 
-
+#include <glm/glm.hpp> // include glm
+#include <glm/gtc/matrix_transform.hpp> // include glm
 
 
 // structural
@@ -12,12 +23,21 @@
 #include "knst_byte_string.hpp"
 #include "knst_vector.hpp"
 
+
+
+
+#include "knst_function.hpp"
+#include "knst_thread_priority.hpp"
+#include "knst_thread_queue.hpp"
+#include "knst_thread.hpp"
+#include "knst_thread_pool.hpp"
+
 #include "knst_image_loader.hpp"
 
 // _end structural
 
 
-
+#include <knst_vertex_structs.hpp>
 
 
 
@@ -39,4 +59,3 @@
 
 
 
-#endif // KERNEL_NUCLEUS_STRUCTS_HPP

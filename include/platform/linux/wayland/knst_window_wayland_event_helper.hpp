@@ -1,15 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: The event management mechanism for the Linux (Wayland) operating system is located in this file; the functions defined here are implemented in this file.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-#ifndef KNST_WINDOW_WAYLAND_EVENT_HELPER_HPP
-#define KNST_WINDOW_WAYLAND_EVENT_HELPER_HPP
-
 #pragma once
 #include <linux/input-event-codes.h>
 
@@ -799,13 +787,13 @@ const wl_data_offer_listener knst_window_wayland_funcs::dataOfferListener = {
 };
 
 
-static void knst_parse_uri_list_wayland(const std::string& uriList, knst_vector<knst_c16string>& out) {
-    size_t pos = 0;
+static void knst_parse_uri_list_wayland(const knst_byte_string& uriList, knst_vector<knst_c16string>& out) {
+    uint32_t pos = 0;
     while (pos < uriList.length()) {
-        size_t end = uriList.find('\n', pos);
-        if (end == std::string::npos) end = uriList.length();
+        uint32_t end = pos;
+        while (end < uriList.length() && uriList[end] != '\n') end++;
 
-        std::string uri = uriList.substr(pos, end - pos);
+        std::string uri(reinterpret_cast<const char*>(uriList.data() + pos), end - pos);
         if (!uri.empty() && uri.back() == '\r') uri.pop_back();
 
         if (uri.find("file://") == 0) {
@@ -973,11 +961,11 @@ inline void knst_window_wayland_funcs::DataDeviceDrop(void*, struct wl_data_devi
   
     wl_display_roundtrip(KnstWindowSources::wayland_display);
 
-    std::string result;
+    knst_byte_string result;
     char buf[4096];
     ssize_t n;
     while ((n = read(pipefd[0], buf, sizeof(buf))) > 0) {
-        result.append(buf, n);
+        result.append(reinterpret_cast<const unsigned char*>(buf), (uint32_t)n);
       
     }
     close(pipefd[0]);
@@ -1022,4 +1010,3 @@ const wl_data_device_listener knst_window_wayland_funcs::dataDeviceListener = {
 
 
 #endif 
-#endif // KNST_WINDOW_WAYLAND_EVENT_HELPER_HPP

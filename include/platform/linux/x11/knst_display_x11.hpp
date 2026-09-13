@@ -1,18 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: It is used to retrieve monitor and screen information in X11.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-
-
-
-#ifndef KNST_DISPLAY_X11_HPP
-#define KNST_DISPLAY_X11_HPP
 #pragma once
 
 
@@ -182,4 +167,3 @@ inline void knst_display::refresh_screens() noexcept {
 
 }
 #endif
-#endif // KNST_DISPLAY_X11_HPP

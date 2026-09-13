@@ -1,15 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: The event management mechanism in the Windows operating system is located in this file.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-#ifndef KNST_WINDOW_WIN32_EVENT_MANAGER_HPP
-#define KNST_WINDOW_WIN32_EVENT_MANAGER_HPP
 #pragma once
 
 #if KNST_USING_PLATFORM_WINDOWS
@@ -17,14 +5,16 @@
 #include <windowsx.h>
 
 #define KNST_RESIZE_BORDER 8
-#define KNST_CORNER_SIZE   12
-#define KNST_BUTTON_WIDTH  48
+#define KNST_CORNER_SIZE 12
+#define KNST_BUTTON_WIDTH 48
+#define KNST_RESIZE_TIMER_ID 0xA5F1 
 
 KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept{
     knst_window* window = reinterpret_cast<knst_window*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 
     if (window) {
         switch (msg) {
+
 
             case WM_NCHITTEST: {
             #ifdef KNST_DISABLE_TITLE_BAR
@@ -93,8 +83,23 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
 
-        case WM_GETMINMAXINFO:
-            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_GETMINMAXINFO: {
+            MINMAXINFO* mmi = reinterpret_cast<MINMAXINFO*>(lParam);
+            POINT* minSize = (POINT*)GetPropW(hwnd, L"KnstMinSize");
+            if (minSize) {
+                mmi->ptMinTrackSize = *minSize;
+            }
+            POINT* maxSize = (POINT*)GetPropW(hwnd, L"KnstMaxSize");
+            if (maxSize) {
+                mmi->ptMaxTrackSize = *maxSize;
+            } else {
+                int* maxW = (int*)GetPropW(hwnd, L"KnstMaxSizeWidth");
+                int* maxH = (int*)GetPropW(hwnd, L"KnstMaxSizeHeight");
+                if (maxW) mmi->ptMaxTrackSize.x = *maxW;
+                if (maxH) mmi->ptMaxTrackSize.y = *maxH;
+            }
+            return 0;
+        }
 
         case WM_NCLBUTTONDOWN:
             return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -234,14 +239,17 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             window->dispatch_current_event();
             return 0;
 
-        case WM_MOUSEWHEEL:
+        case WM_MOUSEWHEEL: {
             window->m_knst_event.type = KNST_MOUSE_EVENT;
             window->m_knst_event.mouse_action = KNST_MOUSE_SCROLL;
             window->m_knst_event.mouse_scroll_delta = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
-            window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
-            window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
+            POINT wheel_pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ScreenToClient(hwnd, &wheel_pt);
+            window->m_knst_event.mouse_x = wheel_pt.x;
+            window->m_knst_event.mouse_y = wheel_pt.y;
             window->dispatch_current_event();
             return 0;
+        }
 
         case WM_MOUSEMOVE:
             if (!window->m_knst_event.mouse_on_window) {
@@ -276,14 +284,27 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             window->dispatch_current_event();
             return 0;
 
+        case WM_SETCURSOR: {
+            if (LOWORD(lParam) == HTCLIENT) {
+                if (window->m_cursor) { SetCursor(window->m_cursor); return TRUE; }
+                if (window->m_system_cursor) { SetCursor(window->m_system_cursor); return TRUE; }
+            }
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
+
         case WM_ERASEBKGND:
             return 1;
 
         case WM_ENTERSIZEMOVE:
         
+             SetTimer(hwnd, KNST_RESIZE_TIMER_ID, 4, nullptr);
             return 0;
 
-        case WM_EXITSIZEMOVE: {
+case WM_EXITSIZEMOVE: {
+    KillTimer(hwnd, KNST_RESIZE_TIMER_ID);
+
+
+
     RECT rc;
     GetWindowRect(hwnd, &rc);
 
@@ -304,8 +325,15 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
     InvalidateRect(hwnd, NULL, FALSE);
     return 0;
 }
-        case WM_TIMER:
-            return 0;
+       case WM_TIMER: {
+    if (wParam == KNST_RESIZE_TIMER_ID) {
+        #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
+            window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+        #endif
+        InvalidateRect(hwnd, NULL, FALSE);
+    }
+    return 0;
+}
 
 case WM_SIZING: {
     RECT* rect = reinterpret_cast<RECT*>(lParam);
@@ -363,6 +391,8 @@ case WM_SIZING: {
         window->dispatch_current_event();
         InvalidateRect(hwnd, NULL, FALSE);
     }
+
+    
     return 0;
 }
 
@@ -514,9 +544,12 @@ case WM_SYSKEYUP: {
             window->should_close();
             return 0;
 
-        case WM_DESTROY:
-            PostQuitMessage(0);
+        case WM_DESTROY: {
+            if (knst_window_event_system::get_window_count() <= 1) {
+                PostQuitMessage(0);
+            }
             return 0;
+        }
 
         default:
             window->m_knst_event.type = KNST_UNKNOWN;
@@ -529,4 +562,3 @@ case WM_SYSKEYUP: {
 
 
 #endif
-#endif // KNST_WINDOW_WIN32_EVENT_MANAGER_HPP

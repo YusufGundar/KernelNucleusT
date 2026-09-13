@@ -1,5 +1,14 @@
-#ifndef KNST_GUI_FRAMEWORK_HPP
-#define KNST_GUI_FRAMEWORK_HPP
+/*
+----------------------------
+knst_gui_framework.hpp
+----------------------------
+
+    includes the necessary hhp files
+    
+*/
+
+
+
 #pragma once
 
 
@@ -12,4 +21,4 @@
 
 
 
-#endif
+

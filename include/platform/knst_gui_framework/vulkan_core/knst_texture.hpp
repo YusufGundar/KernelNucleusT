@@ -1,5 +1,3 @@
-#ifndef KNST_TEXTURE_HPP
-#define KNST_TEXTURE_HPP
 #pragma once
 
 
@@ -29,9 +27,15 @@ bool isLoaded = false;
 knst_c16string file_path;
 
 void* userData = nullptr;
+VkDevice m_owning_device = VK_NULL_HANDLE;
 
 
 knst_texture() = default;
+~knst_texture() {
+    if (isLoaded && m_owning_device != VK_NULL_HANDLE) {
+        Destroy(m_owning_device);
+    }
+}
     
 
 knst_texture(const knst_texture&) = delete;
@@ -46,10 +50,11 @@ knst_texture& operator=(const knst_texture&) = delete;
         if (this != &other) {
             
             if (isLoaded) {
-                //bunu çağıran temizlemeli
+              
+                Destroy(m_owning_device);
             }
             
-            // Kaynakları taşı
+           
             image = other.image;
             image_memory = other.image_memory;
             imageView = other.imageView;
@@ -60,6 +65,7 @@ knst_texture& operator=(const knst_texture&) = delete;
             format = other.format;
             isLoaded = other.isLoaded;
             file_path = std::move(other.file_path);
+            m_owning_device = other.m_owning_device;
             
             
             other.image = VK_NULL_HANDLE;
@@ -67,6 +73,7 @@ knst_texture& operator=(const knst_texture&) = delete;
             other.imageView = VK_NULL_HANDLE;
             other.sampler = VK_NULL_HANDLE;
             other.isLoaded = false;
+            other.m_owning_device = VK_NULL_HANDLE;
         }
         return *this;
     }
@@ -75,7 +82,7 @@ knst_texture& operator=(const knst_texture&) = delete;
     
 
     void Destroy(VkDevice device) {
-       
+        if (device == VK_NULL_HANDLE) return;
         if (sampler != VK_NULL_HANDLE) {
             vkDestroySampler(device, sampler, nullptr);
             sampler = VK_NULL_HANDLE;
@@ -104,6 +111,7 @@ knst_texture& operator=(const knst_texture&) = delete;
         height = 0;
         channels = 0;
         format = VK_FORMAT_UNDEFINED;
+        m_owning_device = VK_NULL_HANDLE;
     }
     
     
@@ -207,7 +215,7 @@ knst_byte_string imageData = knst_image_loader::load_png(file_path,&width,&heigh
 
 
 static knst_texture CreateFromData(VkDevice device,VkPhysicalDevice physical_device,VkCommandPool commandPool,VkQueue graphisc_queue,
-knst_byte_string data,uint32_t width,uint32_t height,uint32_t channels){
+const knst_byte_string& data,uint32_t width,uint32_t height,uint32_t channels){
 
 
 
@@ -421,6 +429,7 @@ texture.height = height;
 texture.channels = channels;
 texture.format = format;
 texture.isLoaded = true;
+texture.m_owning_device = device;
 
 return texture;
 }
@@ -583,12 +592,12 @@ static knst_texture CreateEmpty(
 
     static VkFormat DetermineFormat(uint32_t channels) {
         switch (channels) {
-            case 1:  return VK_FORMAT_R8_UNORM;           // Gri tonlama
-            case 2:  return VK_FORMAT_R8G8_UNORM;         // Gri + Alpha
-            case 3:  return VK_FORMAT_R8G8B8_SRGB;        // RGB
-            case 4:  return VK_FORMAT_R8G8B8A8_SRGB;      // RGBA
-            default: return VK_FORMAT_R8G8B8A8_SRGB;      // Varsayılan
-        } // geliştirmeye devam edicem .. dostum galiba delirmeye başladım, vulkan işte.. yapı doldur ver ama birçok yapı
+            case 1:  return VK_FORMAT_R8_UNORM;
+            case 2:  return VK_FORMAT_R8G8_UNORM;
+            case 3:  return VK_FORMAT_R8G8B8_SRGB;
+            case 4:  return VK_FORMAT_R8G8B8A8_SRGB;
+            default: return VK_FORMAT_R8G8B8A8_SRGB;
+        }
     }
     
     
@@ -607,6 +616,3 @@ static knst_texture CreateEmpty(
 
 
 
-
-
-#endif

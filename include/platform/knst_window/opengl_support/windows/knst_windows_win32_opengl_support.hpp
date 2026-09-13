@@ -1,5 +1,3 @@
-#ifndef KNST_WINDOWS_WIN32_OPENGL_SUPPORT_HPP
-#define KNST_WINDOWS_WIN32_OPENGL_SUPPORT_HPP
 #pragma once
 
 #if KNST_USING_PLATFORM_WINDOWS && defined(KNST_USING_OPENGL)
@@ -157,4 +155,3 @@ inline bool knst_window_opengl_content::Init(knst_window* window_p, bool vsync_s
 }
 
 #endif
-#endif // KNST_WINDOWS_WIN32_OPENGL_SUPPORT_HPP

@@ -1,14 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: The implementations of the functions to be used by the user in Wayland are available here.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-#ifndef KNST_WINDOW_WAYLAND_MANAGER_HPP
-#define KNST_WINDOW_WAYLAND_MANAGER_HPP
 #pragma once
 
 #include <poll.h>       
@@ -51,6 +40,11 @@ inline void knst_window::show() noexcept
 inline void knst_window::destroy() noexcept
 {
     knst_window_event_system::unregister_window(this);
+
+    if (KnstWindowSources::active_window == this) KnstWindowSources::active_window = nullptr;
+    if (KnstWindowSources::keyboard_focus_window == this) KnstWindowSources::keyboard_focus_window = nullptr;
+    if (KnstWindowSources::drag_target_window == this) KnstWindowSources::drag_target_window = nullptr;
+
     if (m_layer_surface) { 
         
             wl_proxy_destroy((struct wl_proxy*)m_layer_surface);
@@ -469,7 +463,7 @@ inline void knst_window::request_clipboard() noexcept {
     int flags = fcntl(pipefd[0], F_GETFL, 0);
     fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
 
-    std::string result;
+    knst_byte_string result;
     char buf[4096];
     bool got_data = false;
 
@@ -497,7 +491,7 @@ inline void knst_window::request_clipboard() noexcept {
         ssize_t n = read(pipefd[0], buf, sizeof(buf) - 1);
         if (n > 0) {
             buf[n] = '\0';
-            result.append(buf, n);
+            result.append(reinterpret_cast<const unsigned char*>(buf), (uint32_t)n);
             got_data = true;
         } else if (n == 0) {
             break;
@@ -513,7 +507,7 @@ inline void knst_window::request_clipboard() noexcept {
     close(pipefd[0]);
 
     if (!result.empty()) {
-        clipboard_text = knst_c16string(result.c_str());
+        clipboard_text = knst_c16string(reinterpret_cast<const char*>(result.data()), result.length());
     } else {
         clipboard_text = u"";
     }
@@ -685,4 +679,3 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
 }
 
 #endif
-#endif // KNST_WINDOW_WAYLAND_MANAGER_HPP

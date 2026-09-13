@@ -1,13 +1,30 @@
-#ifndef KNST_IMAGE_LOADER_HPP
-#define KNST_IMAGE_LOADER_HPP
+/*
+----------------------------
+knst_image_loader.hpp
+----------------------------
+
+    Reads PNG, BMP, TGA, and PPM images—includes its own DEFLATE decoder and does not depend on zlib. Converts to RGBA, RGB, BGRA, or BGR formats; offers high performance via SIMD (SSE2/NEON) and multi-threaded row processing. Uses memory-mapped I/O
+    It is used within the library to load and apply GUI and cursor images
+
+*/
+
+
+
+
 #pragma once
 
-#include <cstdint>
+
 #include <cmath>
 #include <utility>
 #include <thread>
 #include <algorithm>
 #include <functional>
+
+#include "knst_function.hpp"
+#include "knst_thread_priority.hpp"
+#include "knst_thread.hpp"
+#include "knst_thread_queue.hpp"
+#include "knst_thread_pool.hpp"
 
 
 
@@ -53,7 +70,7 @@
 
 static const uint32_t KNST_MAX_IMAGE_DIMENSION = 16384;
 
-inline int knst_bitmap_flag_to_size(int flags) noexcept {
+inline int knst_bitmap_flag_to_size(int flags) noexcept { // Extracts the size from the bitmap flag. KNST_BITMAP_128_128 ==> 128, KNST_BITMAP_16_16 ==> 16. Unknown flag ==> 0
     int size_flag = flags & 0xFF;
     switch (size_flag) {
         case KNST_BITMAP_16_16:   return 16;
@@ -69,7 +86,7 @@ inline int knst_bitmap_flag_to_size(int flags) noexcept {
 }
 
 #pragma pack(push, 1)
-struct BMPHeader {
+struct BMPHeader { // BMP file header. #pragma pack(push, 1) ==> no padding; fields are strictly byte-aligned (as required by the file format). Signature 0x4D42 ("BM"), followed by size, offset, width, height, bit depth, compression, etc.; read directly via header->width/height
     uint16_t signature;
     uint32_t file_size;
     uint16_t reserved1;
@@ -92,7 +109,7 @@ struct BMPHeader {
 
 class KnstInflate {
 public:
-    static bool Inflate(const uint8_t* input, size_t inputSize, knst_byte_string& output) {
+    static bool Inflate(const uint8_t* input, size_t inputSize, knst_byte_string& output) { // It validates the zlib format and extracts the deflate data. It checks the header (CM=8 for deflate, checksum %31) and then passes the data to InflateDeflate. It allocates estimated space for the output (3x + 64)
         if (inputSize < 6) return false;
 
         uint8_t cmf = input[0];
@@ -111,7 +128,7 @@ public:
     }
 
 private:
-    struct BitReader {
+    struct BitReader { // Bit reader — Operates at the DEFLATE bit level. ReadBits(n) ==> reads N bits (LSB-first); ReadBit() ==> reads a single bit; AlignByte() ==> aligns to the byte boundary (for stored blocks); HasData() ==> checks if data remains. Uses a buffer and a bit counter (bitsInBuffer) to enable bit-by-bit reading rather than byte-by-byte reading
         const uint8_t* data;
         size_t size;
         size_t bytePos = 0;
@@ -163,7 +180,7 @@ private:
 
   
    
-    struct HuffmanTable {
+    struct HuffmanTable { // Huffman decoding table. Build ==> constructs a canonical Huffman table from code lengths (counts = number of codes for each length, symbols = ordered symbols). Decode ==> reads bit by bit to find the matching symbol. The heart of DEFLATE — converts compressed data into symbols
         uint16_t counts[16];
         uint16_t symbols[288];
         int numSymbols = 0;
@@ -222,9 +239,9 @@ private:
         }
     };
 
-    struct LengthCode { uint32_t base; uint8_t extraBits; };
+    struct LengthCode { uint32_t base; uint8_t extraBits; }; // Length/distance code information. `base` ==> minimum value, `extraBits` ==> number of extra bits to read. In DEFLATE, for example: "length 3–10, 1 extra bit."
 
-    static const LengthCode GetLengthInfo(uint16_t code) {
+    static const LengthCode GetLengthInfo(uint16_t code) { // Converts the DEFLATE length code into a table entry. Symbols 257–285 map to {base, extraBits}. For example, code 265 ==> {11, 1} (11 + 0/1 = copy 11–12 bytes). Invalid code ==> {0, 0}
         static const LengthCode table[29] = {
             {3,0},{4,0},{5,0},{6,0},{7,0},{8,0},{9,0},{10,0},
             {11,1},{13,1},{15,1},{17,1},{19,2},{23,2},{27,2},{31,2},
@@ -235,7 +252,7 @@ private:
         return {0,0};
     }
 
-    static const LengthCode GetDistanceInfo(uint16_t code) {
+    static const LengthCode GetDistanceInfo(uint16_t code) { // Converts the DEFLATE distance code into a table. Symbol 0–29 ==> returns {base, extraBits}. For example, code=10 ==> {33, 4} (33 + 0–15 = how far back to copy). Invalid code ==> {0, 0}
         static const LengthCode table[30] = {
             {1,0},{2,0},{3,0},{4,0},{5,1},{7,1},{9,2},{13,2},
             {17,3},{25,3},{33,4},{49,4},{65,5},{97,5},{129,6},{193,6},
@@ -247,7 +264,7 @@ private:
         return {0,0};
     }
 
-    static HuffmanTable BuildHuffmanTable(const knst_vector<uint8_t>& lengths) {
+    static HuffmanTable BuildHuffmanTable(const knst_vector<uint8_t>& lengths) { // Constructs a Huffman table from a list of lengths. Limits *n* to 288 (the DEFLATE maximum literal/length symbol count). Delegates to `Build`
         HuffmanTable table;
         int n = (int)lengths.size();
         if (n > 288) n = 288;
@@ -256,7 +273,7 @@ private:
     }
 
    
-    static const HuffmanTable& StaticLiteralTable() {
+    static const HuffmanTable& StaticLiteralTable() { // DEFLATE's fixed literal/length Huffman table. It is set up once using standard fixed lengths (as defined in RFC 1951) and statically cached; there is no need to recalculate it for each block
         static const HuffmanTable table = [] {
             uint8_t lengths[288];
             for (int i = 0;   i < 144; i++) lengths[i] = 8;
@@ -270,7 +287,7 @@ private:
         return table;
     }
 
-    static const HuffmanTable& StaticDistanceTable() {
+    static const HuffmanTable& StaticDistanceTable() { // DEFLATE's fixed distance Huffman table. 32 symbols, all 5 bits (RFC 1951 standard). It is set up once using `static` and cached
         static const HuffmanTable table = [] {
             uint8_t lengths[32];
             for (int i = 0; i < 32; i++) lengths[i] = 5;
@@ -281,7 +298,7 @@ private:
         return table;
     }
 
-    static bool InflateDeflate(const uint8_t* input, size_t inputSize, knst_byte_string& output) {
+    static bool InflateDeflate(const uint8_t* input, size_t inputSize, knst_byte_string& output) { // The DEFLATE main loop. At the beginning of each block, it reads `bfinal` (whether it is the last block) and `btype` (block type). It supports three types: stored (uncompressed), static Huffman, and dynamic Huffman. There is a 100MB output limit (protection against decompression bomb attacks). It continues until all blocks are processed or `bfinal` is 1
         if (inputSize == 0 || input == nullptr) return false;
 
         BitReader reader(input, inputSize);
@@ -322,7 +339,7 @@ private:
         return true;
     }
 
-    static bool BuildDynamicTables(BitReader& reader, HuffmanTable& litTable, HuffmanTable& distTable) {
+    static bool BuildDynamicTables(BitReader& reader, HuffmanTable& litTable, HuffmanTable& distTable) { // DEFLATE sets up the tables for dynamic Huffman blocks. It reads the hlit, hdist, and hclen counts and decodes the code lengths using clTable. It handles the 16, 17, and 18 repeat symbols (shortcuts). The result is the preparation of litTable (literal/length) and distTable (distance). The subsequent DecodeHuffmanBlock uses these tables
         uint16_t hlit = reader.ReadBits(5) + 257;
         uint16_t hdist = reader.ReadBits(5) + 1;
         uint16_t hclen = reader.ReadBits(4) + 4;
@@ -395,7 +412,7 @@ private:
         return litTable.IsValid() && distTable.IsValid();
     }
 
-    static bool DecodeHuffmanBlock(BitReader& reader, const HuffmanTable& litTable,
+    static bool DecodeHuffmanBlock(BitReader& reader, const HuffmanTable& litTable, // Decodes the Huffman block. Symbols: 0–255 ==> literal byte, 256 ==> end of block, 257–285 ==> length-distance pair (LZ77 back-reference). Uses `memcpy` for back-references (sufficient distance) or byte-by-byte copying (overlapping range). Loops until 256 is encountered
                                     const HuffmanTable& distTable, knst_byte_string& output,
                                     size_t maxOutputSize) {
         while (true) {
@@ -446,7 +463,7 @@ private:
 
 class knst_image_loader {
 public:
-    static knst_byte_string load_image(
+    static knst_byte_string load_image( //The main `load_image` function detects the format by examining magic bytes rather than the file extension—specifically PNG (`\x89PNG`), PPM (P3/P6), TGA (type at byte 2), and BMP (`BM`). It routes the task to the appropriate loader and releases the memory map; if the format is unrecognized, it returns null
         const knst_c16string& path,
         int* out_width,
         int* out_height,
@@ -500,7 +517,7 @@ public:
         return result;
     }
 
-    static knst_byte_string load_bmp(
+    static knst_byte_string load_bmp( // Loads a BMP from a file. It converts the UTF-16 path to bytes, reads the file using `mmap`, passes the data to `load_bmp_from_memory`, and releases the memory map. A shortcut function called with the prior knowledge that the file is a BMP
         const knst_c16string& path,
         int* out_width,
         int* out_height,
@@ -517,7 +534,7 @@ public:
         return result;
     }
 
-    static knst_byte_string load_png(
+    static knst_byte_string load_png( // Loads a PNG from a file. Converts the UTF-16 path to bytes, reads the file using mmap, passes it to load_png, and releases the mapping. It is the PNG version of load_bmp
         const knst_c16string& path,
         int* out_width,
         int* out_height,
@@ -534,7 +551,7 @@ public:
         return result;
     }
 
-    static knst_byte_string load_ppm(
+    static knst_byte_string load_ppm( // Loads a PPM from a file. Same pattern: convert path to bytes, mmap, load_ppm, unmap
         const knst_c16string& path,
         int* out_width,
         int* out_height,
@@ -551,7 +568,7 @@ public:
         return result;
     }
 
-    static knst_byte_string load_tga(
+    static knst_byte_string load_tga( // Loads a TGA from a file. Same pattern — path ==> byte, mmap, load_tga, map
         const knst_c16string& path,
         int* out_width,
         int* out_height,
@@ -571,124 +588,124 @@ public:
 private:
   
 
-    static bool read_file(const knst_byte_string& path, uint8_t** out_data, size_t* out_size) {
+    static bool read_file(const knst_byte_string& path, uint8_t** out_data, size_t* out_size) { // Opens the file as memory-mapped. Uses `CreateFileA` + `CreateFileMappingA` + `MapViewOfFile` on Windows, and `open` + `mmap` on Linux. It does not copy the content to RAM; instead, it maps it to virtual memory—a zero-copy operation. It provides platform-specific preloading hints (`PrefetchVirtualMemory`, `madvise`, `posix_fadvise`). Only regular files (`S_ISREG`) are accepted; directories and sockets are rejected
+
         if (path.empty() || out_data == nullptr || out_size == nullptr) return false;
 
-#if KNST_USING_PLATFORM_WINDOWS
-       
-        HANDLE hFile = CreateFileA((const char*)path.data(), GENERIC_READ, FILE_SHARE_READ,NULL, OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-                                   
-        if (hFile == INVALID_HANDLE_VALUE) return false;
-
-        LARGE_INTEGER fileSizeLI;
-        if (!GetFileSizeEx(hFile, &fileSizeLI) || fileSizeLI.QuadPart <= 0) {
-            CloseHandle(hFile);
-            return false;
-        }
-        size_t fileSize = (size_t)fileSizeLI.QuadPart;
-
-        HANDLE hMapping = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
-        if (hMapping == NULL) {
-            CloseHandle(hFile);
-            return false;
-        }
-
-        *out_data = (uint8_t*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, fileSize);
-        *out_size = fileSize;
-
-        CloseHandle(hMapping);
-        CloseHandle(hFile);
-        if (*out_data == nullptr) return false;
-
-#if _WIN32_WINNT >= 0x0602 
-        {
-            WIN32_MEMORY_RANGE_ENTRY range;
-            range.VirtualAddress = *out_data;
-            range.NumberOfBytes = fileSize;
+        #if KNST_USING_PLATFORM_WINDOWS
             
-            PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0);
-        }
-#endif
-        return true;
+                HANDLE hFile = CreateFileA((const char*)path.data(), GENERIC_READ, FILE_SHARE_READ,NULL, OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+                                        
+                if (hFile == INVALID_HANDLE_VALUE) return false;
 
-#elif KNST_USING_PLATFORM_LINUX
-        int fd = open((const char*)path.data(), O_RDONLY);
-        if (fd < 0) return false;
+                LARGE_INTEGER fileSizeLI;
+                if (!GetFileSizeEx(hFile, &fileSizeLI) || fileSizeLI.QuadPart <= 0) {
+                    CloseHandle(hFile);
+                    return false;
+                }
+                size_t fileSize = (size_t)fileSizeLI.QuadPart;
 
-        struct stat st;
-        if (fstat(fd, &st) != 0 || st.st_size <= 0) {
-            close(fd);
-            return false;
-        }
-        if (!S_ISREG(st.st_mode)) {
-            close(fd);
-            return false;
-        }
+                HANDLE hMapping = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+                if (hMapping == NULL) {
+                    CloseHandle(hFile);
+                    return false;
+                }
 
-  #if defined(KNST_USING_LINUX_PLATFORM_ANDROID)
-        
-        int fd_local = fd;
-        *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd_local, 0);
-        if (*out_data == MAP_FAILED) { close(fd); return false; }
-    #ifdef MADV_SEQUENTIAL
-        madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
-    #endif
-    #ifdef MADV_WILLNEED
-        madvise(*out_data, (size_t)st.st_size, MADV_WILLNEED);
-    #endif
+                *out_data = (uint8_t*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, fileSize);
+                *out_size = fileSize;
 
-  #elif defined(KNST_USING_LINUX_PLATFORM_X11) || defined(KNST_USING_LINUX_PLATFORM_WAYLAND)
-       
-    #ifdef POSIX_FADV_SEQUENTIAL
-        posix_fadvise(fd, 0, st.st_size, POSIX_FADV_SEQUENTIAL);
-    #endif
-    #ifdef POSIX_FADV_WILLNEED
-        posix_fadvise(fd, 0, st.st_size, POSIX_FADV_WILLNEED);
-    #endif
-        int mapFlags = MAP_PRIVATE;
-    #ifdef MAP_POPULATE
-        mapFlags |= MAP_POPULATE;
-    #endif
-        *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
-        if (*out_data == MAP_FAILED) {
-            *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        }
-        if (*out_data == MAP_FAILED) { close(fd); return false; }
+                CloseHandle(hMapping);
+                CloseHandle(hFile);
+                if (*out_data == nullptr) return false;
 
-  #else
-       
-        int mapFlags = MAP_PRIVATE;
-    #ifdef MAP_POPULATE
-        mapFlags |= MAP_POPULATE;
-    #endif
-        *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
-        if (*out_data == MAP_FAILED) {
-            *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        }
-        if (*out_data == MAP_FAILED) { close(fd); return false; }
-    #ifdef MADV_SEQUENTIAL
-        madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
-    #endif
-  #endif
+        #if _WIN32_WINNT >= 0x0602 
+                {
+                    WIN32_MEMORY_RANGE_ENTRY range;
+                    range.VirtualAddress = *out_data;
+                    range.NumberOfBytes = fileSize;
+                    
+                    PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0);
+                }
+        #endif
+                return true;
 
-        *out_size = (size_t)st.st_size;
-        close(fd);
-        return true;
-#endif
+        #elif KNST_USING_PLATFORM_LINUX
+                int fd = open((const char*)path.data(), O_RDONLY);
+                if (fd < 0) return false;
+
+                struct stat st;
+                if (fstat(fd, &st) != 0 || st.st_size <= 0) {
+                    close(fd);
+                    return false;
+                }
+                if (!S_ISREG(st.st_mode)) {
+                    close(fd);
+                    return false;
+                }
+
+        #if defined(KNST_USING_LINUX_PLATFORM_ANDROID)
+                
+                int fd_local = fd;
+                *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd_local, 0);
+                if (*out_data == MAP_FAILED) { close(fd); return false; }
+            #ifdef MADV_SEQUENTIAL
+                madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
+            #endif
+            #ifdef MADV_WILLNEED
+                madvise(*out_data, (size_t)st.st_size, MADV_WILLNEED);
+            #endif
+
+        #elif defined(KNST_USING_LINUX_PLATFORM_X11) || defined(KNST_USING_LINUX_PLATFORM_WAYLAND)
+            
+            #ifdef POSIX_FADV_SEQUENTIAL
+                posix_fadvise(fd, 0, st.st_size, POSIX_FADV_SEQUENTIAL);
+            #endif
+            #ifdef POSIX_FADV_WILLNEED
+                posix_fadvise(fd, 0, st.st_size, POSIX_FADV_WILLNEED);
+            #endif
+                int mapFlags = MAP_PRIVATE;
+            #ifdef MAP_POPULATE
+                mapFlags |= MAP_POPULATE;
+            #endif
+                *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
+                if (*out_data == MAP_FAILED) {
+                    *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+                }
+                if (*out_data == MAP_FAILED) { close(fd); return false; }
+
+        #else
+            
+                int mapFlags = MAP_PRIVATE;
+            #ifdef MAP_POPULATE
+                mapFlags |= MAP_POPULATE;
+            #endif
+                *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
+                if (*out_data == MAP_FAILED) {
+                    *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+                }
+                if (*out_data == MAP_FAILED) { close(fd); return false; }
+            #ifdef MADV_SEQUENTIAL
+                madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
+            #endif
+        #endif
+
+                *out_size = (size_t)st.st_size;
+                close(fd);
+                return true;
+        #endif
         return false;
     }
 
-    static void free_file_data(uint8_t* data, size_t size) {
+    static void free_file_data(uint8_t* data, size_t size) { // Releases the memory-mapped file. Uses `UnmapViewOfFile` on Windows and `munmap` on Linux. It is the counterpart to `read_file`—you close with this what you opened with that
         if (!data || size == 0) return;
-#if KNST_USING_PLATFORM_WINDOWS
-        UnmapViewOfFile(data);
-#elif KNST_USING_PLATFORM_LINUX
-        munmap(data, size);
-#endif
+        #if KNST_USING_PLATFORM_WINDOWS
+                UnmapViewOfFile(data);
+        #elif KNST_USING_PLATFORM_LINUX
+                munmap(data, size);
+        #endif
     }
 
-    static uint8_t* resize_image(const uint8_t* src, int src_w, int src_h,
-                                  int channels, int dst_w, int dst_h) {
+    static uint8_t* resize_image(const uint8_t* src, int src_w, int src_h, int channels, int dst_w, int dst_h) { // Resizes the image using the nearest-neighbor method. It allocates a new buffer and pre-calculates the X-mapping using `srcXTable` (avoiding multiplication or division within the loop). For each target pixel, it copies the nearest source pixel. It is fast but low-quality—resulting in a pixelated appearance when enlarged. Memory is allocated via `new uint8_t[]`, so the caller is responsible for calling `delete[]`
         if (src == nullptr || src_w <= 0 || src_h <= 0 ||
             channels <= 0 || dst_w <= 0 || dst_h <= 0) return nullptr;
 
@@ -720,7 +737,8 @@ private:
         return dst;
     }
 
-    static int GetPNGChannels(uint8_t colorType) {
+    static int GetPNGChannels(uint8_t colorType) { // Returns the number of channels based on the PNG color type. 0 ==> gray (1), 2 ==> RGB (3), 3 ==> palette (1), 4 ==> gray+alpha (2), 6 ==> RGBA (4). Unknown ==> 0
+
         switch (colorType) {
             case 0: return 1;
             case 2: return 3;
@@ -731,7 +749,7 @@ private:
         }
     }
 
-    static inline uint8_t PaethPredictor(uint8_t a, uint8_t b, uint8_t c) {
+    static inline uint8_t PaethPredictor(uint8_t a, uint8_t b, uint8_t c) { // The Paeth filter predictor for PNG. a = left, b = top, c = top-left pixel. It returns the one among the three that is closest to p = a + b - c. It is the most effective filter for PNG decoding—providing good predictions in edge and gradient regions
         int p = a + b - c;
         int pa = abs(p - a);
         int pb = abs(p - b);
@@ -742,8 +760,17 @@ private:
     }
 
 
-    static void ParallelForRows(uint32_t height, size_t workPerRow,
-                                 const std::function<void(uint32_t, uint32_t)>& fn) {
+        // Kütüphanenin kendi thread pool'unu kullanıyoruz — her görüntü yüklemesinde
+    // ham OS thread'i yaratıp yok etmek yerine paylaşımlı, statik bir havuzdan yararlanıyoruz.
+    static knst_thread_pool& RowThreadPool() {
+        static knst_thread_pool s_pool(0 /* auto hardware_concurrency */);
+        static bool s_started = s_pool.start();
+        (void)s_started;
+        return s_pool;
+    }
+
+    static void ParallelForRows(uint32_t height, size_t workPerRow,const std::function<void(uint32_t, uint32_t)>& fn) {
+                                 
         unsigned hwThreads = std::thread::hardware_concurrency();
         if (hwThreads == 0) hwThreads = 2;
 
@@ -763,19 +790,28 @@ private:
             return;
         }
 
-        knst_vector<std::thread> pool;
+        // std::thread yerine knst_thread kullanıyoruz — kütüphanenin kendi thread sarmalayıcısı.
+        knst_vector<knst_thread> pool;
         uint32_t rowsPerThread = (height + numThreads - 1) / numThreads;
         for (unsigned t = 0; t < numThreads; t++) {
             uint32_t startRow = t * rowsPerThread;
             uint32_t endRow = startRow + rowsPerThread;
             if (startRow >= height) break;
             if (endRow > height) endRow = height;
-            pool.emplace_back(fn, startRow, endRow);
+
+            knst_thread th;
+            th.start([&fn, startRow, endRow]() {
+                fn(startRow, endRow);
+            });
+            pool.push_back(std::move(th));
         }
         for (auto& th : pool) th.join();
     }
 
     
+
+
+// Converts RGBA to BGRA (swapping the R and B channels). There are three implementations: SSE2 (x86, 4 pixels/iteration), NEON (ARM, 8 pixels/iteration), and scalar (fallback). The SIMD versions are 4–8x faster. `SwizzleRGBA_BGRA` selects the appropriate one at compile time using `#if`
 #if defined(KNST_HAS_SSE2)
     static inline void SwizzleRGBA_BGRA_SSE2(const uint8_t* src, uint8_t* dst, size_t pixelCount) {
         size_t i = 0;
@@ -827,8 +863,7 @@ private:
 #endif
     }
 
-    static void UnpackRow(const uint8_t* packed, knst_byte_string& output, size_t outOffsetSamples,
-                           uint32_t width, int samplesPerPixel, int bitDepth) {
+    static void UnpackRow(const uint8_t* packed, knst_byte_string& output, size_t outOffsetSamples,uint32_t width, int samplesPerPixel, int bitDepth) { // Unpacks bit-packed data from a PNG row into bytes. If bitDepth is 8 or 16, it uses a direct memcpy. For 1, 2, or 4-bit data, it reads bit by bit and writes them into separate bytes. This is required for paletted and low-bit-depth PNGs
         size_t totalSamples = (size_t)width * samplesPerPixel;
 
         if (bitDepth == 8) {
@@ -849,7 +884,7 @@ private:
     }
 
 
-    static knst_byte_string load_png(
+    static knst_byte_string load_png( // The core engine of the PNG decoder. It iterates through chunks (IHDR/PLTE/tRNS/IDAT/IEND), collects and inflates compressed data, reverses filters (including Adam7 de-interlacing), and converts from palette/grayscale/RGB/RGBA to the target format. It utilizes SIMD swizzling and multi-threaded row processing. It handles conversions such as 16-bit to 8-bit and low bit-depth to 8-bit. The result is a byte array in the desired format (RGB/RGBA/BGR/BGRA)
         const uint8_t* data,
         size_t size,
         int* out_width,
@@ -1172,7 +1207,7 @@ private:
     }
 
   
-    static bool ApplyPNGFilters(
+    static bool ApplyPNGFilters( // It resolves PNG row filters. It reads the filter type at the beginning of each row (0=None, 1=Sub, 2=Up, 3=Average, 4=Paeth), applies it, and then unpacks the bit-packed data using UnpackRow. `prevRow` holds the previous row (required for Up/Average/Paeth); it advances within the loop using a swap, avoiding the need for copying
         const knst_byte_string& input,
         knst_byte_string& output,
         uint32_t width, uint32_t height,
@@ -1239,7 +1274,7 @@ private:
         return true;
     }
 
-    static bool ApplyPNGFiltersToPass(
+    static bool ApplyPNGFiltersToPass( // The pointer version of ApplyPNGFilters — for Adam7 interlacing. It takes a `const uint8_t*` instead of a `knst_byte_string` because the passes appear as consecutive blocks in the file. The filter logic is the same; only the input is a pointer
         const uint8_t* input,
         knst_byte_string& output,
         int width, int height,
@@ -1302,7 +1337,7 @@ private:
         return true;
     }
 
-    static bool ApplyAdam7(
+    static bool ApplyAdam7( // It decodes the PNG Adam7 interlacing scheme. It combines pixels stored across seven passes into a single, continuous image. Each pass performs sub-sampling using its own startX, startY, stepX, and stepY parameters—resulting in a sparse, checkerboard-like pixel pattern. Each pass is processed via `ApplyPNGFiltersToPass` and then placed into the correct positions; if `stepX` is 1, a fast bulk copy using `memcpy` is performed
         const knst_byte_string& input,
         knst_byte_string& output,
         uint32_t width, uint32_t height,
@@ -1369,7 +1404,7 @@ private:
     }
 
 
-    static knst_byte_string load_ppm(
+    static knst_byte_string load_ppm( // Loads PPM (P3 ASCII / P6 binary) files. Parses the header—P3/P6, width, height, and maxVal. Includes overflow protection with a 1,000,000 limit. Rejects files where maxVal > 65535. Converts pixel data to the target format (RGB/RGBA/BGR/BGRA). No compression; raw data
         const uint8_t* data,
         size_t size,
         int* out_width,
@@ -1457,7 +1492,7 @@ private:
     }
 
     
-    static knst_byte_string load_tga(
+    static knst_byte_string load_tga( // Loads TGA (Truevision) files. Reads the header—ID length, color map, image type (2=RGB, 3=grayscale). Checks `imageDescriptor & 0x20` to determine if the orientation is bottom-up (TGA defaults to bottom-up). Determines the number of channels based on bit depth (8/24/32). Skips the color map if present. Converts pixel data row by row, using the fast `memcpy` path (BGR and tight packing)
         const uint8_t* data,
         size_t size,
         int* out_width,
@@ -1549,7 +1584,7 @@ private:
     }
 
    
-    static knst_byte_string load_bmp_from_memory(
+    static knst_byte_string load_bmp_from_memory( // Loads a BMP. Reads width, height, and bpp (24 or 32) from the header. Interprets height as top-down if negative, or bottom-up (BMP default) if positive. Handles 4-byte row alignment (calculating `row_size`). Converts pixel data—BGR to RGB, and sets alpha to 255 for 24-bit to 32-bit conversion. Uses a fast `memcpy` path for the tightly packed BGR case
         const uint8_t* data,
         size_t size,
         int* out_width,
@@ -1625,4 +1660,3 @@ private:
     }
 };
 
-#endif // KNST_IMAGE_LOADER_HPP

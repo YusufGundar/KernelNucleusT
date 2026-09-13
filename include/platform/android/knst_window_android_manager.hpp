@@ -1,5 +1,3 @@
-#ifndef KNST_WINDOW_ANDROID_MANAGER_HPP
-#define KNST_WINDOW_ANDROID_MANAGER_HPP
 #pragma once
 
 
@@ -218,8 +216,8 @@ inline void knst_window::set_clipboard(const knst_c16string& text) noexcept {
     jobject clipData = env->CallStaticObjectMethod(
         clipDataClass,
         newPlainTextMethod,
-        jText,  // label
-        jText   // text
+        jText,// label
+        jText// text
     );
     
     env->CallVoidMethod(clipboardManager, setPrimaryClipMethod, clipData);
@@ -230,6 +228,8 @@ inline void knst_window::set_clipboard(const knst_c16string& text) noexcept {
     env->DeleteLocalRef(clipboardManager);
     env->DeleteLocalRef(clipboardClass);
     env->DeleteLocalRef(clipDataClass);
+    env->DeleteLocalRef(contextClass);
+    env->DeleteLocalRef(clipboardServiceStr);
     
     if (attached) {
         vm->DetachCurrentThread();
@@ -327,7 +327,7 @@ inline void knst_window::request_clipboard() noexcept {
                         "toString",
                         "()Ljava/lang/String;"
                     );
-                    jstring jText = (jstring)env->CallObjectMethod(text, toStringMethod);
+                jstring jText = (jstring)env->CallObjectMethod(text, toStringMethod);
                     
                    
                     const char* utf8 = env->GetStringUTFChars(jText, nullptr);
@@ -335,16 +335,22 @@ inline void knst_window::request_clipboard() noexcept {
                     env->ReleaseStringUTFChars(jText, utf8);
                     
                     env->DeleteLocalRef(jText);
+                    env->DeleteLocalRef(text);
+                    env->DeleteLocalRef(charSequenceClass);
                 }
                 env->DeleteLocalRef(clipItem);
+                env->DeleteLocalRef(clipItemClass);
             }
         }
         env->DeleteLocalRef(clipData);
+        env->DeleteLocalRef(clipDataClass);
     }
     
   
     env->DeleteLocalRef(clipboardManager);
     env->DeleteLocalRef(clipboardClass);
+    env->DeleteLocalRef(contextClass);
+    env->DeleteLocalRef(clipboardServiceStr);
     
     if (attached) {
         vm->DetachCurrentThread();
@@ -635,4 +641,3 @@ void knst_mobile_keyboard::shutdown() {
 
 
 #endif
-#endif // KNST_WINDOW_ANDROID_MANAGER_HPP

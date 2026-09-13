@@ -1,5 +1,3 @@
-#ifndef KNST_LINUX_X11_OPENGL_GLX_SUPPORT_HPP
-#define KNST_LINUX_X11_OPENGL_GLX_SUPPORT_HPP
 #pragma once
 
 #if KNST_USING_LINUX_PLATFORM_X11 && defined(KNST_USING_OPENGL) && defined(KNST_OPENGL_USING_GLX)
@@ -140,4 +138,3 @@ inline bool knst_window_opengl_content::Init(knst_window* window_p, bool vsync_s
 }
 
 #endif
-#endif // KNST_LINUX_X11_OPENGL_GLX_SUPPORT_HPP

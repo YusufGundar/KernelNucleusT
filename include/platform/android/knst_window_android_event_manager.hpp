@@ -1,5 +1,3 @@
-#ifndef KNST_WINDOW_ANDROID_EVENT_MANAGER_HPP
-#define KNST_WINDOW_ANDROID_EVENT_MANAGER_HPP
 #pragma once
 
 #if defined(KNST_USING_PLATFORM_ANDROID)
@@ -364,4 +362,3 @@ KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* e
 
 
 #endif
-#endif // KNST_WINDOW_ANDROID_EVENT_MANAGER_HPP

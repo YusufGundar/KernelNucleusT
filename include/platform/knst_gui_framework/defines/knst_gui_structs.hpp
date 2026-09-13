@@ -1,29 +1,6 @@
-#ifndef KNST_GUI_STRUCTS_HPP
-#define KNST_GUI_STRUCTS_HPP
 #pragma once
 
 
-struct KnstVertex2D {
-    float x, y, z;
-    float r, g, b, a;
-    float u, v;
-    
-    static KnstVertex2D Make(float x, float y, float z, float r=1, float g=1, float b=1, float a=1,float u=0, float v=0) {
-                         
-                         
-    KnstVertex2D vertex;
-    vertex.x = x; 
-    vertex.y = y; 
-    vertex.z = z;
-    vertex.r = r; 
-    vertex.g = g; 
-    vertex.b = b; 
-    vertex.a = a;
-    vertex.u = u; 
-    vertex.v = v;
-    return vertex;
-}
-};
 
 
 
@@ -582,7 +559,7 @@ inline VkPresentModeKHR KnstToVulkanPresentMode(const KnstPresentMode& mode) {
         case KnstPresentMode::VSYNC: return VK_PRESENT_MODE_FIFO_KHR;
         case KnstPresentMode::VSYNC_RELAXED: return VK_PRESENT_MODE_FIFO_RELAXED_KHR;
         case KnstPresentMode::MAILBOX: return VK_PRESENT_MODE_MAILBOX_KHR;
-        case KnstPresentMode::FIFO_LATEST: return VK_PRESENT_MODE_FIFO_LATEST_READY_KHR;
+        case KnstPresentMode::FIFO_LATEST: return VK_PRESENT_MODE_FIFO_KHR;
         case KnstPresentMode::SHARED_DEMAND: return VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR;
         case KnstPresentMode::SHARED_CONTINUOUS: return VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR;
         default: return VK_PRESENT_MODE_FIFO_KHR;
@@ -1129,12 +1106,12 @@ struct KnstViewportConfig {
 };
 
 struct KnstGuiConfig {
-    std::string vertexShaderPath;
-    std::string fragmentShaderPath;
+    knst_c16string vertexShaderPath;
+    knst_c16string fragmentShaderPath;
     KnstCullMode cullMode = KnstCullMode::BACK;
     bool enableBlend = true;
 
-    static KnstGuiConfig Default(const std::string& vertPath,const std::string& fragPath) {
+    static KnstGuiConfig Default(const knst_c16string& vertPath,const knst_c16string& fragPath) {
         KnstGuiConfig cfg;
         cfg.vertexShaderPath = vertPath;
         cfg.fragmentShaderPath = fragPath;
@@ -1142,4 +1119,3 @@ struct KnstGuiConfig {
     }
 };
 
-#endif // KNST_GUI_STRUCTS_HPP

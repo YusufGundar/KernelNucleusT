@@ -1,14 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: Starts the window's Vulkan resources.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-#ifndef KNST_WINDOW_VULKAN_MANAGER_HPP
-#define KNST_WINDOW_VULKAN_MANAGER_HPP
 #pragma once
 
 #ifdef KNST_USING_VULKAN
@@ -38,6 +27,7 @@
 
 class knst_window_vulkan_content {
 private:
+
     static inline VkInstance m_instance = VK_NULL_HANDLE;
     static inline VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
     static inline VkDevice m_device = VK_NULL_HANDLE;
@@ -78,7 +68,7 @@ private:
         layerCount = 1;
     #endif
     
-    //★★★★★★ VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME its important for gui framework★★★★★★ 
+
     const char* instanceExtensions[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
         m_surfaceExtension
@@ -166,23 +156,20 @@ private:
     queueCreateInfo.pQueuePriorities = &queuePriority;
     
   
-    // ★★★★★★ DEVICE EXTENSIONS - VK_EXT_vertex_input_dynamic_state  ★★★★★★
-    // If you do not get this add-on, the GUI framework will not work (for now). ★★★★★★★★★★★★★★★★★★★★★★★★ You can change it.You can change it.
+
     const char* deviceExtensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_EXT_VERTEX_INPUT_DYNAMIC_STATE_EXTENSION_NAME
     };
     
-    // ★★★★★★ ★★★★★★ ★★★★★★ 
-    // ★★★ We activate it. ★★★
-    // ★★★★★★ ★★★★★★ ★★★★★★ 
+
     VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT vertexInputDynState{};
     vertexInputDynState.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT;
     vertexInputDynState.vertexInputDynamicState = VK_TRUE;
     
     VkDeviceCreateInfo deviceCreateInfo = {};
     deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.pNext = &vertexInputDynState; //this feature
+    deviceCreateInfo.pNext = &vertexInputDynState;
     deviceCreateInfo.queueCreateInfoCount = 1;
     deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
     deviceCreateInfo.enabledExtensionCount = 2;
@@ -234,6 +221,15 @@ public:
     #if KNST_USING_LINUX_PLATFORM_X11
         knst_window* m_window;
     #endif
+
+
+    ~knst_window_vulkan_content() { Destroy(); }
+
+    knst_window_vulkan_content() = default;
+    knst_window_vulkan_content(const knst_window_vulkan_content&) = delete;
+    knst_window_vulkan_content& operator=(const knst_window_vulkan_content&) = delete;
+       knst_window_vulkan_content(knst_window_vulkan_content&&) = delete;
+    knst_window_vulkan_content& operator=(knst_window_vulkan_content&&) = delete;
 
     bool Init(knst_window& window) {
         if (m_windowInitialized) return true;
@@ -343,5 +339,4 @@ public:
     }
 };
 
-#endif // KNST_USING_VULKAN
-#endif // KNST_WINDOW_VULKAN_MANAGER_HPP
+#endif

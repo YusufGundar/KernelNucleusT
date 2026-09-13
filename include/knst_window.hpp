@@ -1,5 +1,13 @@
-#ifndef KNST_WINDOW_HPP
-#define KNST_WINDOW_HPP
+/*
+----------------------------
+knst_window.hpp
+----------------------------
+
+   It is an .hpp file that collectively includes all window-related resources; additionally, Vulkan and OpenGL contexts for the window are determined here using macros.
+
+*/
+
+
 #pragma once
 
 
@@ -47,5 +55,3 @@
 
 
 
-
-#endif //KNST_WINDOW_HPP

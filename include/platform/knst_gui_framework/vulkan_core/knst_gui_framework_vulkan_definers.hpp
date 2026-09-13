@@ -1,16 +1,9 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: This file contains the implementations of the Vulkan commands that the user will employ.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
+#pragma once
 
 
 void knst_gui_framework::Init(knst_window_vulkan_content *vk_content){ //önemli kaynaklar temizleniyor
     m_vk_content = vk_content;
+    m_lastBoundTexture.clear();
     m_resizePending = false;
     m_skipFrame = false;
     m_resizeRetryCount = 0;
@@ -892,17 +885,18 @@ bool knst_gui_framework::CreateSwapchain(const KnstSwapchainConfig& config) {
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
         imageCount = capabilities.maxImageCount;
     }
+   
+    if (imageCount > MAX_SWAPCHAIN_IMAGES) {
+        imageCount = MAX_SWAPCHAIN_IMAGES;
+    }
 
     VkExtent2D extent{};
     if (capabilities.currentExtent.width != UINT32_MAX) {
         extent = capabilities.currentExtent;
     } else {
-        extent.width = std::max(capabilities.minImageExtent.width,
-                                std::min(capabilities.maxImageExtent.width,
-                                         static_cast<uint32_t>(config.width)));
-        extent.height = std::max(capabilities.minImageExtent.height,
-                                 std::min(capabilities.maxImageExtent.height,
-                                          static_cast<uint32_t>(config.height)));
+        extent.width = std::max(capabilities.minImageExtent.width,std::min(capabilities.maxImageExtent.width,static_cast<uint32_t>(config.width)));
+        extent.height = std::max(capabilities.minImageExtent.height,std::min(capabilities.maxImageExtent.height,static_cast<uint32_t>(config.height)));
+                                          
     }
 
     if (extent.width == 0 || extent.height == 0)
@@ -945,6 +939,10 @@ bool knst_gui_framework::CreateSwapchain(const KnstSwapchainConfig& config) {
         return false;
     }
 
+   
+    VkExtent2D oldExtent = m_swapchainExtent;
+    VkFormat oldFormat = m_swapchainImageFormat;
+
     m_swapchain = newSwapchain;
     m_swapchainImageFormat = m_cachedSurfaceFormat.format;
     m_swapchainExtent = extent;
@@ -953,6 +951,8 @@ bool knst_gui_framework::CreateSwapchain(const KnstSwapchainConfig& config) {
     if (vkGetSwapchainImagesKHR(device, m_swapchain, &newImageCount, nullptr) != VK_SUCCESS || newImageCount == 0) {
         vkDestroySwapchainKHR(device, m_swapchain, nullptr);
         m_swapchain = oldSwapchain;
+        m_swapchainExtent = oldExtent;
+        m_swapchainImageFormat = oldFormat;
         return false;
     }
 
@@ -962,6 +962,8 @@ bool knst_gui_framework::CreateSwapchain(const KnstSwapchainConfig& config) {
     if (vkGetSwapchainImagesKHR(device, m_swapchain, &newImageCount, m_swapchainImages.data()) != VK_SUCCESS) {
         vkDestroySwapchainKHR(device, m_swapchain, nullptr);
         m_swapchain = oldSwapchain;
+        m_swapchainExtent = oldExtent;
+        m_swapchainImageFormat = oldFormat;
         return false;
     }
 
@@ -983,7 +985,6 @@ bool knst_gui_framework::CreateSwapchain(const KnstSwapchainConfig& config) {
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
-
         if (vkCreateImageView(device, &viewInfo, nullptr, &m_swapchainImageViews[i]) != VK_SUCCESS) {
             for (auto view : m_swapchainImageViews) {
                 if (view != VK_NULL_HANDLE) {
@@ -993,6 +994,8 @@ bool knst_gui_framework::CreateSwapchain(const KnstSwapchainConfig& config) {
             m_swapchainImageViews.clear();
             vkDestroySwapchainKHR(device, m_swapchain, nullptr);
             m_swapchain = oldSwapchain;
+            m_swapchainExtent = oldExtent;
+            m_swapchainImageFormat = oldFormat;
             return false;
         }
     }
@@ -1397,16 +1400,20 @@ bool knst_gui_framework::CreateFramebuffers() {
     m_swapchainFramebuffers.clear();
     m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
 
-    for (uint32_t i = 0; i < m_swapchainImageViews.size(); ++i) {
+        for (uint32_t i = 0; i < m_swapchainImageViews.size(); ++i) {
         VkImageView attachments[8];
         uint32_t attachmentCount = 0;
-
-      
-        attachments[attachmentCount++] = m_swapchainImageViews[i];
+        bool firstColorUsed = false;
 
        
         for (const auto& att : m_renderPassConfig.attachments) {
-            if (att.type == KnstAttachmentType::DEPTH ||att.type == KnstAttachmentType::DEPTH_STENCIL) {
+            if (attachmentCount >= 8) break;
+            if (att.type == KnstAttachmentType::COLOR) {
+                if (!firstColorUsed) {
+                    attachments[attachmentCount++] = m_swapchainImageViews[i];
+                    firstColorUsed = true;
+                }
+            } else if (att.type == KnstAttachmentType::DEPTH ||att.type == KnstAttachmentType::DEPTH_STENCIL) {
                 if (m_depthImageView != VK_NULL_HANDLE) {
                     attachments[attachmentCount++] = m_depthImageView;
                 }
@@ -1414,7 +1421,17 @@ bool knst_gui_framework::CreateFramebuffers() {
                 if (m_resolveImageView != VK_NULL_HANDLE) {
                     attachments[attachmentCount++] = m_resolveImageView;
                 }
+            } else if (att.type == KnstAttachmentType::INPUT) {
+                for (uint32_t ii = 0; ii < m_inputImageViews.size() && attachmentCount < 8; ii++) {
+                    attachments[attachmentCount++] = m_inputImageViews[ii];
+                }
             }
+        }
+
+        if (!firstColorUsed && attachmentCount < 8) {
+            for (uint32_t k = attachmentCount; k > 0; k--) attachments[k] = attachments[k-1];
+            attachments[0] = m_swapchainImageViews[i];
+            attachmentCount++;
         }
 
         VkFramebufferCreateInfo framebufferInfo{};
@@ -1520,29 +1537,55 @@ bool knst_gui_framework::CreateSyncObjects() {
     return true;
 }
 
-void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const KnstClearColor& clearColor) { // swapchainden image alıyor command bufferi başlatıyor renderpassı ayarlıyor ve viewport ayarlarını vs
+void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const KnstClearColor& clearColor) {
+    auto sendSyncAckIfPending = [this]() {
+        #if KNST_USING_LINUX_PLATFORM_X11
+        if (m_vk_content && m_vk_content->m_window && m_vk_content->m_window->m_syncHasPendingValue) {
+            xcb_sync_int64_t value = m_vk_content->m_window->m_syncPendingValue;
+            xcb_sync_set_counter(
+                KnstWindowSources::get_native_x11_connection_handle(),
+                m_vk_content->m_window->m_syncCounter, value);
+            if (m_vk_content->m_window->m_syncRequestReceived) {
+                xcb_flush(KnstWindowSources::get_native_x11_connection_handle());
+                m_vk_content->m_window->m_syncRequestReceived = false;
+            }
+            m_vk_content->m_window->m_syncHasPendingValue = false;
+            m_vk_content->m_window->m_syncPendingValue = value;
+        }
+        #endif
+    };
+
     if (m_vk_content == nullptr || m_vk_content->GetDevice() == VK_NULL_HANDLE || m_renderPass == VK_NULL_HANDLE || m_graphicsPipeline == VK_NULL_HANDLE ||
         config.width == 0 || config.height == 0) {
+       
+        sendSyncAckIfPending();
         m_currentCommandBuffer = VK_NULL_HANDLE;
         return;
     }
 
     m_currentClearColor = clearColor;
 
-    
-    bool needsRecreate = !m_swapchainReady || m_swapchain == VK_NULL_HANDLE ||m_swapchainExtent.width != (uint32_t)config.width ||m_swapchainExtent.height != (uint32_t)config.height;
+    VkSurfaceCapabilitiesKHR liveCaps{};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        m_vk_content->GetPhysicalDevice(), m_vk_content->GetSurface(), &liveCaps);
+
+    VkExtent2D liveExtent = liveCaps.currentExtent;
+    if (liveExtent.width == UINT32_MAX) {
+        liveExtent.width = (uint32_t)config.width;
+        liveExtent.height = (uint32_t)config.height;
+    }
+
+    bool needsRecreate = !m_swapchainReady || m_swapchain == VK_NULL_HANDLE ||m_swapchainExtent.width != liveExtent.width ||m_swapchainExtent.height != liveExtent.height;
     if (needsRecreate) {
+       
         m_pendingResizeConfig = config;
         if (!m_resizePending) {
-
             m_resizePending = true;
             m_resizeRetryCount = 0;
         }
     }
 
-    
     if (m_resizePending) {
-        
         bool allFencesReady = true;
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             if (m_inFlightFences[i] != VK_NULL_HANDLE) {
@@ -1555,58 +1598,59 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
         }
 
         if (!allFencesReady) {
-            
+           
             m_skipFrame = true;
             m_currentCommandBuffer = VK_NULL_HANDLE;
             return;
         }
 
-        
-        if (RecreateSwapchainZeroWait(m_pendingResizeConfig)) {
-            m_resizePending = false;
-            m_resizeRetryCount = 0;
-            
-            m_skipFrame = true;
-        } else {
+        if (!RecreateSwapchainZeroWait(m_pendingResizeConfig)) {
             if (m_resizeRetryCount < MAX_RESIZE_RETRIES) {
                 m_resizeRetryCount++;
-                m_skipFrame = true;
-                m_currentCommandBuffer = VK_NULL_HANDLE;
-                return;
             } else {
                 m_resizeRetryCount = 0;
-                m_skipFrame = true;
-                m_currentCommandBuffer = VK_NULL_HANDLE;
-                return;
             }
+           
+            m_skipFrame = true;
+            m_currentFrame++;
+            m_currentCommandBuffer = VK_NULL_HANDLE;
+            return;
         }
+
+      
+        m_resizePending = false;
+        m_resizeRetryCount = 0;
+       
+        m_skipFrame = false;
     }
 
-    
     if (m_skipFrame) {
         m_skipFrame = false;
+        m_currentFrame++;
+       
         m_currentCommandBuffer = VK_NULL_HANDLE;
         return;
     }
 
-    
     if (m_swapchainFramebuffers.empty() || m_currentImageIndex >= m_swapchainFramebuffers.size()) {
+       
         m_currentCommandBuffer = VK_NULL_HANDLE;
         return;
     }
 
-    
     uint32_t frameIndex = m_currentFrame % MAX_FRAMES_IN_FLIGHT;
     VkFence currentFence = m_inFlightFences[frameIndex];
-
-    
-    VkResult waitResult = vkWaitForFences(m_vk_content->GetDevice(), 1, &currentFence, VK_TRUE, UINT64_MAX);
+    VkResult waitResult = vkWaitForFences(m_vk_content->GetDevice(), 1, &currentFence, VK_TRUE, 16'000'000ULL);
+    if (waitResult == VK_TIMEOUT) {
+       
+        m_currentCommandBuffer = VK_NULL_HANDLE;
+        return;
+    }
     if (waitResult != VK_SUCCESS) {
         m_currentCommandBuffer = VK_NULL_HANDLE;
         return;
     }
 
-    
     VkResult result = vkAcquireNextImageKHR(
         m_vk_content->GetDevice(),
         m_swapchain,
@@ -1621,31 +1665,36 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
         return;
     }
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         m_resizePending = true;
-        m_pendingResizeConfig = config;
-        m_resizeRetryCount = 0;
-
         m_skipFrame = true;
-
-        m_swapchainReady = false;
         m_currentCommandBuffer = VK_NULL_HANDLE;
         return;
     }
+    if (result == VK_SUBOPTIMAL_KHR) {
+        m_resizePending = true;
+        m_resizeRetryCount = 0;
+    }
 
-    if (result != VK_SUCCESS || m_currentImageIndex >= m_swapchainFramebuffers.size()) {
+    if ((result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) ||
+        m_currentImageIndex >= m_swapchainFramebuffers.size()) {
+        sendSyncAckIfPending();
         m_currentCommandBuffer = VK_NULL_HANDLE;
         return;
     }
 
     
+    if (m_currentImageIndex < m_imagesInFlight.size() &&
+        m_imagesInFlight[m_currentImageIndex] != VK_NULL_HANDLE) {
+        vkWaitForFences(m_vk_content->GetDevice(), 1, &m_imagesInFlight[m_currentImageIndex], VK_TRUE, UINT64_MAX);
+                       
+    }
+
     for (auto& pending : m_pendingVertexDestroys[frameIndex]) {
         if (pending.buffer != VK_NULL_HANDLE) {
             vkDestroyBuffer(m_vk_content->GetDevice(), pending.buffer, nullptr);
         }
         if (pending.memory != VK_NULL_HANDLE) {
-
-
             vkFreeMemory(m_vk_content->GetDevice(), pending.memory, nullptr);
         }
     }
@@ -1665,29 +1714,20 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
     m_imagesInFlight[m_currentImageIndex] = currentFence;
 
     VkCommandBuffer commandBuffer = m_commandBuffers[frameIndex];
-
-
     m_currentCommandBuffer = commandBuffer;
 
     vkResetCommandBuffer(commandBuffer, 0);
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-
     VkRenderPassBeginInfo renderPassInfo{};
-
-
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = m_renderPass;
-
     renderPassInfo.framebuffer = m_swapchainFramebuffers[m_currentImageIndex];
     renderPassInfo.renderArea.offset = {0, 0};
-
     renderPassInfo.renderArea.extent = m_swapchainExtent;
 
     VkClearValue clearValues[8];
@@ -1696,16 +1736,12 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
     for (const auto& att : m_renderPassConfig.attachments) {
         if (att.loadOp == KnstAttachmentLoadOp::CLEAR && clearCount < 8) {
             if (att.type == KnstAttachmentType::DEPTH ||att.type == KnstAttachmentType::DEPTH_STENCIL) {
-                
                 clearValues[clearCount].depthStencil = {1.0f, 0};
-
             } else {
                 clearValues[clearCount].color = {{
                     m_currentClearColor.r,
                     m_currentClearColor.g,
-
                     m_currentClearColor.b,
-
                     m_currentClearColor.a
                 }};
             }
@@ -1721,33 +1757,23 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
     renderPassInfo.clearValueCount = clearCount;
     renderPassInfo.pClearValues = clearValues;
 
-
-
-
     m_vertexWriteOffset = 0;
-
     m_indexWriteOffset = 0;
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
     VkViewport viewportState{};
-
     viewportState.x = m_viewportConfig.x;
     viewportState.y = m_viewportConfig.y;
-
     viewportState.minDepth = m_viewportConfig.minDepth;
     viewportState.maxDepth = m_viewportConfig.maxDepth;
 
     float viewportWidth, viewportHeight;
-
     if (m_viewportConfig.autoSize) {
         viewportWidth = (float)m_swapchainExtent.width;
-        
         viewportHeight = (float)m_swapchainExtent.height;
     } else {
-
         viewportWidth = m_viewportConfig.width;
         viewportHeight = m_viewportConfig.height;
     }
@@ -1755,27 +1781,21 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
     if (m_viewportConfig.preserveAspectRatio && m_viewportConfig.aspectRatio > 0.0f) {
         float currentAspect = viewportWidth / viewportHeight;
         float targetAspect = m_viewportConfig.aspectRatio;
-        
         if (currentAspect > targetAspect) {
             float newWidth = viewportHeight * targetAspect;
             float offsetX = (viewportWidth - newWidth) * 0.5f;
-
             viewportState.x += offsetX;
             viewportState.width = newWidth;
             viewportState.height = viewportHeight;
         } else {
             float newHeight = viewportWidth / targetAspect;
             float offsetY = (viewportHeight - newHeight) * 0.5f;
-
             viewportState.y += offsetY;
             viewportState.width = viewportWidth;
-
-
             viewportState.height = newHeight;
         }
     } else {
         viewportState.width = viewportWidth;
-
         viewportState.height = viewportHeight;
     }
 
@@ -1783,14 +1803,9 @@ void knst_gui_framework::BeginFrame(const KnstSwapchainConfig& config, const Kns
 
     VkRect2D scissor{};
     if (m_viewportConfig.autoScissor) {
-
         scissor.offset = {0, 0};
-
         scissor.extent = m_swapchainExtent;
-    } 
-    
-    else {
-
+    } else {
         if (m_viewportConfig.preserveAspectRatio && m_viewportConfig.aspectRatio > 0.0f) {
             scissor.offset.x = (int32_t)viewportState.x;
             scissor.offset.y = (int32_t)viewportState.y;
@@ -2076,8 +2091,10 @@ void knst_gui_framework::UpdateDescriptorSet(const knst_texture& texture, uint32
 
 
 
-void knst_gui_framework::EndFrame() { // render passı bitirir command bufferi gönderir ekranda görürsünüz present işte sunum yapar
-    if (m_currentCommandBuffer == VK_NULL_HANDLE) return;
+void knst_gui_framework::EndFrame() {
+    if (m_currentCommandBuffer == VK_NULL_HANDLE) {
+        return;
+    }
 
     VkCommandBuffer commandBuffer = m_currentCommandBuffer;
     VkQueue queue = m_vk_content->GetGraphicsQueue();
@@ -2106,7 +2123,6 @@ void knst_gui_framework::EndFrame() { // render passı bitirir command bufferi g
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-   
     VkResult submitResult = vkQueueSubmit(queue, 1, &submitInfo, m_inFlightFences[frameIndex]);
     if (submitResult != VK_SUCCESS) {
         m_swapchainReady = false;
@@ -2123,7 +2139,6 @@ void knst_gui_framework::EndFrame() { // render passı bitirir command bufferi g
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &m_currentImageIndex;
 
-    
     VkResult presentResult = vkQueuePresentKHR(queue, &presentInfo);
 
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
@@ -2133,39 +2148,29 @@ void knst_gui_framework::EndFrame() { // render passı bitirir command bufferi g
         m_swapchainReady = false;
     }
 
-
+    #if KNST_USING_LINUX_PLATFORM_X11
+    if (m_vk_content && m_vk_content->m_window && m_vk_content->m_window->m_syncHasPendingValue) {
+        xcb_sync_int64_t value = m_vk_content->m_window->m_syncPendingValue;
+        xcb_sync_set_counter(
+            KnstWindowSources::get_native_x11_connection_handle(),
+            m_vk_content->m_window->m_syncCounter, value);
+        if (m_vk_content->m_window->m_syncRequestReceived) {
+            xcb_flush(KnstWindowSources::get_native_x11_connection_handle());
+            m_vk_content->m_window->m_syncRequestReceived = false;
+        }
+        m_vk_content->m_window->m_syncHasPendingValue = false;
+        m_vk_content->m_window->m_syncPendingValue = value;
+    }
+    #endif
 
     m_currentFrame++;
     m_currentCommandBuffer = VK_NULL_HANDLE;
-
-
-    // burasıda şöyle x11 de xvsync diye bi olay var asenkronluğu sağlamak için , bende x11 deki pencerenin resize yaparken niye donduğunu araştırırken öğrendim 8saatimi abartısız bu sorun için harcadım  fenceleri semaphoreleri işte recarete sırsaını optimize ettim ancak hala sorun devam ediyordu titriyordu bende sonunda böyle birşey olduğunu öğrendim ve uyguladım aynısını opengl kısmındada uyguladım swapbuffer() fonksiyonunda çözüldümü diye sorarsanız olduğu kadar. x sunucusunun yükü var..... windows ve waylandda sorunsuz x11 dede yapabileceğim en iyisini yapmaya çalıştım 
-    #if KNST_USING_LINUX_PLATFORM_X11
-            if (m_vk_content->m_window->m_syncHasPendingValue) {
-                xcb_sync_int64_t value = m_vk_content->m_window->m_syncPendingValue;
-                value.lo += 1;
-                if (value.lo == 0) value.hi += 1;
-                    
-                xcb_sync_set_counter(
-                    KnstWindowSources::get_native_x11_connection_handle(),
-                    m_vk_content->m_window->m_syncCounter,
-                    value
-                );
-                    
-                    
-                if (m_vk_content->m_window->m_syncRequestReceived) {
-                    xcb_flush(KnstWindowSources::get_native_x11_connection_handle());
-                    m_vk_content->m_window->m_syncRequestReceived = false;
-                }
-                    
-                m_vk_content->m_window->m_syncHasPendingValue = false;
-                m_vk_content->m_window->m_syncPendingValue = value;
-            }
-        #endif
-    // x11 de kullanmanızı şuanlık önermiyorum yeni bi çözüm bulana kadar beklemede kalın
-
-
 }
+
+  
+
+
+
 
 
 bool knst_gui_framework::RecreateSwapchainZeroWait(const KnstSwapchainConfig& config) {
@@ -2173,65 +2178,65 @@ bool knst_gui_framework::RecreateSwapchainZeroWait(const KnstSwapchainConfig& co
 
     VkDevice device = m_vk_content->GetDevice();
 
-   
-    bool allFencesReady = true;
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         if (m_inFlightFences[i] == VK_NULL_HANDLE) continue;
-        VkResult fenceStatus = vkGetFenceStatus(device, m_inFlightFences[i]);
-        if (fenceStatus == VK_NOT_READY) {
-            allFencesReady = false;
-            break;
+        VkResult fenceWait = vkWaitForFences(device, 1, &m_inFlightFences[i], VK_TRUE, 30'000'000ULL);
+        if (fenceWait != VK_SUCCESS) {
+            return false;
         }
-    }
-
-    if (!allFencesReady) {
-        return false;
     }
 
   
-    for (auto fb : m_swapchainFramebuffers) {
-        if (fb != VK_NULL_HANDLE) {
-            vkDestroyFramebuffer(device, fb, nullptr);
-        }
+    VkSwapchainKHR oldSwapchain = m_swapchain;
+    knst_vector<VkFramebuffer> oldFramebuffers = m_swapchainFramebuffers;
+    knst_vector<VkImageView> oldImageViews = m_swapchainImageViews;
+
+  
+    knst_vector<VkImage> oldImages = m_swapchainImages;
+    if (!CreateSwapchain(config)) {
+        m_swapchain = oldSwapchain;
+        m_swapchainFramebuffers = oldFramebuffers;
+        m_swapchainImageViews = oldImageViews;
+        m_swapchainImages = oldImages;
+        return false;
     }
+
+   
+    for (auto fb : oldFramebuffers) {
+        if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device, fb, nullptr);
+    }
+   
     m_swapchainFramebuffers.clear();
 
-   
-    for (auto imageView : m_swapchainImageViews) {
-        if (imageView != VK_NULL_HANDLE) {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
+    for (auto imageView : oldImageViews) {
+        if (imageView != VK_NULL_HANDLE) vkDestroyImageView(device, imageView, nullptr);
     }
-    m_swapchainImageViews.clear();
-    m_swapchainImages.clear();
+    
 
-    VkSwapchainKHR oldSwapchain = m_swapchain;
-
-  
-        if (!CreateSwapchain(config)) {
-        m_swapchain = oldSwapchain;
-        return false;
-    }
-
-   
-    if (oldSwapchain != VK_NULL_HANDLE) {
-        vkQueueWaitIdle(m_vk_content->GetGraphicsQueue());
+    if (oldSwapchain != VK_NULL_HANDLE && oldSwapchain != m_swapchain) {
         vkDestroySwapchainKHR(device, oldSwapchain, nullptr);
     }
+
+    
 
    
     if (m_hasDepthAttachment || m_hasResolveAttachment || m_hasInputAttachments) {
         CleanupAuxiliaryResources();
         if (!CreateAuxiliaryResources()) {
+            m_swapchainReady = false;
             return false;
         }
     }
 
    
-    if (!CreateFramebuffers()) return false;
+    if (!CreateFramebuffers()) {
+        m_swapchainReady = false;
+        return false;
+    }
 
  
     m_imagesInFlight.assign(m_swapchainImages.size(), VK_NULL_HANDLE);
+    m_currentImageIndex = 0;
 
     m_swapchainReady = true;
     return true;
@@ -2265,25 +2270,40 @@ void knst_gui_framework::CleanupSwapchain() {
 }
 
 void knst_gui_framework::Destroy() {
-    if (m_vk_content != nullptr && m_vk_content->GetDevice() != VK_NULL_HANDLE) {
-        vkDeviceWaitIdle(m_vk_content->GetDevice());
-    }
-        m_dummyTexture.Destroy(m_vk_content->GetDevice());
-   
-    if (m_descriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(m_vk_content->GetDevice(), m_descriptorSetLayout, nullptr);
+    if (m_vk_content == nullptr) return;
+
+
+    VkDevice dev = m_vk_content->GetDevice();
+    if (dev == VK_NULL_HANDLE) {
+        m_swapchainReady = false;
+        m_swapchain = VK_NULL_HANDLE;
+        m_renderPass = VK_NULL_HANDLE;
+        m_graphicsPipeline = VK_NULL_HANDLE;
+        m_pipelineLayout = VK_NULL_HANDLE;
+        m_commandPool = VK_NULL_HANDLE;
+        m_descriptorPool = VK_NULL_HANDLE;
         m_descriptorSetLayout = VK_NULL_HANDLE;
+        return;
     }
-    
+
+    vkDeviceWaitIdle(dev);
+
+
     if (m_descriptorPool != VK_NULL_HANDLE) {
-        vkDestroyDescriptorPool(m_vk_content->GetDevice(), m_descriptorPool, nullptr);
+        vkDestroyDescriptorPool(dev, m_descriptorPool, nullptr);
         m_descriptorPool = VK_NULL_HANDLE;
     }
+    
+    if (m_descriptorSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(dev, m_descriptorSetLayout, nullptr);
+        m_descriptorSetLayout = VK_NULL_HANDLE;
+    }
 
-    // m_descriptorSets otomatik olarak pool ile temizlenir, ayrıca silmeye gerek yok
+   
+    m_dummyTexture.Destroy(dev);
 
     CleanupAuxiliaryResources();
-    CleanupDepthResources();
+
     CleanupSwapchain();
     CleanupPersistentBuffers();
 
@@ -2331,6 +2351,7 @@ void knst_gui_framework::Destroy() {
     }
 
     m_swapchainReady = false;
+    m_vk_content = nullptr;
 }
 
 

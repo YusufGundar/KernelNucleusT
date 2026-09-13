@@ -1,9 +1,11 @@
 #include <iostream>
 #include <chrono>
-#include <glm/glm.hpp> // include glm
-#include <glm/gtc/matrix_transform.hpp> // include glm
 
+
+//#define KNST_VULKAN_VALIDATION
 #include "../../include/KernelNucleusT.hpp"
+
+
 
 
 KnstDrawConfig CreateGround() {
@@ -166,7 +168,7 @@ struct VulkanRenderState {
 };
 
 
-void vulkan_render_frame(knst_window& window, void* user_data) {
+KNST_FORCE_INLINE  void vulkan_render_frame(knst_window& window, void* user_data) {
     VulkanRenderState* rs = static_cast<VulkanRenderState*>(user_data);
 
     int w = window.get_window_event_handle().window_width;
@@ -245,10 +247,11 @@ int main() {
     KnstSwapchainConfig swapConfig = KnstSwapchainConfig::Default();
     swapConfig.width = winWidth;
     swapConfig.height = winHeight;
+    
 
     KnstGuiConfig guiConfig = KnstGuiConfig::Default(
-        "/home/knst_tester/Desktop/KernelNucleusT/include/platform/knst_gui_framework/shader/spv/vert.spv",
-        "/home/knst_tester/Desktop/KernelNucleusT/include/platform/knst_gui_framework/shader/spv/frag.spv"
+        "/home/knst/Desktop/KernelNucleusT/include/platform/knst_gui_framework/shader/spv/vert.spv",
+        "/home/knst/Desktop/KernelNucleusT/include/platform/knst_gui_framework/shader/spv/frag.spv"
     );
 
     gui.SetKnstGuiConfig(swapConfig, guiConfig);
@@ -263,11 +266,11 @@ int main() {
 
     knst_texture laptop_texture = knst_texture_loader::LoadFromFile(
         gui.GetDevice(), gui.GetPhysicalDevice(), gui.GetCommandPool(), gui.GetGraphicsQueue(),
-        "/home/knst_tester/Desktop/KernelNucleusT/Models/laptop_texture.png"
+        "/home/knst/Desktop/KernelNucleusT/Models/laptop_texture.png"
     );
 
     knst_obj_loader::MeshData laptop_data;
-    knst_obj_loader::Load("/home/knst_tester/Desktop/KernelNucleusT/Models/laptop.obj", laptop_data);
+    knst_obj_loader::Load("/home/knst/Desktop/KernelNucleusT/Models/laptop.obj", laptop_data);
     KnstDrawConfig mesh;
     mesh.vertices3D = laptop_data.vertices;
     mesh.indices = laptop_data.indices;
@@ -308,6 +311,29 @@ int main() {
 
     window.show();
 
+
+
+
+    knst_thread_pool pool(6);
+    pool.start();
+    pool.submit([]{
+        std::cout << "HELLO1" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+        std::cout << "HELLO2" << std::endl;
+    });
+
+    knst_thread th;
+    th.start(pool,[]{
+        std::cout << "HELLO3" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::cout << "HELLO4" << std::endl;
+    });
+
+    
+
+
+    
+
     while (true) {
         knst_window_event_system::non_block_pool_event();
 
@@ -345,8 +371,8 @@ int main() {
     }
 
     gui.Destroy();
-    vk_content.Destroy();
     window.destroy();
+    vk_content.Destroy();
     KnstWindowSources::CleanUp();
 
     return 0;

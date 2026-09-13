@@ -1,52 +1,21 @@
-#ifndef KNST_OBJ_LOADER_HPP
-#define KNST_OBJ_LOADER_HPP
+/*
+----------------------------
+knst_obj_loader.hpp
+----------------------------
+
+  The GLM library is essential
+  It reads Wavefront OBJ files—specifically 3D mesh data (vertices, normals, UVs, indices). It utilizes memory-mapped I/O (mmap/CreateFileMapping), meaning it reads the file without copying it into RAM. It deduplicates faces (reusing the same vertices), optionally corrects winding order, and generates missing normals. It also extracts texture paths from the associated MTL file
+
+
+*/
+
+
+
+
 #pragma once
 
 
 
-struct KnstVertex3D {
-    float x, y, z;
-    float r, g, b, a;
-    float u, v;
-    float nx, ny, nz;
-    float tx, ty, tz;
-    uint32_t boneIndices[4];
-    float boneWeights[4];
-    float customData[4];
-
-    static KnstVertex3D Make(float x, float y, float z,float r=1, float g=1, float b=1, float a=1,float u=0, float v=0, float nx=0, float ny=0, float nz=1) {
-    KnstVertex3D vertex;
-    vertex.x = x;
-    vertex.y = y;
-    vertex.z = z;
-    vertex.r = r;
-    vertex.g = g;
-    vertex.b = b;
-    vertex.a = a;
-    vertex.u = u;
-    vertex.v = v;
-    vertex.nx = nx;
-    vertex.ny = ny;
-    vertex.nz = nz;
-    vertex.tx = 0;
-    vertex.ty = 0;
-    vertex.tz = 0;
-    vertex.boneIndices[0] = 0;
-    vertex.boneIndices[1] = 0;
-    vertex.boneIndices[2] = 0;
-    vertex.boneIndices[3] = 0;
-    vertex.boneWeights[0] = 1.0f;
-    vertex.boneWeights[1] = 0.0f;
-    vertex.boneWeights[2] = 0.0f;
-    vertex.boneWeights[3] = 0.0f;
-    vertex.customData[0] = 0.0f;
-    vertex.customData[1] = 0.0f;
-    vertex.customData[2] = 0.0f;
-    vertex.customData[3] = 0.0f;
-    return vertex;
-}
-};
-//..... vertex yapısı burda evet loaderın görmesi gerek ayrıca obj loaderı bağımsız tutmak istedim gui frameworkten ilerde fbx loader vs geldiğinde direkt ayrı bi sınıfa koyarım belki yapıları
 
 #if KNST_USING_PLATFORM_LINUX
     #include <sys/mman.h>
@@ -62,8 +31,6 @@ struct KnstVertex3D {
 struct KnstObjLoadOptions {
    
     bool autoFixWinding = true;
-
-    
     bool generateNormalsIfMissing = true;
 };
 
@@ -71,7 +38,7 @@ struct KnstObjLoadOptions {
 class knst_obj_loader {
 public:
 
-    struct MeshData {
+    struct MeshData { // Holds the result of the loaded OBJ.
         knst_vector<KnstVertex3D> vertices;
         knst_vector<uint32_t> indices;
         knst_byte_string texturePath;
@@ -83,9 +50,7 @@ public:
     };
 
 
-    static bool Load(const knst_c16string& path, MeshData& outData,const KnstObjLoadOptions& options = KnstObjLoadOptions()) {
-                      
-
+         static bool Load(const knst_c16string& path, MeshData& outData,const KnstObjLoadOptions& options = KnstObjLoadOptions()) {
         knst_byte_string pathBytes(path);
 
         uint8_t* file_data = nullptr;
@@ -95,16 +60,25 @@ public:
             return false;
         }
 
-        bool result = LoadFromMemory(file_data, file_size, outData, options);
+        knst_byte_string baseDir;
+        uint32_t last_sep = 0;
+        bool found_sep = false;
+        for (uint32_t i = 0; i < pathBytes.length(); i++) {
+            unsigned char c = pathBytes[i];
+            if (c == '/' || c == '\\') { last_sep = i; found_sep = true; }
+        }
+        if (found_sep) {
+            baseDir = knst_byte_string(pathBytes.data(), last_sep + 1);
+        }
+
+        bool result = LoadFromMemory(file_data, file_size, outData, options, baseDir);
         free_file_data(file_data, file_size);
 
         return result;
     }
 
 
-    static bool LoadFromMemory(const uint8_t* data, size_t size, MeshData& outData,
-                                const KnstObjLoadOptions& options = KnstObjLoadOptions()) {
-
+        static bool LoadFromMemory(const uint8_t* data, size_t size, MeshData& outData, const KnstObjLoadOptions& options = KnstObjLoadOptions(), const knst_byte_string& baseDir = knst_byte_string()) {
         if (data == nullptr || size == 0) {
             return false;
         }
@@ -143,9 +117,7 @@ public:
             const char* lineEnd = ptr;
 
             if (lineEnd > lineStart) {
-                ParseLineFast(lineStart, lineEnd, positions, texCoords, normals,
-                               outData, mtlFile, currentMaterial, objName,
-                               lineNum, faceCount, dedup, options);
+                ParseLineFast(lineStart, lineEnd, positions, texCoords, normals,outData, mtlFile, currentMaterial, objName,lineNum, faceCount, dedup, options);
             }
 
             while (ptr < end && (*ptr == '\n' || *ptr == '\r')) ptr++;
@@ -162,10 +134,14 @@ public:
         outData.objName = objName;
         outData.loaded = !outData.vertices.empty();
 
-        if (!mtlFile.empty() && !currentMaterial.empty()) {
-            knst_byte_string texPath = FindTextureInMTL(mtlFile, currentMaterial);
+               if (!mtlFile.empty() && !currentMaterial.empty()) {
+            knst_byte_string fullMtlPath = baseDir;
+            fullMtlPath.append(mtlFile);
+            knst_byte_string texPath = FindTextureInMTL(fullMtlPath, currentMaterial);
             if (!texPath.empty()) {
-                outData.texturePath = texPath;
+                knst_byte_string fullTexPath = baseDir;
+                fullTexPath.append(texPath);
+                outData.texturePath = fullTexPath;
             }
         }
 
@@ -174,9 +150,7 @@ public:
 
 private:
 
-    static void CountElements(const uint8_t* data, size_t size,
-                               size_t& outV, size_t& outVt, size_t& outVn, size_t& outF) {
-
+    static void CountElements(const uint8_t* data, size_t size,size_t& outV, size_t& outVt, size_t& outVn, size_t& outF) { // It performs a preliminary count to determine the number of v, vt, vn, and f lines. It checks the first two characters of each line and increments the counters. This allows it to reserve the correct amount of space, avoiding reallocation. It is a single-pass, fast process
         outV = outVt = outVn = outF = 0;
         const uint8_t* p = data;
         const uint8_t* end = data + size;
@@ -200,7 +174,7 @@ private:
         }
     }
 
-    static inline float ParseFloatFast(const char*& p, const char* end) {
+    static inline float ParseFloatFast(const char*& p, const char* end) { // A fast float parser. It reads digits manually instead of strtof — performance critical as it is called millions of times on OBJ files. Supports pointers, integers, decimals, and exponents (e±N). It retrieves the pointer by reference, so it tells the caller where it left off
         while (p < end && (*p == ' ' || *p == '\t')) p++;
 
         bool neg = false;
@@ -241,9 +215,9 @@ private:
 
     class VertexDedupMap {
     public:
-        VertexDedupMap() { slots.resize(16); capacityMask = 15; count = 0; }
+        VertexDedupMap() { slots.resize(16); capacityMask = 15; count = 0; } // Constructor. Starts with 16 slots, a mask of 15, and a counter of 0. It begins small and grows via "Grow" as it fills up
 
-        void Init(size_t expectedInsertions) {
+        void Init(size_t expectedInsertions) { // It performs pre-allocation based on the expected number of elements. It targets a load factor of ~0.5 (doubling the capacity) and rounds the capacity up to a power of 2. It avoids reallocations by utilizing the estimate provided by CountElements
             size_t cap = 16;
             size_t need = expectedInsertions * 2;
             while (cap < need) cap <<= 1;
@@ -254,7 +228,9 @@ private:
         }
 
 
-        uint32_t FindOrInsert(int32_t v, int32_t vt, int32_t vn, uint32_t newIndexIfMissing, bool& wasNew) {
+        uint32_t FindOrInsert(int32_t v, int32_t vt, int32_t vn, uint32_t newIndexIfMissing, bool& wasNew) { // It searches for the vertex in the hash table. If found, it returns the existing index; otherwise, it adds the vertex and returns the new index. The `v/vt/vn` triplet serves as the key. Collisions are resolved using linear probing. The `wasNew` output parameter lets the caller know whether to add a new vertex or use an existing one ,, Even if the same vertex appears in multiple triangles, only a single copy is stored—this is deduplication
+
+
             if ((count + 1) * 2 > (capacityMask + 1)) Grow();
 
             uint64_t h = Hash(v, vt, vn);
@@ -277,18 +253,18 @@ private:
         }
 
     private:
-        struct Slot {
+        struct Slot { // A cell of the hash table. hash ==>  for fast comparison. v/vt/vn ==>  original OBJ indices (key). index ==>  ​​final index in the mesh. occupied ==>  whether the slot is occupied
             uint64_t hash = 0;
             int32_t v = -1, vt = -1, vn = -1;
             uint32_t index = 0;
             bool occupied = false;
         };
 
-        knst_vector<Slot> slots;
-        size_t capacityMask = 15;
-        size_t count = 0;
+        knst_vector<Slot> slots; // The hash table's slots — `knst_vector<Slot>`. Initially 16; doubles in size via `Grow`
+        size_t capacityMask = 15; // Capacity mask. cap - 1 (power of 2 minus 1). hash & capacityMask ==>  fast modulo. 15 = mask for 16 slots
+        size_t count = 0; // The number of occupied slots in the table. For load factor monitoring: grow when count/capacity exceeds 50%
 
-        static inline uint64_t Hash(int32_t v, int32_t vt, int32_t vn) {
+        static inline uint64_t Hash(int32_t v, int32_t vt, int32_t vn) { // Hash function. FNV-1a initialization + mixing + finalizer (Murmur3-style). Reduces the v/vt/vn triplet to a single 64-bit hash. Good distribution ==> fewer collisions ==>  fast lookup
             uint64_t h = 1469598103934665603ULL;
             auto mix = [&](uint32_t x) { h ^= x; h *= 1099511628211ULL; };
             mix((uint32_t)v);
@@ -300,7 +276,7 @@ private:
             return h;
         }
 
-        void Grow() {
+        void Grow() { // It doubles the size of the table. It allocates a new array and reinserts the existing elements using the new mask (rehash). The capacityMask is updated. The load factor decreases, and collisions are reduced
             size_t newCap = (capacityMask + 1) * 2;
             knst_vector<Slot> newSlots;
             newSlots.resize(newCap);
@@ -320,117 +296,118 @@ private:
     };
 
 
-    static bool read_file(const knst_byte_string& path, uint8_t** out_data, size_t* out_size) {
+    static bool read_file(const knst_byte_string& path, uint8_t** out_data, size_t* out_size) { // Opens the file as memory-mapped. It does not copy the content but maps the file directly into virtual memory—resulting in zero-copy and fast reads for large files ,, Windows: Uses CreateFileA + CreateFileMappingA + MapViewOfFile. Preloads using PrefetchVirtualMemory ,, Linux/Android: Uses open + mmap. Instructs the kernel to "read sequentially and preload" via madvise(MADV_SEQUENTIAL | MADV_WILLNEED) ,, X11/Wayland: Preloads using posix_fadvise + MAP_POPULATE. Fallback: Uses mmap + MAP_POPULATE; retries with MAP_PRIVATE if that fails.Returns out_data and out_size. The user must call free_file_data (which invokes munmap/UnmapViewOfFile) when finished.Supports only regular files (S_ISREG); directories and sockets are rejected. On error, the file descriptor (fd) is closed to prevent leaks.
+
         if (path.empty() || out_data == nullptr || out_size == nullptr) return false;
 
-#if KNST_USING_PLATFORM_WINDOWS
-        HANDLE hFile = CreateFileA((const char*)path.data(), GENERIC_READ, FILE_SHARE_READ,
-                                   NULL, OPEN_EXISTING,
-                                   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-        if (hFile == INVALID_HANDLE_VALUE) return false;
+        #if KNST_USING_PLATFORM_WINDOWS
+                HANDLE hFile = CreateFileA((const char*)path.data(), GENERIC_READ, FILE_SHARE_READ,NULL, OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+                                        
+                                        
+                if (hFile == INVALID_HANDLE_VALUE) return false;
 
-        LARGE_INTEGER fileSizeLI;
-        if (!GetFileSizeEx(hFile, &fileSizeLI) || fileSizeLI.QuadPart <= 0) {
-            CloseHandle(hFile);
-            return false;
-        }
-        size_t fileSize = (size_t)fileSizeLI.QuadPart;
+                LARGE_INTEGER fileSizeLI;
+                if (!GetFileSizeEx(hFile, &fileSizeLI) || fileSizeLI.QuadPart <= 0) {
+                    CloseHandle(hFile);
+                    return false;
+                }
+                size_t fileSize = (size_t)fileSizeLI.QuadPart;
 
-        HANDLE hMapping = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
-        if (hMapping == NULL) {
-            CloseHandle(hFile);
-            return false;
-        }
+                HANDLE hMapping = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+                if (hMapping == NULL) {
+                    CloseHandle(hFile);
+                    return false;
+                }
 
-        *out_data = (uint8_t*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, fileSize);
-        *out_size = fileSize;
+                *out_data = (uint8_t*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, fileSize);
+                *out_size = fileSize;
 
-        CloseHandle(hMapping);
-        CloseHandle(hFile);
-        if (*out_data == nullptr) return false;
+                CloseHandle(hMapping);
+                CloseHandle(hFile);
+                if (*out_data == nullptr) return false;
 
-#if _WIN32_WINNT >= 0x0602
-        {
-            WIN32_MEMORY_RANGE_ENTRY range;
-            range.VirtualAddress = *out_data;
-            range.NumberOfBytes = fileSize;
-            PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0);
-        }
-#endif
-        return true;
+        #if _WIN32_WINNT >= 0x0602
+                {
+                    WIN32_MEMORY_RANGE_ENTRY range;
+                    range.VirtualAddress = *out_data;
+                    range.NumberOfBytes = fileSize;
+                    PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0);
+                }
+        #endif
+                return true;
 
-#elif KNST_USING_PLATFORM_LINUX
-        int fd = open((const char*)path.data(), O_RDONLY);
-        if (fd < 0) return false;
+        #elif KNST_USING_PLATFORM_LINUX
+                int fd = open((const char*)path.data(), O_RDONLY);
+                if (fd < 0) return false;
 
-        struct stat st;
-        if (fstat(fd, &st) != 0 || st.st_size <= 0) {
-            close(fd);
-            return false;
-        }
-        if (!S_ISREG(st.st_mode)) {
-            close(fd);
-            return false;
-        }
+                struct stat st;
+                if (fstat(fd, &st) != 0 || st.st_size <= 0) {
+                    close(fd);
+                    return false;
+                }
+                if (!S_ISREG(st.st_mode)) {
+                    close(fd);
+                    return false;
+                }
 
-  #if defined(KNST_USING_LINUX_PLATFORM_ANDROID)
-        *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        if (*out_data == MAP_FAILED) { close(fd); return false; }
-    #ifdef MADV_SEQUENTIAL
-        madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
-    #endif
-    #ifdef MADV_WILLNEED
-        madvise(*out_data, (size_t)st.st_size, MADV_WILLNEED);
-    #endif
-  #elif defined(KNST_USING_LINUX_PLATFORM_X11) || defined(KNST_USING_LINUX_PLATFORM_WAYLAND)
-    #ifdef POSIX_FADV_SEQUENTIAL
-        posix_fadvise(fd, 0, st.st_size, POSIX_FADV_SEQUENTIAL);
-    #endif
-    #ifdef POSIX_FADV_WILLNEED
-        posix_fadvise(fd, 0, st.st_size, POSIX_FADV_WILLNEED);
-    #endif
-        int mapFlags = MAP_PRIVATE;
-    #ifdef MAP_POPULATE
-        mapFlags |= MAP_POPULATE;
-    #endif
-        *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
-        if (*out_data == MAP_FAILED) {
-            *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        }
-        if (*out_data == MAP_FAILED) { close(fd); return false; }
-  #else
-        int mapFlags = MAP_PRIVATE;
-    #ifdef MAP_POPULATE
-        mapFlags |= MAP_POPULATE;
-    #endif
-        *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
-        if (*out_data == MAP_FAILED) {
-            *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-        }
-        if (*out_data == MAP_FAILED) { close(fd); return false; }
-    #ifdef MADV_SEQUENTIAL
-        madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
-    #endif
-  #endif
+        #if defined(KNST_USING_LINUX_PLATFORM_ANDROID)
+                *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+                if (*out_data == MAP_FAILED) { close(fd); return false; }
+            #ifdef MADV_SEQUENTIAL
+                madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
+            #endif
+            #ifdef MADV_WILLNEED
+                madvise(*out_data, (size_t)st.st_size, MADV_WILLNEED);
+            #endif
+        #elif defined(KNST_USING_LINUX_PLATFORM_X11) || defined(KNST_USING_LINUX_PLATFORM_WAYLAND)
+            #ifdef POSIX_FADV_SEQUENTIAL
+                posix_fadvise(fd, 0, st.st_size, POSIX_FADV_SEQUENTIAL);
+            #endif
+            #ifdef POSIX_FADV_WILLNEED
+                posix_fadvise(fd, 0, st.st_size, POSIX_FADV_WILLNEED);
+            #endif
+                int mapFlags = MAP_PRIVATE;
+            #ifdef MAP_POPULATE
+                mapFlags |= MAP_POPULATE;
+            #endif
+                *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
+                if (*out_data == MAP_FAILED) {
+                    *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+                }
+                if (*out_data == MAP_FAILED) { close(fd); return false; }
+        #else
+                int mapFlags = MAP_PRIVATE;
+            #ifdef MAP_POPULATE
+                mapFlags |= MAP_POPULATE;
+            #endif
+                *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, mapFlags, fd, 0);
+                if (*out_data == MAP_FAILED) {
+                    *out_data = (uint8_t*)mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+                }
+                if (*out_data == MAP_FAILED) { close(fd); return false; }
+            #ifdef MADV_SEQUENTIAL
+                madvise(*out_data, (size_t)st.st_size, MADV_SEQUENTIAL);
+            #endif
+        #endif
 
-        *out_size = (size_t)st.st_size;
-        close(fd);
-        return true;
-#endif
+                *out_size = (size_t)st.st_size;
+                close(fd);
+                return true;
+        #endif
         return false;
     }
 
-    static void free_file_data(uint8_t* data, size_t size) {
+    static void free_file_data(uint8_t* data, size_t size) { // Releases the memory-mapped file. Uses `UnmapViewOfFile` on Windows and `munmap` on Linux. It is the counterpart to `read_file`—you close with this what you opened with that
         if (!data || size == 0) return;
-#if KNST_USING_PLATFORM_WINDOWS
-        UnmapViewOfFile(data);
-#elif KNST_USING_PLATFORM_LINUX
-        munmap(data, size);
-#endif
+        #if KNST_USING_PLATFORM_WINDOWS
+                UnmapViewOfFile(data);
+        #elif KNST_USING_PLATFORM_LINUX
+                munmap(data, size);
+        #endif
     }
 
 
-    static void ParseLineFast(
+    static void ParseLineFast( // Parses the OBJ line based on the initial characters—adds data for v/vt/vn, processes faces for f, records metadata for mtllib/usemtl/o, and skips comments and blank lines
         const char* lineStart, const char* lineEnd,
         knst_vector<glm::vec3>& positions,
         knst_vector<glm::vec2>& texCoords,
@@ -522,7 +499,7 @@ private:
 
 
    
-    static void ParseFaceFast(
+    static void ParseFaceFast( // It parses the OBJ 'f' line, triangulates the polygon, corrects the winding if necessary, adds vertices while deduplicating them, and writes the indices
         const char* p, const char* lineEnd,
         const knst_vector<glm::vec3>& positions,
         const knst_vector<glm::vec2>& texCoords,
@@ -539,46 +516,46 @@ private:
         int count = 0;
 
         const char* ptr = p;
-while (ptr < lineEnd && count < MAX_FACE_VERTS) {
-    while (ptr < lineEnd && (*ptr == ' ' || *ptr == '\t')) ptr++;
-    if (ptr >= lineEnd) break;
-    if (*ptr != '-' && !(*ptr >= '0' && *ptr <= '9')) break;
+    while (ptr < lineEnd && count < MAX_FACE_VERTS) {
+        while (ptr < lineEnd && (*ptr == ' ' || *ptr == '\t')) ptr++;
+        if (ptr >= lineEnd) break;
+        if (*ptr != '-' && !(*ptr >= '0' && *ptr <= '9')) break;
 
-    bool neg = false;
-    if (*ptr == '-') { neg = true; ptr++; }
+        bool neg = false;
+        if (*ptr == '-') { neg = true; ptr++; }
 
-    int32_t vi = 0;
-    bool anyDigit = false;
-    while (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') { vi = vi * 10 + (*ptr - '0'); ptr++; anyDigit = true; }
-    if (!anyDigit) break;
+        int32_t vi = 0;
+        bool anyDigit = false;
+        while (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') { vi = vi * 10 + (*ptr - '0'); ptr++; anyDigit = true; }
+        if (!anyDigit) break;
 
-    int32_t vt = -1, vn = -1;
-    if (ptr < lineEnd && *ptr == '/') {
-        ptr++;
-        bool vtNeg = false;
-        if (ptr < lineEnd && *ptr == '-') { vtNeg = true; ptr++; }
-        if (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') {
-            int32_t v2 = 0;
-            while (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') { v2 = v2 * 10 + (*ptr - '0'); ptr++; }
-            vt = vtNeg ? (int32_t)texCoords.size() - v2 : v2 - 1;
-        }
+        int32_t vt = -1, vn = -1;
         if (ptr < lineEnd && *ptr == '/') {
             ptr++;
-            bool vnNeg = false;
-            if (ptr < lineEnd && *ptr == '-') { vnNeg = true; ptr++; }
+            bool vtNeg = false;
+            if (ptr < lineEnd && *ptr == '-') { vtNeg = true; ptr++; }
             if (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') {
-                int32_t v3 = 0;
-                while (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') { v3 = v3 * 10 + (*ptr - '0'); ptr++; }
-                vn = vnNeg ? (int32_t)normals.size() - v3 : v3 - 1;
+                int32_t v2 = 0;
+                while (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') { v2 = v2 * 10 + (*ptr - '0'); ptr++; }
+                vt = vtNeg ? (int32_t)texCoords.size() - v2 : v2 - 1;
+            }
+            if (ptr < lineEnd && *ptr == '/') {
+                ptr++;
+                bool vnNeg = false;
+                if (ptr < lineEnd && *ptr == '-') { vnNeg = true; ptr++; }
+                if (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') {
+                    int32_t v3 = 0;
+                    while (ptr < lineEnd && *ptr >= '0' && *ptr <= '9') { v3 = v3 * 10 + (*ptr - '0'); ptr++; }
+                    vn = vnNeg ? (int32_t)normals.size() - v3 : v3 - 1;
+                }
             }
         }
-    }
 
-    vIdx[count] = neg ? (int32_t)positions.size() - vi : vi - 1;
-    vtIdx[count] = vt;
-    vnIdx[count] = vn;
-    count++;
-}
+        vIdx[count] = neg ? (int32_t)positions.size() - vi : vi - 1;
+        vtIdx[count] = vt;
+        vnIdx[count] = vn;
+        count++;
+    }
 
         if (count < 3) return;
 
@@ -652,7 +629,7 @@ while (ptr < lineEnd && count < MAX_FACE_VERTS) {
 
 
 
-    static void GenerateSmoothNormals(MeshData& data) {
+    static void GenerateSmoothNormals(MeshData& data) { // It generates smooth normals. It calculates the face normal for each triangle and accumulates it into that triangle's vertices. Then, it normalizes the sum at each vertex—effectively averaging the normals of the adjacent faces. This results in smooth shading instead of sharp edges
         if (data.vertices.empty() || data.indices.size() < 3) return;
 
         knst_vector<glm::vec3> accum;
@@ -698,7 +675,7 @@ while (ptr < lineEnd && count < MAX_FACE_VERTS) {
     }
 
 
-    static knst_byte_string FindTextureInMTL(const knst_byte_string& mtlPath,const knst_byte_string& matName) {
+    static knst_byte_string FindTextureInMTL(const knst_byte_string& mtlPath,const knst_byte_string& matName) { // It locates the material specified in the MTL file and extracts the `map_Kd` (diffuse texture) line. It tracks the start of the material using `newmtl` and captures the `map_Kd` value once the correct material is reached. It then returns the file path.
 
         uint8_t* file_data = nullptr;
         size_t file_size = 0;
@@ -753,4 +730,3 @@ while (ptr < lineEnd && count < MAX_FACE_VERTS) {
     }
 };
 
-#endif // KNST_OBJ_LOADER_HPP

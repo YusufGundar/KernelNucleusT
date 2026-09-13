@@ -1,16 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: It is used to retrieve monitor and screen information in Windows.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-
-
-#ifndef KNST_DISPLAY_WIN32_HPP
-#define KNST_DISPLAY_WIN32_HPP
 #pragma once
 
 #if KNST_USING_PLATFORM_WINDOWS
@@ -117,4 +104,3 @@
 #endif
 
 
-#endif // KNST_DISPLAY_WIN32_HPP

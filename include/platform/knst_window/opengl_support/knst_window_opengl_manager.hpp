@@ -1,14 +1,3 @@
-// ============================================================================
-//  KernelNucleusT - Modern C++ Library
-// ============================================================================
-//  Description: Starts the window's OpenGL resources.
-//  Copyright (c) 2026 Yusuf Gündar
-//  Licensed under the MIT License. See LICENSE file for details.
-// ============================================================================
-
-
-#ifndef KNST_WINDOW_OPENGL_MANAGER_HPP
-#define KNST_WINDOW_OPENGL_MANAGER_HPP
 #pragma once
 
 #ifdef KNST_USING_OPENGL
@@ -108,6 +97,15 @@ private:
     knst_window* window = nullptr;
 
 public:
+
+
+    ~knst_window_opengl_content() { Shutdown(); }
+
+    knst_window_opengl_content() = default;
+    knst_window_opengl_content(const knst_window_opengl_content&) = delete;
+    knst_window_opengl_content& operator=(const knst_window_opengl_content&) = delete;
+    knst_window_opengl_content(knst_window_opengl_content&&) = delete;
+    knst_window_opengl_content& operator=(knst_window_opengl_content&&) = delete;
 
     bool Init(knst_window* window_p , bool vsync = false);
 
@@ -278,27 +276,23 @@ public:
             #endif
         
             #if KNST_USING_LINUX_PLATFORM_X11
-                if (window->m_syncHasPendingValue) {
-                    xcb_sync_int64_t value = window->m_syncPendingValue;
-                    value.lo += 1;
-                    if (value.lo == 0) value.hi += 1;
-                    
-                    xcb_sync_set_counter(
-                        KnstWindowSources::get_native_x11_connection_handle(),
-                        window->m_syncCounter,
-                        value
-                    );
-                    
-                    
-                    if (window->m_syncRequestReceived) {
-                        xcb_flush(KnstWindowSources::get_native_x11_connection_handle());
-                        window->m_syncRequestReceived = false;
-                    }
-                    
-                    window->m_syncHasPendingValue = false;
-                    window->m_syncPendingValue = value;
-                }
-            #endif
+    if (window->m_syncHasPendingValue) {
+        xcb_sync_int64_t value = window->m_syncPendingValue;
+
+        xcb_sync_set_counter(
+            KnstWindowSources::get_native_x11_connection_handle(),
+            window->m_syncCounter,
+            value
+        );
+
+        if (window->m_syncRequestReceived) {
+            xcb_flush(KnstWindowSources::get_native_x11_connection_handle());
+            window->m_syncRequestReceived = false;
+        }
+
+        window->m_syncHasPendingValue = false;
+    }
+#endif
 
     
         
@@ -1212,4 +1206,3 @@ KNST_FORCE_INLINE void BeginFrame() {
 #endif
 
 #endif
-#endif // KNST_WINDOW_OPENGL_MANAGER_HPP
