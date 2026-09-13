@@ -720,4 +720,4 @@ build/./knst_app
 
 ## 📄 License
 
-- MIT License — Use freely, develop, and share.
+- Gpl 3.0

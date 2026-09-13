@@ -738,4 +738,4 @@ build/./knst_app
 
 ##  📄 Lisans
 
-- MIT License — Özgürce kullanın, geliştirin, paylaşın.
+- Gpl 3.0
