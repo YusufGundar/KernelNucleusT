@@ -1,3 +1,20 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+/*
+----------------------------
+knst_display.hpp
+----------------------------
+
+    The class that generally encompasses monitor information is located in this .hpp file.
+
+*/
+
+
+
 #pragma once
 
 #include <cmath>
@@ -24,15 +41,15 @@ class knst_monitor {
 private:
     friend class knst_display;
 
-    #if KNST_USING_PLATFORM_WINDOWS
-        HMONITOR handle;   
-    #elif KNST_USING_LINUX_PLATFORM_X11
-        xcb_randr_output_t output_id;
-    #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-        friend class KnstWindowSources;
-        struct wl_output* output = nullptr;
-        uint32_t output_id = 0;
-    #endif
+#if KNST_USING_PLATFORM_WINDOWS
+    HMONITOR handle = nullptr;
+#elif KNST_USING_LINUX_PLATFORM_X11
+    xcb_randr_output_t output_id = 0;
+#elif KNST_USING_LINUX_PLATFORM_WAYLAND
+    friend class KnstWindowSources;
+    struct wl_output* output = nullptr;
+    uint32_t output_id = 0;
+#endif
 
 public:
     int root_x = 0;

@@ -1,3 +1,18 @@
+﻿// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+/*
+----------------------------
+knst_window_win32_manager.hpp
+----------------------------
+
+    The function definitions for the Windows backend are here.
+
+*/
+
+
 #pragma once
 
 
@@ -56,15 +71,18 @@ public:
 
         m_is_hovering = true;
 
-        if (m_window) {
-            m_window->m_knst_event.drop_files.clear();
+                if (m_window) {
+            if (!m_window->m_knst_event.drop_files) {
+                m_window->m_knst_event.drop_files = std::make_shared<knst_vector<knst_c16string>>();
+            }
+            m_window->m_knst_event.drop_files->clear();
 
             POINT client_pt = { pt.x, pt.y };
             ScreenToClient(m_window->m_window, &client_pt);
             m_window->m_knst_event.mouse_x = client_pt.x;
             m_window->m_knst_event.mouse_y = client_pt.y;
 
-            set_event(KNST_FILE_DROP_ENTER);
+            set_event(KNST_WINDOW_EVENT_FILE_DROP_ENTER);
         }
 
         *pdwEffect = DROPEFFECT_COPY;
@@ -82,7 +100,7 @@ public:
         m_window->m_knst_event.mouse_x = client_pt.x;
         m_window->m_knst_event.mouse_y = client_pt.y;
 
-        set_event(KNST_FILE_DROP_MOVE);
+        set_event(KNST_WINDOW_EVENT_FILE_DROP_MOVE);
         *pdwEffect = DROPEFFECT_COPY;
         return S_OK;
     }
@@ -92,9 +110,11 @@ public:
 
         m_is_hovering = false;
 
-        if (m_window) {
-            set_event(KNST_FILE_DROP_LEAVE);
-            m_window->m_knst_event.drop_files.clear();
+                if (m_window) {
+            set_event(KNST_WINDOW_EVENT_FILE_DROP_LEAVE);
+            if (m_window->m_knst_event.drop_files) {
+                m_window->m_knst_event.drop_files->clear();
+            }
         }
 
         return S_OK;
@@ -109,7 +129,10 @@ public:
         m_is_hovering = false;
 
         if (m_window) {
-            m_window->m_knst_event.drop_files.clear();
+            if (!m_window->m_knst_event.drop_files) {
+                m_window->m_knst_event.drop_files = std::make_shared<knst_vector<knst_c16string>>();
+            }
+            m_window->m_knst_event.drop_files->clear();
 
             FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
             STGMEDIUM stg;
@@ -121,7 +144,7 @@ public:
                         UINT pathLen = DragQueryFileW(hDrop, i, nullptr, 0);
                         wchar_t* buffer = new wchar_t[pathLen + 1];
                         DragQueryFileW(hDrop, i, buffer, pathLen + 1);
-                        m_window->m_knst_event.drop_files.push_back(knst_c16string(buffer));
+                                                m_window->m_knst_event.drop_files->push_back(knst_c16string(buffer));
                         delete[] buffer;
                     }
                     GlobalUnlock(stg.hGlobal);
@@ -134,7 +157,7 @@ public:
             m_window->m_knst_event.mouse_x = client_pt.x;
             m_window->m_knst_event.mouse_y = client_pt.y;
 
-            set_event(KNST_FILE_DROP);
+            set_event(KNST_WINDOW_EVENT_FILE_DROP);
         }
 
         *pdwEffect = DROPEFFECT_COPY;
@@ -404,7 +427,7 @@ inline void knst_window::set_maximized() noexcept {
     m_knst_event.window_width = rect.right - rect.left;
     m_knst_event.window_height = rect.bottom - rect.top;
     
-   m_redraw_callback(*this, const_cast<void*>(get_user_data()));
+       m_redraw_callback();
 
 }
 
@@ -431,7 +454,7 @@ inline void knst_window::restore() noexcept {
     m_knst_event.window_width = rect.right - rect.left;
     m_knst_event.window_height = rect.bottom - rect.top;
     
-    m_redraw_callback(*this, const_cast<void*>(get_user_data()));
+        m_redraw_callback();
 
 }
 
@@ -500,12 +523,12 @@ if (!m_window) return;
 inline void knst_window::set_cursor_mode(int mode) noexcept {
     if (!m_window) return;
     
-    if (mode == KNST_CURSOR_NORMAL) {
+    if (mode == KNST_WINDOW_CURSOR_ARROW) {
         ShowCursor(TRUE);
         ClipCursor(nullptr);
-    } else if (mode == KNST_CURSOR_HIDDEN) {
+    } else if (mode == KNST_WINDOW_CURSOR_HIDDEN) {
         ShowCursor(FALSE);
-    } else if (mode == KNST_CURSOR_DISABLED) {
+    } else if (mode == KNST_WINDOW_CURSOR_DISABLED) {
         ShowCursor(FALSE);
         
         RECT rect;
@@ -603,7 +626,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
     if (!m_window) return;
 
     switch (attribute) {
-        case KNST_WINDOW_ATTRIB_DECORATED: {
+        case KNST_WINDOW_ATTR_DECORATED: {
             DWORD style = GetWindowLongPtrW(m_window, GWL_STYLE);
             style = value ? WS_OVERLAPPEDWINDOW : (WS_POPUP | WS_VISIBLE);
             SetWindowLongPtrW(m_window, GWL_STYLE, style);
@@ -613,7 +636,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
             m_draw_custom_title_bar = !value;
             break;
         }
-        case KNST_WINDOW_ATTRIB_RESIZABLE: {
+        case KNST_WINDOW_ATTR_RESIZABLE: {
             DWORD style = GetWindowLongPtrW(m_window, GWL_STYLE);
             if (value) style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
             else       style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
@@ -622,13 +645,13 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
             break;
         }
-        case KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP:
+        case KNST_WINDOW_ATTR_ALWAYS_ON_TOP:
             SetWindowPos(m_window, value ? HWND_TOPMOST : HWND_NOTOPMOST,
                 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             break;
 
        
-        case KNST_WINDOW_ATTRIB_TRANSPARENT: {
+        case KNST_WINDOW_ATTR_TRANSPARENT: {
             if (value) {
                
                 LONG_PTR exStyle = GetWindowLongPtrW(m_window, GWL_EXSTYLE);
@@ -653,18 +676,18 @@ inline bool knst_window::get_attribute(int attribute) const noexcept {
     if (!m_window) return false;
 
     switch (attribute) {
-        case KNST_WINDOW_ATTRIB_DECORATED: {
+        case KNST_WINDOW_ATTR_DECORATED: {
             if (m_draw_custom_title_bar) return false;
             DWORD style = GetWindowLongPtrW(m_window, GWL_STYLE);
             return (style & WS_CAPTION) != 0;
         }
-        case KNST_WINDOW_ATTRIB_RESIZABLE: {
+        case KNST_WINDOW_ATTR_RESIZABLE: {
             DWORD style = GetWindowLongPtrW(m_window, GWL_STYLE);
             return (style & WS_THICKFRAME) != 0;
         }
-        case KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP:
+        case KNST_WINDOW_ATTR_ALWAYS_ON_TOP:
             return (GetWindowLongPtrW(m_window, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-        case KNST_WINDOW_ATTRIB_TRANSPARENT:
+        case KNST_WINDOW_ATTR_TRANSPARENT:
             return m_input_transparent;
     }
     return false;
@@ -871,10 +894,10 @@ inline void knst_window::reset_cursor() noexcept {
 inline void knst_window::set_minimum_size(int width, int height) noexcept {
     if (!m_window) return;
     
-    if (width == KNST_DEFAULT) {
+    if (width == KNST_WINDOW_DEFAULT) {
         width = 300; 
     }
-    if (height == KNST_DEFAULT) {
+    if (height == KNST_WINDOW_DEFAULT) {
         height = 250;
     }
     
@@ -913,7 +936,7 @@ inline void knst_window::set_minimum_size(int width, int height) noexcept {
 inline void knst_window::set_maximum_size(int width, int height) noexcept {
     if (!m_window) return;
     
-    if (width == KNST_DEFAULT && height == KNST_DEFAULT) {
+    if (width == KNST_WINDOW_DEFAULT && height == KNST_WINDOW_DEFAULT) {
         return;
     }
     
@@ -927,7 +950,7 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
     
-       if (width != KNST_DEFAULT && height != KNST_DEFAULT) {
+       if (width != KNST_WINDOW_DEFAULT && height != KNST_WINDOW_DEFAULT) {
         POINT* old_max = (POINT*)GetPropW(m_window, L"KnstMaxSize");
         if (old_max) delete old_max;
         int* old_w = (int*)GetPropW(m_window, L"KnstMaxSizeWidth");
@@ -935,14 +958,14 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
         int* old_h = (int*)GetPropW(m_window, L"KnstMaxSizeHeight");
         if (old_h) { delete old_h; RemovePropW(m_window, L"KnstMaxSizeHeight"); }
         SetPropW(m_window, L"KnstMaxSize", (HANDLE)new POINT{width, height});
-    } else if (width != KNST_DEFAULT) {
+    } else if (width != KNST_WINDOW_DEFAULT) {
         int* old_w = (int*)GetPropW(m_window, L"KnstMaxSizeWidth");
         if (old_w) delete old_w;
         SetPropW(m_window, L"KnstMaxSizeWidth", (HANDLE)new int{width});
         POINT* old_max = (POINT*)GetPropW(m_window, L"KnstMaxSize");
         if (old_max) { delete old_max; RemovePropW(m_window, L"KnstMaxSize"); }
         RemovePropW(m_window, L"KnstMaxSizeHeight");
-    } else if (height != KNST_DEFAULT) {
+    } else if (height != KNST_WINDOW_DEFAULT) {
         int* old_h = (int*)GetPropW(m_window, L"KnstMaxSizeHeight");
         if (old_h) delete old_h;
         SetPropW(m_window, L"KnstMaxSizeHeight", (HANDLE)new int{height});

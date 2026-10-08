@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 KernelNucleusT.hpp
@@ -13,9 +19,30 @@ KernelNucleusT.hpp
 #pragma once
 
 
-#include <glm/glm.hpp> // include glm
-#include <glm/gtc/matrix_transform.hpp> // include glm
 
+#if defined(_WIN32) || defined(_WIN64)
+    #ifndef KNST_DISABLE_CONSOLE_UTF8
+        extern "C" __declspec(dllimport) int __stdcall SetConsoleOutputCP(unsigned int);
+        extern "C" __declspec(dllimport) int __stdcall SetConsoleCP(unsigned int);
+        namespace knst_detail {
+            struct knst_console_utf8_initializer {
+                knst_console_utf8_initializer() noexcept {
+                    ::SetConsoleOutputCP(65001);  // CP_UTF8
+                    ::SetConsoleCP(65001);
+                }
+            };
+            inline knst_console_utf8_initializer g_console_utf8_init;
+        }
+    #endif
+#endif
+
+#if defined(_WIN32) || defined(KNST_USING_PLATFORM_WINDOWS)
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+#endif
 
 // structural
 #include "knst_global_functions.hpp"
@@ -23,6 +50,7 @@ KernelNucleusT.hpp
 #include "knst_byte_string.hpp"
 #include "knst_vector.hpp"
 
+#include "knst_file.hpp"
 
 
 
@@ -32,12 +60,13 @@ KernelNucleusT.hpp
 #include "knst_thread.hpp"
 #include "knst_thread_pool.hpp"
 
+#include "knst_process.hpp"
+#include "knst_devices.hpp"
+
 #include "knst_image_loader.hpp"
 
 // _end structural
 
-
-#include <knst_vertex_structs.hpp>
 
 
 
@@ -47,15 +76,11 @@ KernelNucleusT.hpp
 
 // _end knst_window
 
-// knst_gui_framework
-#ifdef KNST_USING_VULKAN
-    #include "knst_obj_loader.hpp"
-    #include "knst_gui_framework.hpp"
 
+
+
+#if !defined(KNST_KEEP_X11_NONE_MACRO) 
+    #ifdef None // for knst_file none parameter
+        #undef None 
+    #endif
 #endif
-// knst_gui_framework
-
-
-
-
-

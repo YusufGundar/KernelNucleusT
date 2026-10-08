@@ -1,1 +1,0 @@
-### There is no detailed documentation for now; it will be available later.

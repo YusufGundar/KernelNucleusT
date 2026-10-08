@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 knst_c16string.hpp
@@ -25,28 +31,6 @@ knst_c16string.hpp
 
 
 */
-
-    // align macros
-
-    /*#if defined(KNST_C16STRING_ALIGN_64)
-      
-        #define KNST_CLASS_ALIGNMENT alignas(64)
-        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 31; // 31 * 2 == 62 byte Stack Data; 61 bayt character 1 byte u'/0'; max 30 character count;
-        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 30;
-
-    #elif defined(KNST_C16STRING_ALIGN_32)
-        
-        #define KNST_CLASS_ALIGNMENT alignas(32)
-        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 15; // 15 * 2 == 30 byte Stack Data; 29 bayt character 1 byte u'/0'; max 14 character count;
-        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 14;
-
-    #else
-       
-        #define KNST_CLASS_ALIGNMENT alignas(8)
-        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 11; // 11 * 2 == 22 byte Stack Data; 29 bayt character 1 byte u'/0'; max 10 character count;
-        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 10;
-
-    #endif*/ 
 
 
 template <typename Allocator = knst_default_allocator>
@@ -120,16 +104,16 @@ class KNST_CLASS_ALIGNMENT basic_c16string{
 
     }
 
-    // Provides the appropriate size for allocation.
+        // Provides the appropriate size for allocation.
     KNST_FORCE_INLINE uint32_t get_new_heap_size(uint32_t size)const noexcept{
         
         #ifdef KNST_C16STRING_DEACTIVE_COW
 
-            return size * sizeof(char16_t);
+            return static_cast<uint32_t>(size * sizeof(char16_t));
 
         #else
 
-            return sizeof(SharingHeapData) + size * sizeof(char16_t);
+            return static_cast<uint32_t>(sizeof(SharingHeapData) + size * sizeof(char16_t));
 
         #endif
 
@@ -208,28 +192,23 @@ class KNST_CLASS_ALIGNMENT basic_c16string{
 
         }
 
-        KNST_FORCE_INLINE bool m_detach() noexcept{ // COW detach — detaches from the shared buffer. It allocates a new heap block, copies the existing data, and decrements the old buffer's reference count. The string now has its own private buffer—you can write to it without affecting others. It is the counterpart to `set_cow_ref_count_plus_plus`
-
-            const char16_t * heap_data = this->heap_data.sharing_heap_data->m_real_data;
+                KNST_FORCE_INLINE bool m_detach() noexcept{ // COW detach — detaches from the shared buffer. It allocates a new heap block, copies the existing data, and decrements the old buffer's reference count. The string now has its own private buffer—you can write to it without affecting others. It is the counterpart to `set_cow_ref_count_plus_plus`
+            SharingHeapData* old_shared = this->heap_data.sharing_heap_data;
+            const char16_t * old_data = old_shared->m_real_data; // renamed from heap_data to avoid shadowing the member
             uint32_t str_capacity = this->heap_data.m_capacity;
 
             void * new_heap = this->m_allocator.allocate(get_new_heap_size(str_capacity));
 
             if(!new_heap) return false;
-           
-            set_clean_heap_varible(new_heap,heap_data, this->heap_data.m_length,str_capacity);
+
+            set_clean_heap_varible(new_heap, old_data, this->heap_data.m_length, str_capacity);
 
             #ifdef KNST_C16_STRING_USING_ATOMIC_COW
-
-                this->heap_data.sharing_heap_data->m_ref_count.fetch_sub(1,std::memory_order::memory_order_relaxed);
-            
+                old_shared->m_ref_count.fetch_sub(1,std::memory_order_relaxed);
             #else
-
-                --this->heap_data.sharing_heap_data->m_ref_count;
-
+                --old_shared->m_ref_count;
             #endif
-            
-            
+
             return true;
         }
 
@@ -326,7 +305,7 @@ class KNST_CLASS_ALIGNMENT basic_c16string{
         uint32_t k = 1;
         uint32_t p= 1; 
 
-        while(j + k < (int32_t)pat_len){
+        while(j + (int32_t)k < (int32_t)pat_len){
             char16_t a = pat[j + k];
             char16_t b = pat[ms + k];
             if(a < b){
@@ -345,7 +324,7 @@ class KNST_CLASS_ALIGNMENT basic_c16string{
         j = 0; k = 1;
         uint32_t p2 = 1;
 
-        while(j + k < (int32_t)pat_len){
+        while(j + (int32_t)k < (int32_t)pat_len){
             char16_t a = pat[j + k];
             char16_t b = pat[ms2 + k];
             if(a > b){
@@ -1209,6 +1188,30 @@ public:
         return true;
     }
 
+    inline bool append(char16_t chr) noexcept {
+        char16_t buffer[2] = { chr, u'\0' };
+        return append(buffer);
+    }
+
+    inline bool append(char chr) noexcept {
+        // Treat single `char` as ASCII (same convention as std::string::push_back).
+        // For UTF-8 multi-byte input, use append(const char*) instead.
+        char16_t buffer[2] = { static_cast<char16_t>(static_cast<unsigned char>(chr)), u'\0' };
+        return append(buffer);
+    }
+
+    inline bool append(wchar_t chr) noexcept {
+        // On Windows wchar_t is UTF-16, on POSIX it is UTF-32 — reuses the
+        // existing wchar_t* append which already handles the conversion.
+        wchar_t buffer[2] = { chr, L'\0' };
+        return append(buffer);
+    }
+
+    inline bool append(char32_t chr) noexcept {
+        // Reuses char32_t* append — surrogate pairs (emojis) handled correctly.
+        char32_t buffer[2] = { chr, U'\0' };
+        return append(buffer);
+    }
 
     inline bool append(int value) noexcept{ // It converts the `int` value to a string and appends it to the end. It performs a fast conversion without `snprintf` by writing the digits from back to front (starting from `buffer + 15`). It supports negative signs. Then, it follows standard append logic—using the `+` operator to write the number into the string
 
@@ -2012,7 +2015,11 @@ public:
             get_real_heap_m_data()[data_length] = u'\0';
             this->heap_data.m_length = data_length;
             this->heap_data.m_capacity = new_cap;
-           
+
+            #ifndef KNST_C16STRING_DEACTIVE_COW
+                set_cow_ref_count(1);
+            #endif
+
             set_heap_mode();
 
         }
@@ -4492,6 +4499,22 @@ public:
             }
             KNST_FORCE_INLINE basic_c16string& operator+=(const char32_t* str) noexcept {
                 append(str);
+                return *this;
+            }
+            KNST_FORCE_INLINE basic_c16string& operator+=(char16_t chr) noexcept {
+                append(chr);
+                return *this;
+            }
+            KNST_FORCE_INLINE basic_c16string& operator+=(char chr) noexcept {
+                append(chr);
+                return *this;
+            }
+            KNST_FORCE_INLINE basic_c16string& operator+=(wchar_t chr) noexcept {
+                append(chr);
+                return *this;
+            }
+            KNST_FORCE_INLINE basic_c16string& operator+=(char32_t chr) noexcept {
+                append(chr);
                 return *this;
             }
             KNST_FORCE_INLINE basic_c16string& operator+=(int value) noexcept {

@@ -1,741 +1,501 @@
-# KernelNucleusT
+# KernelNucleusT (*Beta)
 
-Modern C++17 kütüphane paketi. Yüksek performanslı, özelleştirilebilir , çapraz platform destekli bir kütüphane Paketidir
+####  C++ 20 ile yazılmış Yüksek performanslı, Özelleştirilebilir , Çapraz Platform Destekli bir kütüphane paketidir.
+
+# knst_window — Deskteklenen Platformlar
+
+| Platform | Durum |
+|----------|:-----:|
+| **Windows** | ✅ |
+| **Linux X11** | ✅ |
+| **Linux Wayland** | ✅ |
+| **Android** | ✅ |
+
+Yukarıdaki platformlarda pencere açma, olay alma, klavye/fare, pano ve yaşam döngüsü test edildi
 
 ## İçerisinde 
-### Paketli Yapılardan
-
-- knst_window  ---> (Window / Linux(X11 / Wayland) / Android) <---  Desteği sağlamaktadır
-
-- geliştirme aşamasında (knst_gui_framework) --->(Window / Linux(X11 / Wayland) / Android) <---  Desteği Vulkan altyapısı ile (çok erken beta aşaması kullanmanızı önermem)
-
-___
 
 
-### Temel Yapılardan
+### Karmaşık Yapılardan
 
-- knst_c16string  
+- knst_window
+- knst_vgui <---------> (Çok yakında)
+
+### Basit Yapılardan
+
 - knst_byte_array
+- knst_c16string  
+- knst_device
+- knst_file
+- knst_function
+- knst_image_loader
+- knst_process
+- knst_thread
+- knst_thread_pool
 - knst_vector
-- knst_memory
-- knst_image_loader ---> şimdilik sadece `BMP ve PNG` desteği mevcuttur
 
-Sınıfları içerisinde bulundurmaktadır
+
+#### Bünyesinde barındırır. Karmaşık yapılar, temel yapılar kullanılarak oluşturulmaktadır. Basit yapıların çoğu birbirlerine bağımlıdır; karmaşık yapılar ise basit yapılara bağımlıdır.
+
 
 ## Felsefe
 
 KernelNucleusT, **performans ve güvenlik arasında optimum denge** üzerine kurulmuştur. Temel prensipler:
 
-- **noexcept + bool dönüş** — Çoğu fonksiyon exception fırlatmak yerine `bool` döndürür. Bu sayede hem performans artar hem de hata kontrolü tamamen geliştiricinin elinde olur
+- **noexcept + bool dönüş** — Çoğu fonksiyon exception fırlatmak yerine `bool` döndürür. Bu sayede hem performans artar hem de hata kontrolü tamamen geliştiricinin elinde olur.
 
-- **Force Inline** — Varsayılan olarak fonksiyonlar `force_inline` ile derlenir. Call overhead'i olmaz, kod direkt çağrıldığı yere kopyalanır. Sonuç: daha hızlı çalışma, fakat daha büyük binary
+- **Force Inline** — Varsayılan olarak bazı performans için kritik olan fonksiyonlar `force_inline` ile derlenir. Call overhead'i olmaz, kod direkt çağrıldığı yere kopyalanır. Sonuç: daha hızlı çalışma, fakat biraz daha daha büyük binary, tercih sizin.
 
-- **Ayarlanabilir Binary Boyutu** — `KNST_SMALL_SIZE_CLASS` tanımlanırsa, `force_inline` yerine standart `inline` kullanılır. Derleyici kendi karar verir, çoğu durumda `call` ile fonksiyona gidilir. Binary boyutu küçülür, hız azalabilir. Tercih sizin. Ayrıca genel olarak kütüphaneleri istediğiniz gibi özelleştirme imkanı sunmaktadır , ayrıca `knst_window` opengl contenti için özel title bar temalarıda sunmaktadır
+- **Ayarlanabilir Binary Boyutu** — `KNST_SMALL_SIZE_CLASS` tanımlanırsa, `force_inline` yerine standart `inline` kullanılır. Derleyici kendi karar verir, çoğu durumda `call` ile fonksiyona gidilir. Binary boyutu küçülür, hız azalabilir. Tercih sizin. Ayrıca genel olarak kütüphaneleri istediğiniz gibi özelleştirme imkanı sunmaktadır `include/knst_settings.hpp` içerisinde makrolar ve açıklamaları mevcuttur.
 
 - **Duruma Göre Esneklik** — Sık kullanılan kritik fonksiyonlarda binary boyut pahasına ek optimizasyonlar yapılabilir. Bu bir hata değil, bilinçli bir tercihtir. hedefimiz sizlere esneklik ve performansı en iyi şekilde harmanlamaktır , ayrıca makrolar kütüphaneyi istediğiniz gibi şekillendirme imkanı sunar
 
-Bu felsefe, paketteki tüm mevcut ve gelecek kütüphaneler için geçerlidir
-
-## 🚀 Kütüphaneler
-
-## knst_window  (Beta)
-
-
-**Çok kapsamlı windows , linux ve android için tam destekli bir pencere yönetim kütüphanesi olmayı ve sizlere olabildiğince çok özellik sunmayı hedefler**
-
-**Özellikler:**
-- **Çoğu kritik ve uygulama çalışırken sürekli tekrarlancak yerlerde `force inline` kullanılmıştır**
-- **Modern C++ özellikleri ile kullanıcıya temiz kod yazma imkanı sunar**
-- **işletim sisteminin event mantığına benzer bir şekilde eventleri yakalar ve işleme imkanı sunar**
-- **Güvenlik** — Sınırlı sayıdaki , testlerden başarıyla geçmiştir
-
-
-## knst_gui_framework (Erken Beta)
-
-**Çok Özelleştirilebilir Vulkan Render Moturudur**
-
-- 2D , 3D Grafiklerini oluşturup `yüksek performanslı` şekilde herhangi bir uygulama yapmanıza olanak sağlar
-
-- Kütüphanede her aşamayı özelleştirme imkanınız mevcuttur , her aşamayı istediğiniz gibi ya configler le yada setter fonksiyonlarımız ile özelleştireme imkanı sunar
-
-- Vulkanın yeni özelliklerini kullanma imkanı sunar , hem ileri seviye vulkan bilen hemde , hiç bilmeyenler için doğru tercihtir
-
-- İçerisinde obj loader gibi yapılar vardır , model yükleme texture yükleme gibi özellikler vardır
-
-- Yapmayı düşündüğünüz projeye göre istediğiniz gibi özelleştirebilirsiniz
-
-- Daha çok erken erişim aşamasında geliştirmeyi elbette düşünüyorum ancak şimdilik , büyük bir ara vermeyi düşünüyorum , eğer sormak istediğiniz sorunuz varsa özelden ulaşabilirsiniz , bu haliyle büyük projelerde kullanmanızı önermiyorum , ancak örneğe bakıp kendiniz deneyebilirsiniz
+Bu felsefe, paketteki tüm mevcut ve gelecek yapılar için geçerlidir
 
 ---
 
-## knst_c16string
+## Detaylı Döküman İçin
 
-`char16_t` tabanlı, yüksek performanslı string sınıfı.
-**Default olarak 22 byte'a kadar yani 10 karaktere kadar stack'te tutar, fazlasında heap'e geçer.**
+#### Proje dizinindeki `docs/` yolu içerisinde `türkçe` ve `english` klasörleri altında , basit ve karmaşık yapıların dökümanları mevcuttur ek olarak `docs/` içerisinde vscode_setting altında platformlara özel hazır ayarlar vardır.
 
-**Özellikler:**
-- **Çoklu Karakter Desteği** — Kurucu ve fonksiyonlarda `char16_t`, `char`, `wchar_t`, `char32_t` türlerini doğrudan kabul eder.
-- **STL Uyumlu** — `std::string`, `std::wstring`, `std::u16string`, `std::u32string` ve view'leri gibi yapılar ile sorunsuz çalışır
-- **Makro ile Özelleştirme:**
-  - `KNST_C16STRING_DEACTIVE_COW` — Copy-On-Write'ı kapatır
-  - `KNST_C16_STRING_USING_ATOMIC_COW` — COW sayacını thread-safe yapar
-  - `KNST_C16STRING_ALIGN_64` / `KNST_C16STRING_ALIGN_32` — Sınıf hizalamasını ve SSO kapasitesini değiştirir
-- **Güvenlik** — Kapsamlı test paketinden başarıyla geçmiştir
-
-
-## knst_byte_string
-
-'unsigned char` tabanlı, binary data ve utf8 değerlerini tutmak için knst_c16string alternetifidir, ileride ağ iletişimi için özellikler eklenecektir.
- -  **UTF-8 Desteği:** Ham byte olarak saklar
- -  **Güvenlik** — testlerden başarıyla geçmiştir
- -  **Binary Güvenli:** \0 (null) byte'ları içerebilir
-
-
-## knst_vector
- Şimdilik kütüphanenin ihtiyaçlarına göre metotları mevcuttur ,metotları sınırlıdır, kullanıcı kullanımı için yeni metotlar eklenecektir
-
- - **Güvenlik** — testlerden başarıyla geçmiştir
- - **Bellek** — knst_memory ile beraber kullanılabilmektedir
-
-
-## knst_memory
-
-Instance tabanlı, memory pool allocator. Thread-safe opsiyonu mevcuttur ayrıca eklenecek yeni kütüphanelerin hepsinde knst_memory desteği mevcut olucaktır
-
----
-## Hedefler
-
-Gelecek için bi tür gui framework kütüphanesi tasarlamayı düşünüyorum ayrıca regex destekli yapılar ve yine çapraz platform destekli dosya okuma işlemleri için temel yapılar eklemeyi düşünüyorum , asıl büyük hedefim ise linuxda wayland için bir masaüstü ortamı geliştirmektir
-
-
----
-
-## 📦 Kurulum
-
-
-### WINDOWS (MSVC)
-
-```bash
-# OpenGL
-- cmake -B build -DENABLE_OPENGL=ON
-- cmake --build build --config Release
-
-# Vulkan
-cmake -B build -DENABLE_VULKAN=ON
-cmake --build build --config Release
-
-# OpenGL + Vulkan
-cmake -B build -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
-cmake --build build --config Release
-
-# Run
-build/knst_app.exe
-```
-
-
-### WINDOWS (MinGW / MSYS2)
-
-```bash
-# OpenGL
-cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON
-cmake --build build
-
-# Vulkan
-cmake -B build -G "MinGW Makefiles" -DENABLE_VULKAN=ON
-cmake --build build
-
-# OpenGL + Vulkan
-cmake -B build -G "MinGW Makefiles" -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
-cmake --build build
-
-# Run
-build/knst_app.exe
-```
-
-
-
-### WINDOWS (Ninja / MSYS2)
-
-```bash
-# OpenGL
-cmake -B build -G Ninja -DENABLE_OPENGL=ON
-cmake --build build
-
-# Vulkan
-cmake -B build -G Ninja -DENABLE_VULKAN=ON
-cmake --build build
-
-# OpenGL + Vulkan
-cmake -B build -G Ninja -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
-cmake --build build
-
-# Run
-build/knst_app.exe
-```
-
-
-
-### LINUX / X11
-
-```bash
-# X11 + OpenGL (GLX)
-cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON
-cmake --build build
-
-# X11 + OpenGL (EGL)
-cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON
-cmake --build build
-
-# X11 + Vulkan
-cmake -B build -DLINUX_PLATFORM=X11 -DENABLE_VULKAN=ON
-cmake --build build
-
-# X11 + OpenGL (GLX) + Vulkan
-cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=GLX -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
-cmake --build build
-
-# X11 + OpenGL (EGL) + Vulkan
-cmake -B build -DLINUX_PLATFORM=X11 -DOPENGL_BACKEND=EGL -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
-cmake --build build
-
-# Run
-build/./knst_app
-```
-
-### LINUX / WAYLAND
-```bash
-# Wayland + OpenGL (EGL)
-cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON
-cmake --build build
-
-# Wayland + Vulkan
-cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_VULKAN=ON
-cmake --build build
-
-# Wayland + OpenGL (EGL) + Vulkan
-cmake -B build -DLINUX_PLATFORM=Wayland -DENABLE_OPENGL=ON -DENABLE_VULKAN=ON
-cmake --build build
-
-# Run
-build/./knst_app
-```
-
-
-### ANDROID
-
-```bash
-#Linux
-
-    package_tests/knst_window/android/./build_android.sh # apk oluşturur
-    package_tests/knst_window/android/./run_android.sh # telefonda apk çalışır
-
-#Windows
-
-    package_tests/knst_window/android/./build_android.bat # apk oluşturur
-    package_tests/knst_window/android/./run_android.bat # telefonda apk çalışır
-```
-
-
- 📌 **NOT:** Android için : Android SDK ve Android NDK ' yı indirip derleyiciye tanıtmalısınız  örnek vscode json ayarı :
-
-```json
-{
-    "configurations": [
-       
-        {
-            "name": "Android (OpenGL ES)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/EGL",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES3",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES2",
-                "/opt/android-ndk/sources/android/native_app_glue"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_ANDROID",
-                "KNST_PLATFORM_ANDROID_OPENGL",
-                "KNST_USING_OPENGL"
-            ],
-            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-clang-arm64"
-        },
-        {
-            "name": "Android (Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_ANDROID",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-clang-arm64"
-        },
-        {
-            "name": "Android (OpenGL ES + Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/EGL",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES3",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/GLES2",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan",
-                "/opt/android-ndk/sources/android/native_app_glue"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_ANDROID",
-                "KNST_PLATFORM_ANDROID_OPENGL",
-                "KNST_USING_OPENGL",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-clang-arm64"
-        },
-        {
-            "name": "Android (Headless - No Graphics)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include",
-                "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_ANDROID",
-                "KNST_HEADLESS_MODE"
-            ],
-            "compilerPath": "/opt/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-clang-arm64"
-        },
-        {
-            "name": "Windows (MSVC - OpenGL)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_WGL",
-                "_CRT_SECURE_NO_WARNINGS",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "compilerPath": "cl.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x64"
-        },
-        {
-            "name": "Windows (MSVC - Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt",
-                "${env:VULKAN_SDK}/Include"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_VULKAN",
-                "_CRT_SECURE_NO_WARNINGS",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "compilerPath": "cl.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x64"
-        },
-        {
-            "name": "Windows (MSVC - OpenGL + Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/winrt",
-                "${env:VULKAN_SDK}/Include"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_WGL",
-                "KNST_USING_VULKAN",
-                "_CRT_SECURE_NO_WARNINGS",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "compilerPath": "cl.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x64"
-        },
-        {
-            "name": "Windows (MSVC - Headless)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "${env:ProgramFiles(x86)}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Microsoft Visual Studio/**/include",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/um",
-                "${env:ProgramFiles}/Windows Kits/**/Include/**/shared"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_HEADLESS_MODE",
-                "_CRT_SECURE_NO_WARNINGS",
-                "UNICODE",
-                "_UNICODE"
-            ],
-            "compilerPath": "cl.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x64"
-        },
-        {
-            "name": "Windows (MinGW - OpenGL)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "C:/msys64/mingw64/include",
-                "C:/msys64/mingw64/include/SDL2",
-                "C:/msys64/mingw64/include/GL",
-                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
-                "C:/mingw64/include"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_WGL"
-            ],
-            "compilerPath": "g++.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-gcc-x64"
-        },
-        {
-            "name": "Windows (MinGW - Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "C:/msys64/mingw64/include",
-                "C:/msys64/mingw64/include/vulkan",
-                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
-                "C:/mingw64/include"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "g++.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-gcc-x64"
-        },
-        { // version path example
-            "name": "Windows (MinGW - Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "${workspaceFolder}/glad_3_3/include",
-                "C:/msys64/mingw64/include",
-                "C:/VulkanSDK/1.4.350.0/Include",
-                "C:/VulkanSDK/1.4.350.0/Include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_VULKAN"
-                
-            ],
-            "compilerPath": "g++.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-gcc-x64"
-        },
-        {
-            "name": "Windows (MinGW - OpenGL + Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "C:/msys64/mingw64/include",
-                "C:/msys64/mingw64/include/GL",
-                "C:/msys64/mingw64/include/vulkan",
-                "C:/mingw-w64/x86_64-8.1.0-posix-seh-rt_v6-rev0/mingw64/include",
-                "C:/mingw64/include"
-            ],
-            "defines": [
-                "KNST_USING_PLATFORM_WINDOWS",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_WGL",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "g++.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "windows-gcc-x64"
-        },
-        {
-            "name": "Linux X11 (OpenGL - GLX)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
-                "${workspaceFolder}/include/linux/x11"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_GLX"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux X11 (OpenGL - EGL)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
-                "${workspaceFolder}/include/linux/x11"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_EGL"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux X11 (Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "/usr/include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux X11 (OpenGL - GLX + Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
-                "${workspaceFolder}/include/linux/x11",
-                "/usr/include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_GLX",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux X11 (OpenGL - EGL + Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "/usr/lib/gcc/x86_64-linux-gnu/*/include",
-                "${workspaceFolder}/include/linux/x11",
-                "/usr/include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_EGL",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux X11 (Headless)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_X11",
-                "KNST_HEADLESS_MODE"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux Wayland (OpenGL - EGL)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "${workspaceFolder}/include/linux/wayland",
-                "/usr/include/wayland-client"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_WAYLAND",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_EGL"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux Wayland (Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "${workspaceFolder}/include/linux/wayland",
-                "/usr/include/wayland-client",
-                "/usr/include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_WAYLAND",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux Wayland (OpenGL - EGL + Vulkan)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu",
-                "${workspaceFolder}/include/linux/wayland",
-                "/usr/include/wayland-client",
-                "/usr/include/vulkan"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_WAYLAND",
-                "KNST_USING_OPENGL",
-                "KNST_OPENGL_USING_EGL",
-                "KNST_USING_VULKAN"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        },
-        {
-            "name": "Linux Wayland (Headless)",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/include",
-                "/usr/include"
-            ],
-            "defines": [
-                "KNST_USING_LINUX_PLATFORM_WAYLAND",
-                "KNST_HEADLESS_MODE"
-            ],
-            "compilerPath": "/usr/bin/g++",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "linux-gcc-x64"
-        }
-    ],
-    "version": 4
-}
-```
-📌 **NOT:** Örnek olarak size bu json ayarını verebilirim
+Örneğin : CTRL + SHİFT + P ile `C/C++: Edit Configurations` ile ayarı ekleyebilirsiniz
  
 ---
+
+# KernelNucleusT – Kurulum Bilgilendirmesi
+
+Bu kısım KernelNucleusT kütüphanesini **Linux (X11 / Wayland)**, **Windows** ve **Android** için nasıl derleyeceğini ve makro detaylarını adım adım anlatmaktadır;
+
 ---
-```cpp
-#include "../include/KernelNucleusT.hpp" // Hepsi bukadar
+
+## 1. Temelde 2 farklı seçim vardır
+
+| Seçim | Ne yapar? |
+|---|---|
+| **Platform** | Otomatik algılanır. Linux'ta ayrıca **X11** mi **Wayland** mı olduğunu sizin seçmeniz gerekir. |
+| **Grafik modu** | **Vulkan** (`-DKNST_ENABLE_VULKAN=ON`) veya **Headless** (`-DKNST_ENABLE_VULKAN=OFF`, varsayılan) olarak seçilmektedir.|
+
+
+---
+
+## 2. Tüm CMake seçenekleri
+
+| Seçenek | Varsayılan | Açıklama |
+|---|---|---|
+| `KNST_ENABLE_VULKAN` | `OFF` | `ON` = Vulkan ile derle, `OFF` = headless |
+| `KNST_LINUX_PLATFORM` | `X11` | Sadece Linux: `X11` veya `Wayland` |
+| `KNST_BUILD_EXAMPLES` | `OFF` | `examples/` klasöründeki örnekleri de derle |
+| `KNST_APP_SOURCE` | Boş | Kendi `.cpp` dosyanı `knst_app` olarak derle |
+| `KNST_ENABLE_SANITIZERS` | `OFF` | AddressSanitizer + UBSan (hata ayıklama için) |
+| `KNST_WARNINGS_AS_ERRORS` | `OFF` | Uyarıları hata say |
+| `KNST_STATIC_MSVC_RUNTIME` | `ON` | Sadece MSVC: statik runtime (`/MT`) |
+| `CMAKE_BUILD_TYPE` | `Release` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
+
+
+
+---
+
+## 3. Hangi makrolar tanımlanır?
+
+Bu makrolar kütüphaneyi kullanan her projeye **otomatik** geçer. Elle tanımlamana gerek yok.
+
+| Durum | Tanımlanan makrolar |
+|---|---|
+| Linux + X11 | `KNST_USING_PLATFORM_LINUX`, `KNST_USING_LINUX_PLATFORM_X11` |
+| Linux + Wayland | `KNST_USING_PLATFORM_LINUX`, `KNST_USING_LINUX_PLATFORM_WAYLAND` |
+| Windows | `KNST_USING_PLATFORM_WINDOWS`, `NOMINMAX`, `_CRT_SECURE_NO_WARNINGS`, `UNICODE`, `_UNICODE` |
+| Android | `KNST_USING_PLATFORM_ANDROID`, `KNST_USING_PLATFORM_LINUX` |
+| Vulkan açık | `KNST_USING_VULKAN` (Android'de ayrıca `KNST_PLATFORM_ANDROID_VULKAN`) |
+| Headless | `KNST_HEADLESS_MODE` tanımlanır, Vulkan makrosu **tanımlanmaz** |
+
+Derleme sırasında CMake sonunda bir özet yazdırır; hangi makroların tanımlandığını oradan görebilirsin.
+
+---
+
+## 4. Hızlı başlangıç (küçük bir örnek)
+
+```bash
+git clone https://github.com/YusufGundar/KernelNucleusT
+cd KernelNucleusT
+
+# Yapılandır (Linux X11 + Vulkan, kendi .cpp dosyanı derle)
+cmake -S . -B build \
+  -DKNST_ENABLE_VULKAN=ON \
+  -DKNST_APP_SOURCE=examples/simple_structures/knst_vector/knst_vector_basic.cpp
+
+# Derle
+cmake --build build -j
+
+# Çalıştır (örnek)
+./build/bin/knst_app
+```
+### Kütüphane örnekleri de derlemek isterseniz
+
+```bash
+cmake -S . -B build -DKNST_ENABLE_VULKAN=ON -DKNST_BUILD_EXAMPLES=ON
+
+cmake --build build -j
+
+./build/bin/knst_window_basic
 ```
 
-- İsterseniz direkt `KernelNucleusT.hpp` bu başlığı include edebilirsiniz yada ek olarak , sadece ihtiyacınız olan yapıları ayrı bir projede kullanabilirsiniz
+💡 Not: Her iki durumda da çıktılar build/bin/ klasörüne düşer. Örnek modunda her örnek kendi adıyla ayrı bir program olur (knst_window_basic, knst_vector_basic gibi).
 
 
-```cpp
+---
 
-// Bütün temel yapılar `knst_global_functions.hpp` ye bağımlıdır
+## 5. Linux
 
-#include "knst_global_functions.hpp"
+### 5.1 Gerekli araçlar
 
-#include "knst_c16string.hpp"
-#include "knst_byte_string.hpp"
-#include "knst_vector.hpp"
-#include "knst_image_loader.hpp"
+**Ubuntu / Debian / Pop!_OS**
+```bash
+sudo apt update
+sudo apt install build-essential cmake ninja-build pkg-config
 ```
 
-```cpp
-#include "knst_window.hpp" // Paket kütüphaneler ise temel yapılara bağımlıdırlar
+**Fedora**
+```bash
+sudo dnf install gcc-c++ cmake ninja-build pkgconf-pkg-config
 ```
+
+**Arch**
+```bash
+sudo pacman -S base-devel cmake ninja pkgconf
+```
+
+### 5.2 X11 için paketler
+
+**Ubuntu / Debian / Pop!_OS**
+```bash
+sudo apt install libx11-dev libx11-xcb-dev libxcb1-dev libxcb-randr0-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-util-dev libxcb-sync-dev \
+  libxext-dev libxfixes-dev libxi-dev libxrandr-dev libxcursor-dev
+```
+
+**Fedora**
+```bash
+sudo dnf install libX11-devel libxcb-devel xcb-util-devel xcb-util-keysyms-devel \
+  xcb-util-wm-devel libXext-devel libXfixes-devel libXi-devel libXrandr-devel libXcursor-devel
+```
+
+**Arch**
+```bash
+sudo pacman -S libx11 libxcb xcb-util xcb-util-keysyms xcb-util-wm \
+  libxext libxfixes libxi libxrandr libxcursor
+```
+
+Derle:
+```bash
+cmake -S . -B build -DKNST_LINUX_PLATFORM=X11 -DKNST_ENABLE_VULKAN=ON
+cmake --build build -j
+```
+
+### 5.3 Wayland için paketler
+
+**Ubuntu / Debian / Pop!_OS**
+```bash
+sudo apt install libwayland-dev libxkbcommon-dev
+```
+
+**Fedora**
+```bash
+sudo dnf install wayland-devel libxkbcommon-devel
+```
+
+**Arch**
+```bash
+sudo pacman -S wayland libxkbcommon
+```
+
+Derle:
+```bash
+cmake -S . -B build -DKNST_LINUX_PLATFORM=Wayland -DKNST_ENABLE_VULKAN=ON
+cmake --build build -j
+```
+
+> Wayland protokol dosyaları (`.c` dosyaları) `include/platform/linux/wayland/protocol_files/` içinde hazır gelir. CMake bunları kendisi derler, sizin bir şey yapmanıza gerek yok.
+
+### 5.4 Vulkan için paketler (Linux)
+
+**Ubuntu / Debian / Pop!_OS**
+```bash
+sudo apt install libvulkan-dev vulkan-tools
+# İsteğe bağlı (hata ayıklama katmanları):
+sudo apt install vulkan-validationlayers
+```
+
+**Fedora**
+```bash
+sudo dnf install vulkan-loader-devel vulkan-headers vulkan-tools
+```
+
+**Arch**
+```bash
+sudo pacman -S vulkan-headers vulkan-icd-loader vulkan-tools
+```
+
+Kontrol: `vulkaninfo --summary` komutu ekran kartını göstermelidir. NVIDIA / AMD / Intel için güncel sürücü kurulu olmalıdır.
+
+### 5.5 Linux'ta Headless
+
+Ekran kartı veya Vulkan paketi gerekmez:
+```bash
+cmake -S . -B build -DKNST_ENABLE_VULKAN=OFF
+cmake --build build -j
+```
+
+---
+
+## 6. Windows
+
+### 6.1 Seçenek A: Visual Studio (MSVC) – önerilen
+
+Gerekenler:
+- **Visual Studio 2022** ("Desktop development with C++" iş yükü ile)
+- **CMake** (Visual Studio ile birlikte gelir)
+- Vulkan kullanacaksan **Vulkan SDK**: https://vulkan.lunarg.com/ (kurulumdan sonra terminali kapatıp aç; `VULKAN_SDK` ortam değişkeni otomatik ayarlanır)
+
+"x64 Native Tools Command Prompt" veya PowerShell'de:
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 "-DKNST_ENABLE_VULKAN=ON"
+cmake --build build --config Release
+```
+Çıktı: `build\bin\Release\`
+
+Headless için `-DKNST_ENABLE_VULKAN=OFF` yaz, Vulkan SDK gerekmez.
+
+### 6.2 Seçenek B: MSYS2 (MinGW)
+
+
+
+1. https://www.msys2.org/ adresinden MSYS2'yi kur.
+2. **MSYS2 UCRT64** terminalini aç ve şunları kur:
+
+Ekstra : pacman -S mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+
+```bash
+pacman -S mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake \
+          mingw-w64-ucrt-x86_64-ninja
+# Vulkan için:
+pacman -S mingw-w64-ucrt-x86_64-vulkan-headers mingw-w64-ucrt-x86_64-vulkan-loader
+```
+3. Derle:
+```bash
+cmake -S . -B build -G Ninja -DKNST_ENABLE_VULKAN=ON
+cmake --build build
+```
+Çıktı: `build/bin/`
+
+---
+
+## 7. Android
+
+### 7.1 Gerekenler
+- **Android NDK** (r26 veya daha yenisi önerilir). Android Studio → SDK Manager → SDK Tools → "NDK (Side by side)" ile kurabilirsiniz.
+- **CMake** ve **Ninja**
+- Ortam değişkeni (yolu kendi kurulumuna göre değiştir):
+```bash
+export ANDROID_NDK=$HOME/Android/Sdk/ndk/<sürüm>
+```
+Windows PowerShell: `$env:ANDROID_NDK="C:\Users\<kullanici>\AppData\Local\Android\Sdk\ndk\<sürüm>"`
+
+### 7.2 Derleme (Vulkan ile)
+
+```bash
+cmake -S . -B build-android -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-24 \
+  -DKNST_ENABLE_VULKAN=ON \
+  -DKNST_BUILD_EXAMPLES=ON
+cmake --build build-android
+```
+
+Çıktı: `build-android/libknst_app.so`
+
+Önemli noktalar:
+- **Vulkan için en az `android-24` gerekir.** Daha düşük verirsen CMake hata verir.
+- `ANDROID_ABI` değerleri: `arm64-v8a` (çoğu telefon), `armeabi-v7a`, `x86_64` (emülatör).
+- Headless için `-DKNST_ENABLE_VULKAN=OFF` yaz.
+- Kendi kodunu kullanmak istersen: `-DKNST_APP_SOURCE=yol/dosyam.cpp`
+
+Hazır olarak 'build-android' scriptleri mevcuttur gerekli ortamı sağladıktan sonra o scriptleri çalıştırarak bağlantıyı sağlayabilirsiniz.
+
+
+## 8. Kendi projende kullanmak
+
+Kütüphane sadece başlık dosyalarından oluşur (header-only). En kolay yol `add_subdirectory`:
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(BenimUygulamam CXX)
+
+set(KNST_ENABLE_VULKAN ON CACHE BOOL "" FORCE)
+set(KNST_LINUX_PLATFORM "X11" CACHE STRING "" FORCE)   # sadece Linux'ta anlamlı
+
+add_subdirectory(KernelNucleusT)
+
+add_executable(benim_uygulamam main.cpp)
+target_link_libraries(benim_uygulamam PRIVATE KernelNucleusT::KernelNucleusT)
+```
+
+Bu satır yeterlidir: include klasörleri, platform makroları, `KNST_USING_VULKAN`, X11/Wayland/Vulkan kütüphaneleri otomatik bağlanır. Kodunda şöyle kullanabilirsin:
+
+```cpp
+#include "KernelNucleusT.hpp"
+
+#if defined(KNST_USING_VULKAN)
+    // Vulkan modu
+#else
+    // Headless modu
+#endif
+```
+
+---
+
+## 9. Sık karşılaşılan sorunlar
+
+| Sorun | Çözüm |
+|---|---|
+| `Missing X11 development packages` | Bölüm 5.2'deki paketleri kur, sonra `rm -rf build` ve tekrar yapılandır. |
+| `KNST_ENABLE_VULKAN=ON but Vulkan was not found` | Vulkan paketini / SDK'yı kur (Bölüm 5.4 veya 6), ya da `-DKNST_ENABLE_VULKAN=OFF` kullan. |
+| `Wayland protocol source not found` | `include/platform/linux/wayland/protocol_files/` klasöründeki `.c` dosyalarının silinmediğinden emin ol. |
+| `Android NDK not found` | `-DCMAKE_TOOLCHAIN_FILE=.../android.toolchain.cmake` parametresini ver. |
+| `Vulkan requires Android API level 24` | `-DANDROID_PLATFORM=android-24` (veya daha yenisi) kullan. |
+| Windows'ta Vulkan bulunamıyor | Vulkan SDK'yı kur, terminali kapatıp yeniden aç (`VULKAN_SDK` değişkeni yüklensin). |
+| Ayarı değiştirdim ama etkisi yok | Önbelleği temizle: `rm -rf build` (Windows: `rmdir /s /q build`) ve baştan yapılandır. |
+| Hangi makrolar tanımlı? | `cmake` çıktısının sonundaki özet tablosundaki **Definitions** satırına bak. |
+| `ninja: command not found` (Windows) | MSYS2 UCRT64 terminalini kullan, normal PowerShell değil. Yoksa: `pacman -S mingw-w64-ucrt-x86_64-ninja` |
+| `cmake: command not found` (Windows) | MSYS2 UCRT64'te: `pacman -S mingw-w64-ucrt-x86_64-cmake` |
+| PowerShell `-D` argümanını `.cpp`'den bölüyor | Argümanı tırnak içine al: `"-DKNST_APP_SOURCE=yol/dosya.cpp"` |
+| `cl.exe not found` (MSVC) | "x64 Native Tools Command Prompt for VS" aç, normal PowerShell değil |
+| Visual Studio 2026 kullanıyorum | Generator adı: `-G "Visual Studio 18 2026"` |
+---
+
+
+## 10. Hazır komut özeti
+```bash
+
+#-DKNST_BUILD_EXAMPLES=ON bütün örnekleri derlemek için
+# ------------------------------------X11--------------------------------------------
+  # Vulkan
+  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=X11 -DKNST_ENABLE_VULKAN=ON -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp
+  cmake --build build -j
+  ./build/bin/knst_app
+
+  # Headless
+  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=X11 -DKNST_ENABLE_VULKAN=OFF -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp
+  cmake --build build -j
+  ./build/bin/knst_app
+
+  # Örnekleri de derle (X11 + Vulkan)
+  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=X11 -DKNST_ENABLE_VULKAN=ON -DKNST_BUILD_EXAMPLES=ON  
+  cmake --build build -j
+  ./build/bin/knst_window_basic
+
+  # Örnekleri de derle (X11 + Headless)
+  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=X11 -DKNST_ENABLE_VULKAN=OFF -DKNST_BUILD_EXAMPLES=ON
+  cmake --build build -j
+  ./build/bin/knst_vector_basic
+# ------------------------------------------------------------------------------------
+
+# ------------------------------------Wayland-----------------------------------------
+  # Vulkan 
+  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=Wayland -DKNST_ENABLE_VULKAN=ON -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp
+  cmake --build build -j
+  ./build/bin/knst_app
+
+  # Headless
+  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=Wayland -DKNST_ENABLE_VULKAN=OFF
+  cmake --build build -j
+  ./build/bin/knst_app
+# ------------------------------------------------------------------------------------
+
+# ------------------------------------Windows MSVC------------------------------------
+# NOT: "x64 Native Tools Command Prompt for VS" icinde calistir
+# NOT: -D argumanlarini tirnak icine al (PowerShell tuzagi)
+
+  # Vulkan
+  cmake -S . -B build -G "Visual Studio 17 2022" -A x64 "-DKNST_ENABLE_VULKAN=ON"
+  cmake --build build --config Release
+  build\bin\Release\knst_app.exe
+
+  # Headless
+  cmake -S . -B build -G "Visual Studio 17 2022" -A x64 "-DKNST_ENABLE_VULKAN=OFF"
+  cmake --build build --config Release
+  build\bin\Release\knst_app.exe
+
+  # Kendi .cpp dosyanla
+  cmake -S . -B build -G "Visual Studio 17 2022" -A x64 ^
+    "-DKNST_ENABLE_VULKAN=ON" ^
+    "-DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp"
+  cmake --build build --config Release
+  build\bin\Release\knst_app.exe
+# ------------------------------------------------------------------------------------
+
+# --------------------------------Windows (MSYS2 / MinGW)-----------------------------
+# NOT: Normal PowerShell degil, "MSYS2 UCRT64" terminalini kullan
+# NOT: Bash'te tirnak gerekmez, -D argumanlari bolunmez
+
+  # Vulkan
+  cmake -S . -B build -G Ninja -DKNST_ENABLE_VULKAN=ON -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp
+  cmake --build build
+  ./build/bin/knst_app.exe
+
+  # Headless
+  cmake -S . -B build -G Ninja -DKNST_ENABLE_VULKAN=OFF -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp
+  cmake --build build
+  ./build/bin/knst_app.exe
+# -----------------------------------------------------------------------------------
+
+# ------------------------------------Android----------------------------------------
+  # Ortam değişkeni (Linux / macOS)
+  export ANDROID_NDK=$HOME/Android/Sdk/ndk/<sürüm>
+
+  # Ortam değişkeni (Windows PowerShell)
+  $env:ANDROID_NDK="C:\Users\<kullanici>\AppData\Local\Android\Sdk\ndk\<sürüm>"
+
+  # Vulkan
+  cmake -S . -B build-android -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+    -DANDROID_ABI=arm64-v8a \
+    -DANDROID_PLATFORM=android-24 \
+    -DKNST_ENABLE_VULKAN=ON
+  cmake --build build-android
+
+  # Headless
+  cmake -S . -B build-android -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+    -DANDROID_ABI=arm64-v8a \
+    -DANDROID_PLATFORM=android-24 \
+    -DKNST_ENABLE_VULKAN=OFF
+  cmake --build build-android
+# -----------------------------------------------------------------------------------
+
+# Kendi .cpp Dosyanı Derle
+  cmake -S . -B build -G Ninja -DKNST_ENABLE_VULKAN=ON \
+    -DKNST_APP_SOURCE=yol/dosyan.cpp
+  cmake --build build
+# -----------------------------------------------------------------------------------
+
+# Tüm Örnekleri Derle
+  cmake -S . -B build -G Ninja -DKNST_ENABLE_VULKAN=ON -DKNST_BUILD_EXAMPLES=ON
+  cmake --build build
+# -----------------------------------------------------------------------------------
+```
+
 
 ## 🤝 Katkıda Bulunma
 
-  - Bug raporları ve özellik istekleri için **Issues** sayfasını kullanın
-  - Herangi bir özel istek veya benimle iletişime geçmek isterseniz mail adresimden ulaşabilirsiniz
-  - Eğer bana yardımcı olmak isterseniz
-  - [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/developeryk)
+#### Bug raporları ve özellik istekleri için **Issues** sayfasını kullanabilirsiniz
 
+#### Eğer özel olarak yardımda bulunmak isterseniz
 
-##  📄 Lisans
+  [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/developeryk)
 
-- Gpl 3.0
+---
+
+## 📄 License
+
+- MPL 2.0

@@ -1,3 +1,19 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+/*
+----------------------------
+knst_display_wayland.hpp
+----------------------------
+
+    Retrieves monitor information for the Wayland backend.
+
+*/
+
+
 #pragma once
 
 #if KNST_USING_LINUX_PLATFORM_WAYLAND

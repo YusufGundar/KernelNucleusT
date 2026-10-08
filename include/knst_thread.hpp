@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 knst_thread.hpp
@@ -6,7 +12,6 @@ knst_thread.hpp
     It is an advanced thread library used for thread management; it can utilize pre-existing threads via a thread pool if desired and includes features such as priority setting, allowing you to use it for various purposes as you see fit
 
 */
-
 
 
 
@@ -20,6 +25,7 @@ knst_thread.hpp
 #else
     #include <pthread.h>
     #if defined(__GLIBCXX__) || defined(__GLIBC__)
+
         #include <cxxabi.h>
     #endif
 #endif
@@ -38,7 +44,6 @@ enum class knst_thread_state : uint8_t { // It tracks the state of the thread: `
     joined = 3,
     detached = 4
 };
-
 
 
 /*
@@ -98,7 +103,6 @@ private:
                                        
         data->state.store((uint8_t)knst_thread_state::running,std::memory_order_release);
                           
-
       
         data->self_ref = data;
 
@@ -172,6 +176,7 @@ private:
 
     #if KNST_USING_PLATFORM_WINDOWS
         static DWORD WINAPI trampoline_win(LPVOID arg) {
+
             auto* self = static_cast<knst_thread_data*>(arg);
 
             knst_thread_priority requested = static_cast<knst_thread_priority>(
@@ -193,6 +198,7 @@ private:
                             
 
             self->self_ref.reset();
+
             return 0;
         }
     #else
@@ -213,6 +219,7 @@ private:
             try {
                 self->task();
             }
+
     #if defined(__GLIBCXX__) || defined(__GLIBC__)
             catch (abi::__forced_unwind&) {
                 throw;
@@ -398,12 +405,16 @@ public:
                 TerminateThread(m_data->handle, 0);
                 WaitForSingleObject(m_data->handle, INFINITE);
                 CloseHandle(m_data->handle);
+
                 m_data->handle = nullptr;
             }
         #else
             if (m_data->handle_valid) {
-                pthread_cancel(m_data->handle);
+                #if !defined(__ANDROID__)
+                    pthread_cancel(m_data->handle);
+                #endif
                 pthread_join(m_data->handle, nullptr);
+
                 m_data->handle_valid = false;
             }
         #endif
@@ -442,8 +453,7 @@ public:
         }
 
         m_data->state.store((uint8_t)knst_thread_state::detached,std::memory_order_release);
-                            
-        m_data.reset();
+      
         return true;
     }
 

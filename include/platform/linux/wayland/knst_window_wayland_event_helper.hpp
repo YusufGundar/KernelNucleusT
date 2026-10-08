@@ -1,10 +1,24 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+/*
+----------------------------
+knst_window_wayland_event_helper.hpp
+----------------------------
+
+    Event handling for the Wayland backend and listeners
+
+*/
+
+
+
+
 #pragma once
 #include <linux/input-event-codes.h>
 
-
-
 #if KNST_USING_LINUX_PLATFORM_WAYLAND
-
 
 inline void knst_window_wayland_funcs::XdgSurfaceConfigure(
     void* data, xdg_surface* surface, uint32_t serial)
@@ -16,7 +30,6 @@ knst_window_wayland_funcs::xdgSurfaceListener =
 {
     XdgSurfaceConfigure
 };
-
 
 inline void knst_window_wayland_funcs::XdgToplevelConfigure(
     void* data,
@@ -32,16 +45,16 @@ inline void knst_window_wayland_funcs::XdgToplevelConfigure(
     if (!window) return;
 
     if (w > 0 && h > 0) {
+        window->m_knst_event.begin(KNST_WINDOW_EVENT_RESIZE);
         window->m_knst_event.window_width = w;
         window->m_knst_event.window_height = h;
-        window->m_knst_event.type = KNST_WINDOW_RESIZE;
         window->dispatch_current_event();
     }
 
     bool maximized = false;
     bool activated = false;
     bool fullscreen = false;
-    
+
     if (states && states->size > 0) {
         uint32_t* s = (uint32_t*)states->data;
         size_t count = states->size / sizeof(uint32_t);
@@ -53,20 +66,20 @@ inline void knst_window_wayland_funcs::XdgToplevelConfigure(
     }
 
     if (fullscreen != window->m_knst_event.is_full_screen) {
+        window->m_knst_event.begin(fullscreen ? KNST_WINDOW_EVENT_FULLSCREEN : KNST_WINDOW_EVENT_RESTORE);
         window->m_knst_event.is_full_screen = fullscreen;
-        window->m_knst_event.type = fullscreen ? KNST_WINDOW_FULL_SCREEN : KNST_WINDOW_RESTORE;
         window->dispatch_current_event();
     }
 
     if (maximized != window->m_knst_event.is_maximized) {
+        window->m_knst_event.begin(maximized ? KNST_WINDOW_EVENT_MAXIMIZE : KNST_WINDOW_EVENT_RESTORE);
         window->m_knst_event.is_maximized = maximized;
-        window->m_knst_event.type = maximized ? KNST_WINDOW_MAXIMIZE : KNST_WINDOW_RESTORE;
         window->dispatch_current_event();
     }
 
     if (activated != window->m_knst_event.is_focused) {
+        window->m_knst_event.begin(activated ? KNST_WINDOW_EVENT_FOCUS_IN : KNST_WINDOW_EVENT_FOCUS_OUT);
         window->m_knst_event.is_focused = activated;
-        window->m_knst_event.type = activated ? KNST_FOCUS_IN : KNST_FOCUS_OUT;
         window->dispatch_current_event();
     }
 
@@ -82,7 +95,11 @@ inline void knst_window_wayland_funcs::XdgToplevelClose(
     (void)toplevel;
     auto* window = static_cast<knst_window*>(data);
     if (!window) return;
+
+
+    window->m_knst_event.begin(KNST_WINDOW_EVENT_CLOSE);
     window->should_close();
+    window->dispatch_current_event();
 }
 
 inline void knst_window_wayland_funcs::XdgToplevelConfigureBounds(
@@ -110,7 +127,6 @@ knst_window_wayland_funcs::xdgToplevelListener =
     XdgToplevelConfigureBounds,
     XdgToplevelWmCapabilities
 };
-
 
 inline void knst_window_wayland_funcs::UpdateCursor(
     wl_pointer* pointer,
@@ -154,7 +170,6 @@ inline void knst_window_wayland_funcs::UpdateCursor(
     wl_pointer_set_cursor(pointer, serial, KnstWindowSources::cursor_surface, image->hotspot_x, image->hotspot_y);
 }
 
-
 inline void knst_window_wayland_funcs::PointerEnter(
     void* data,
     wl_pointer* pointer,
@@ -176,7 +191,7 @@ inline void knst_window_wayland_funcs::PointerEnter(
     KnstWindowSources::active_window = window;
 
     auto& ev = window->m_knst_event;
-    ev.type = KNST_ENTER_NOTIFY;
+    ev.begin(KNST_WINDOW_EVENT_ENTER);
     ev.mouse_on_window = true;
     ev.mouse_x = wl_fixed_to_int(sx);
 
@@ -223,7 +238,7 @@ inline void knst_window_wayland_funcs::PointerLeave(
     window->m_pointer_pressed = false;
 
     auto& ev = window->m_knst_event;
-    ev.type = KNST_LEAVE_NOTIFY;   
+    ev.begin(KNST_WINDOW_EVENT_LEAVE);
     ev.mouse_on_window = false;
     window->dispatch_current_event();
 
@@ -251,11 +266,9 @@ inline void knst_window_wayland_funcs::PointerMotion(
 
     if (old_edge != new_edge) {
         if (new_edge != resize_edge::none) {
-
             UpdateCursor(pointer, window->m_pointer_serial, new_edge);
         }
         else if (window->m_using_custom_cursor && !window->m_pending_cursor_data.empty()) {
-           
             window->apply_bmp_cursor_now(
                 window->m_pending_cursor_data,
                 window->m_pending_cursor_w,
@@ -270,7 +283,7 @@ inline void knst_window_wayland_funcs::PointerMotion(
     }
 
     auto& ev = window->m_knst_event;
-    ev.type = KNST_MOTION_NOTIFY;
+    ev.begin(KNST_WINDOW_EVENT_MOTION);
     ev.mouse_x = wl_fixed_to_int(sx);
 
     #ifndef KNST_DISABLE_TITLE_BAR
@@ -301,9 +314,8 @@ inline void knst_window_wayland_funcs::PointerButton(
     int original_mx = (int)window->m_mouse_x;
     int original_my = (int)window->m_mouse_y;
 
-    ev.type = KNST_MOUSE_EVENT;
+    ev.begin(KNST_WINDOW_EVENT_MOUSE);
     ev.mouse_x = original_mx;
-    
     #ifndef KNST_DISABLE_TITLE_BAR
         int titleBarH = window->get_title_bar_height();
         ev.mouse_y = (original_my < titleBarH) ? 0 : (original_my - titleBarH);
@@ -312,28 +324,26 @@ inline void knst_window_wayland_funcs::PointerButton(
     #endif
 
     switch (button) {
-        case BTN_LEFT: ev.mouse_button = KNST_MOUSE_BUTTON_LEFT; break;
-        case BTN_MIDDLE: ev.mouse_button = KNST_MOUSE_BUTTON_MIDDLE; break;
-        case BTN_RIGHT: ev.mouse_button = KNST_MOUSE_BUTTON_RIGHT; break;
+        case BTN_LEFT: ev.mouse_button = KNST_WINDOW_MOUSE_BUTTON_LEFT; break;
+        case BTN_MIDDLE: ev.mouse_button = KNST_WINDOW_MOUSE_BUTTON_MIDDLE; break;
+        case BTN_RIGHT: ev.mouse_button = KNST_WINDOW_MOUSE_BUTTON_RIGHT; break;
         default: ev.mouse_button = button; break;
     }
 
-    ev.mouse_action = (state == WL_POINTER_BUTTON_STATE_PRESSED) ? 
-                       KNST_MOUSE_BUTTON_PRESS : 
-                       KNST_MOUSE_BUTTON_RELEASE;
-                      
+    ev.mouse_action = (state == WL_POINTER_BUTTON_STATE_PRESSED) ?
+                       KNST_WINDOW_MOUSE_ACTION_PRESS :
+                       KNST_WINDOW_MOUSE_ACTION_RELEASE;
+
     if (button == BTN_LEFT && state == WL_POINTER_BUTTON_STATE_PRESSED) {
         int mx = original_mx;
         int my = original_my;
         int width = ev.window_width;
-        int titleBarH = window->get_title_bar_height();
         const int BUTTON_WIDTH = 48;
-        const int CORNER_SIZE = 8;   
+        const int CORNER_SIZE = 8;
 
         if (my <= titleBarH && my >= 0) {
-
             if (mx >= width - BUTTON_WIDTH) {
-                ev.type = KNST_CLOSE_WINDOW;
+                ev.type = KNST_WINDOW_EVENT_CLOSE;
                 window->should_close();
                 window->dispatch_current_event();
                 return;
@@ -342,17 +352,17 @@ inline void knst_window_wayland_funcs::PointerButton(
                 if (ev.is_maximized) {
                     xdg_toplevel_unset_maximized(window->toplevel);
                     ev.is_maximized = false;
-                    ev.type = KNST_WINDOW_RESTORE;
+                    ev.type = KNST_WINDOW_EVENT_RESTORE;
                 } else {
                     xdg_toplevel_set_maximized(window->toplevel);
                     ev.is_maximized = true;
-                    ev.type = KNST_WINDOW_MAXIMIZE;
+                    ev.type = KNST_WINDOW_EVENT_MAXIMIZE;
                 }
                 window->dispatch_current_event();
                 return;
             }
             else if (mx >= width - BUTTON_WIDTH * 3) {
-                ev.type = KNST_WINDOW_MINIMIZE;
+                ev.type = KNST_WINDOW_EVENT_MINIMIZE;
                 xdg_toplevel_set_minimized(window->toplevel);
                 window->dispatch_current_event();
                 return;
@@ -416,7 +426,8 @@ inline void knst_window_wayland_funcs::PointerAxis(
     if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
     {
         auto& ev = window->m_knst_event;
-        ev.type = KNST_MOUSE_SCROLL;   
+        ev.begin(KNST_WINDOW_EVENT_MOUSE);
+        ev.mouse_action = KNST_WINDOW_MOUSE_ACTION_SCROLL;
         ev.mouse_scroll_delta = wl_fixed_to_int(value);
         window->dispatch_current_event();
     }
@@ -448,7 +459,6 @@ knst_window_wayland_funcs::pointerListener =
     PointerAxisStop,
     PointerAxisDiscrete
 };
-
 
 inline void knst_window_wayland_funcs::SeatCapabilities(
     void* data,
@@ -511,7 +521,6 @@ knst_window_wayland_funcs::seatListener =
     SeatName
 };
 
-
 inline void knst_window_wayland_funcs::KeyboardEnter(
     void* data,
     wl_keyboard* keyboard,
@@ -526,7 +535,7 @@ inline void knst_window_wayland_funcs::KeyboardEnter(
     knst_window* window = knst_window::find_from_surface(surface);
     if (!window) return;
 
-    window->m_knst_event.type = KNST_FOCUS_IN;          
+    window->m_knst_event.begin(KNST_WINDOW_EVENT_FOCUS_IN);
     window->m_knst_event.is_focused = true;
     KnstWindowSources::keyboard_focus_window = window;
     window->dispatch_current_event();
@@ -543,7 +552,7 @@ inline void knst_window_wayland_funcs::KeyboardLeave(
     auto* window = KnstWindowSources::keyboard_focus_window;
     if (!window) return;
 
-    window->m_knst_event.type = KNST_FOCUS_OUT;         
+    window->m_knst_event.begin(KNST_WINDOW_EVENT_FOCUS_OUT);
     window->m_knst_event.is_focused = false;
     window->dispatch_current_event();
     KnstWindowSources::keyboard_focus_window = nullptr;
@@ -617,9 +626,9 @@ inline void knst_window_wayland_funcs::KeyboardKey(
         );
 
         keycode = xkb_state_key_get_one_sym(KnstWindowSources::xkb_st, keycode);
-        
+
         if (keycode >= XKB_KEY_a && keycode <= XKB_KEY_z) {
-            keycode -= 32; 
+            keycode -= 32;
         }
         else if (keycode == XKB_KEY_udiaeresis) {
             keycode = XKB_KEY_Udiaeresis;
@@ -642,32 +651,31 @@ inline void knst_window_wayland_funcs::KeyboardKey(
     }
 
     auto& ev = window->m_knst_event;
-    
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-    if (window->m_knst_event.find_held_by_scancode(scancode)) {
-        ev.key_action = KNST_KEY_REPEAT;
-        ev.type = KNST_KEYBOARD_EVENT;
-        ev.key_code = keycode;
-        ev.scancode = scancode;
-       
-        return;
-    }
-    window->m_knst_event.add_held_key(keycode, scancode, current_time);
-    ev.type = KNST_KEYBOARD_EVENT;
-    ev.key_action = KNST_KEY_PRESS;
-    ev.key_code = keycode;
-    ev.scancode = scancode;
-    window->dispatch_current_event();
-} else {
-    ev.type = KNST_KEYBOARD_EVENT;
-    ev.key_code = keycode;
-    ev.scancode = scancode;
-    ev.key_action = KNST_KEY_RELEASE;
-    window->m_knst_event.remove_held_key(scancode);
-    window->dispatch_current_event();
-}
-}
 
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        if (window->find_held_by_scancode(scancode)) {
+            window->m_knst_event.begin(KNST_WINDOW_EVENT_KEYBOARD);
+            window->m_knst_event.key_action = KNST_WINDOW_KEY_ACTION_REPEAT;
+            window->m_knst_event.key_code   = keycode;
+            window->m_knst_event.scancode   = scancode;
+            window->dispatch_current_event();
+            return;
+        }
+        window->add_held_key(keycode, scancode, current_time);
+        window->m_knst_event.begin(KNST_WINDOW_EVENT_KEYBOARD);
+        window->m_knst_event.key_action = KNST_WINDOW_KEY_ACTION_PRESS;
+        window->m_knst_event.key_code   = keycode;
+        window->m_knst_event.scancode   = scancode;
+        window->dispatch_current_event();
+    } else {
+        window->remove_held_key(scancode);
+        window->m_knst_event.begin(KNST_WINDOW_EVENT_KEYBOARD);
+        window->m_knst_event.key_action = KNST_WINDOW_KEY_ACTION_RELEASE;
+        window->m_knst_event.key_code   = keycode;
+        window->m_knst_event.scancode   = scancode;
+        window->dispatch_current_event();
+    }
+}
 
 inline void knst_window_wayland_funcs::KeyboardModifiers(
     void* data,
@@ -683,12 +691,12 @@ inline void knst_window_wayland_funcs::KeyboardModifiers(
     auto* window = KnstWindowSources::keyboard_focus_window;
 
     int mods = 0;
-    if (mods_depressed & 1)  mods |= KNST_MOD_SHIFT;
-    if (mods_depressed & 4)  mods |= KNST_MOD_CONTROL;
-    if (mods_depressed & 8)  mods |= KNST_MOD_ALT;
-    if (mods_depressed & 64) mods |= KNST_MOD_SUPER;
-    if (mods_locked & 2)     mods |= KNST_MOD_CAPS_LOCK;
-    if (mods_locked & 16)    mods |= KNST_MOD_NUM_LOCK;
+    if (mods_depressed & 1)  mods |= KNST_WINDOW_MOD_SHIFT;
+    if (mods_depressed & 4)  mods |= KNST_WINDOW_MOD_CONTROL;
+    if (mods_depressed & 8)  mods |= KNST_WINDOW_MOD_ALT;
+    if (mods_depressed & 64) mods |= KNST_WINDOW_MOD_SUPER;
+    if (mods_locked & 2)     mods |= KNST_WINDOW_MOD_CAPS_LOCK;
+    if (mods_locked & 16)    mods |= KNST_WINDOW_MOD_NUM_LOCK;
 
     if (window)
         window->m_knst_event.mods = mods;
@@ -717,7 +725,6 @@ knst_window_wayland_funcs::keyboardListener =
     KeyboardRepeatInfo
 };
 
-
 inline void knst_window_wayland_funcs::WmBasePing(void* data, struct xdg_wm_base* base, uint32_t serial)
 {
     (void)data;
@@ -728,7 +735,6 @@ inline const xdg_wm_base_listener knst_window_wayland_funcs::wmBaseListener =
 {
     WmBasePing
 };
-
 
 inline void knst_window_wayland_funcs::DataSourceTarget(void*, struct wl_data_source*, const char*) {}
 
@@ -771,7 +777,7 @@ const wl_data_source_listener knst_window_wayland_funcs::dataSourceListener = {
 };
 
 inline void knst_window_wayland_funcs::DataOfferOffer(void* data, struct wl_data_offer* offer, const char* mime_type) {
-    if (offer == KnstWindowSources::pending_offer) { 
+    if (offer == KnstWindowSources::pending_offer) {
         if (strcmp(mime_type, "text/uri-list") == 0) {
             KnstWindowSources::pending_offer_has_uri_list = true;
         }
@@ -786,7 +792,6 @@ const wl_data_offer_listener knst_window_wayland_funcs::dataOfferListener = {
     DataOfferAction
 };
 
-
 static void knst_parse_uri_list_wayland(const knst_byte_string& uriList, knst_vector<knst_c16string>& out) {
     uint32_t pos = 0;
     while (pos < uriList.length()) {
@@ -800,7 +805,7 @@ static void knst_parse_uri_list_wayland(const knst_byte_string& uriList, knst_ve
             std::string path = uri.substr(7);
             for (size_t i = 0; i < path.length(); i++) {
                 if (path[i] == '%' && i + 2 < path.length()) {
-                    int hex;
+                    unsigned int hex;
                     sscanf(path.substr(i + 1, 2).c_str(), "%x", &hex);
                     path.replace(i, 3, 1, (char)hex);
                 }
@@ -811,11 +816,10 @@ static void knst_parse_uri_list_wayland(const knst_byte_string& uriList, knst_ve
     }
 }
 
-
 inline void knst_window_wayland_funcs::DataDeviceDataOffer(void*, struct wl_data_device*, struct wl_data_offer* offer) {
     if (offer) {
         wl_data_offer_add_listener(offer, &dataOfferListener, nullptr);
-    
+
         KnstWindowSources::pending_offer = offer;
         KnstWindowSources::pending_offer_has_uri_list = false;
     }
@@ -823,19 +827,18 @@ inline void knst_window_wayland_funcs::DataDeviceDataOffer(void*, struct wl_data
 
 inline void knst_window_wayland_funcs::DataDeviceEnter(
     void*, struct wl_data_device*, uint32_t serial,
-    struct wl_surface* surface, wl_fixed_t x, wl_fixed_t y, 
+    struct wl_surface* surface, wl_fixed_t x, wl_fixed_t y,
     struct wl_data_offer* offer)
 {
-   
-    if (KnstWindowSources::drag_offer && 
-        KnstWindowSources::drag_offer != offer) 
+    if (KnstWindowSources::drag_offer &&
+        KnstWindowSources::drag_offer != offer)
     {
         wl_data_offer_destroy(KnstWindowSources::drag_offer);
         KnstWindowSources::drag_offer = nullptr;
     }
     if (KnstWindowSources::drag_target_window) {
-        KnstWindowSources::drag_target_window->m_knst_event.type = KNST_FILE_DROP_LEAVE;
-        KnstWindowSources::drag_target_window->m_knst_event.drop_files.clear();
+        KnstWindowSources::drag_target_window->m_knst_event.type = KNST_WINDOW_EVENT_FILE_DROP_LEAVE;
+        KnstWindowSources::drag_target_window->m_knst_event.drop_files = nullptr;
         KnstWindowSources::drag_target_window->m_knst_event.drop_count = 0;
         KnstWindowSources::drag_target_window->dispatch_current_event();
     }
@@ -845,11 +848,10 @@ inline void knst_window_wayland_funcs::DataDeviceEnter(
     if (!window) return;
 
     if (!window->m_drag_drop_enabled) {
-       
         if (offer) {
             wl_data_offer_destroy(offer);
         }
-       
+
         if (offer == KnstWindowSources::pending_offer) {
             KnstWindowSources::pending_offer = nullptr;
             KnstWindowSources::pending_offer_has_uri_list = false;
@@ -879,8 +881,8 @@ inline void knst_window_wayland_funcs::DataDeviceEnter(
         wl_data_offer_accept(offer, serial, "text/uri-list");
     }
 
-    window->m_knst_event.type = KNST_FILE_DROP_ENTER;
-    window->m_knst_event.drop_files.clear();
+    window->m_knst_event.type = KNST_WINDOW_EVENT_FILE_DROP_ENTER;
+    window->m_knst_event.drop_files = nullptr;
     window->m_knst_event.drop_count = 0;
     window->m_knst_event.mouse_x = wl_fixed_to_int(x);
     window->m_knst_event.mouse_y = wl_fixed_to_int(y);
@@ -888,46 +890,39 @@ inline void knst_window_wayland_funcs::DataDeviceEnter(
 }
 
 inline void knst_window_wayland_funcs::DataDeviceLeave(void*, struct wl_data_device*) {
-   
-    
     auto* window = KnstWindowSources::drag_target_window;
     if (window) {
-        window->m_knst_event.type = KNST_FILE_DROP_LEAVE;
-        window->m_knst_event.drop_files.clear();
+        window->m_knst_event.type = KNST_WINDOW_EVENT_FILE_DROP_LEAVE;
+        window->m_knst_event.drop_files = nullptr;
         window->m_knst_event.drop_count = 0;
         window->dispatch_current_event();
     }
-    if (KnstWindowSources::drag_offer) { 
+    if (KnstWindowSources::drag_offer) {
         wl_data_offer_destroy(KnstWindowSources::drag_offer);
         KnstWindowSources::drag_offer = nullptr;
     }
     KnstWindowSources::drag_offer_has_uri_list = false;
-    KnstWindowSources::drag_target_window = nullptr; 
+    KnstWindowSources::drag_target_window = nullptr;
 }
 
-
-
 inline void knst_window_wayland_funcs::DataDeviceMotion(
-    void*, struct wl_data_device*, uint32_t, wl_fixed_t x, wl_fixed_t y) 
+    void*, struct wl_data_device*, uint32_t, wl_fixed_t x, wl_fixed_t y)
 {
     auto* window = KnstWindowSources::drag_target_window;
     if (!window) return;
-    
-    window->m_knst_event.type = KNST_FILE_DROP_MOVE;
+
+    window->m_knst_event.type = KNST_WINDOW_EVENT_FILE_DROP_MOVE;
     window->m_knst_event.mouse_x = wl_fixed_to_int(x);
     window->m_knst_event.mouse_y = wl_fixed_to_int(y);
     window->dispatch_current_event();
 }
 
 inline void knst_window_wayland_funcs::DataDeviceDrop(void*, struct wl_data_device*) {
-   
-    
     auto* window = KnstWindowSources::drag_target_window;
     if (!window) {
         return;
     }
-    
-    
+
     struct wl_data_offer* local_offer = KnstWindowSources::drag_offer;
     if (!local_offer) {
         return;
@@ -935,12 +930,10 @@ inline void knst_window_wayland_funcs::DataDeviceDrop(void*, struct wl_data_devi
 
     bool has_uri_list = KnstWindowSources::drag_offer_has_uri_list;
 
-    
     KnstWindowSources::drag_offer = nullptr;
     KnstWindowSources::drag_offer_has_uri_list = false;
 
     if (!has_uri_list) {
-        
         wl_data_offer_finish(local_offer);
         wl_data_offer_destroy(local_offer);
         KnstWindowSources::drag_target_window = nullptr;
@@ -949,16 +942,13 @@ inline void knst_window_wayland_funcs::DataDeviceDrop(void*, struct wl_data_devi
 
     int pipefd[2];
     if (pipe(pipefd) != 0) {
-       
         wl_data_offer_destroy(local_offer);
         return;
     }
 
-   
     wl_data_offer_receive(local_offer, "text/uri-list", pipefd[1]);
     close(pipefd[1]);
 
-  
     wl_display_roundtrip(KnstWindowSources::wayland_display);
 
     knst_byte_string result;
@@ -966,31 +956,25 @@ inline void knst_window_wayland_funcs::DataDeviceDrop(void*, struct wl_data_devi
     ssize_t n;
     while ((n = read(pipefd[0], buf, sizeof(buf))) > 0) {
         result.append(reinterpret_cast<const unsigned char*>(buf), (uint32_t)n);
-      
     }
     close(pipefd[0]);
 
-   
-
     knst_vector<knst_c16string> files;
     knst_parse_uri_list_wayland(result, files);
-  
 
-    window->m_knst_event.drop_files = files;
-    window->m_knst_event.drop_count = files.size();
-    window->m_knst_event.type = KNST_FILE_DROP;
+    window->m_knst_event.drop_files =
+        std::make_shared<knst_vector<knst_c16string>>(std::move(files));
+    window->m_knst_event.drop_count = (uint32_t)window->m_knst_event.drop_files->size();
+    window->m_knst_event.type = KNST_WINDOW_EVENT_FILE_DROP;
     window->dispatch_current_event();
-   
 
-  
     wl_data_offer_finish(local_offer);
     wl_data_offer_destroy(local_offer);
-    
+
     KnstWindowSources::drag_target_window = nullptr;
 }
 
 inline void knst_window_wayland_funcs::DataDeviceSelection(void*, struct wl_data_device*, struct wl_data_offer* offer) {
-    
     if (KnstWindowSources::selection_offer) {
         wl_data_offer_destroy(KnstWindowSources::selection_offer);
     }
@@ -1006,7 +990,4 @@ const wl_data_device_listener knst_window_wayland_funcs::dataDeviceListener = {
     DataDeviceSelection
 };
 
-
-
-
-#endif 
+#endif

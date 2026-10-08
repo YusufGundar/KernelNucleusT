@@ -1,10 +1,28 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+
+/*
+----------------------------
+knst_window_core.hpp
+----------------------------
+
+    The core structure of the window library is here—structures, classes, and the like...
+
+*/
+
+
+
 #pragma once
 
 
-class knst_window_opengl_content;
+
 
 #include <chrono>
-
+#include <memory>
 #if KNST_USING_LINUX_PLATFORM_X11
     #include <xcb/sync.h>
 #endif
@@ -18,7 +36,7 @@ class knst_window_opengl_content;
     class KnstWindowSources;    
     #include <mutex>
 
-    class knst_mobile_keyboard {
+    class knst_mobile_keyboard { // android keyborad
     private:
         friend KnstWindowSources;
         static inline JavaVM* s_javaVM = nullptr;
@@ -73,7 +91,6 @@ class knst_window_opengl_content;
             right,
             top,
             bottom,
-
             top_left,
             top_right,
             bottom_left,
@@ -91,7 +108,7 @@ class knst_window;
 
 class KnstWindowSources{
 
-    private:
+        public:
         friend struct knst_window_event_system;
         friend class knst_window;
         
@@ -168,7 +185,6 @@ class KnstWindowSources{
             static inline uint32_t keyboard_serial = 0;
             friend class knst_window_wayland_funcs;
             friend inline void knst_display::refresh_screens() noexcept;
-            friend class knst_window_opengl_content;
             
             static inline wl_registry * registery = nullptr;
             static inline wl_compositor * compositor = nullptr;
@@ -182,13 +198,11 @@ class KnstWindowSources{
             static inline xkb_context* xkb_ctx = nullptr;                   
             static inline xkb_keymap*  xkb_map = nullptr;                 
             static inline xkb_state*   xkb_st  = nullptr;                  
-            
             static inline struct zwp_pointer_constraints_v1* pointer_constraints = nullptr;
             static inline struct zwp_relative_pointer_manager_v1* relative_pointer_manager = nullptr;
             static inline struct zwp_locked_pointer_v1* locked_pointer = nullptr;
             static inline struct zwp_confined_pointer_v1* confined_pointer = nullptr;
 
-            
             
 
             static inline wl_cursor_theme* cursor_theme = nullptr;
@@ -199,7 +213,6 @@ class KnstWindowSources{
             static inline wl_cursor* cursor_ns = nullptr;
             static inline wl_cursor* cursor_nwse = nullptr;
             static inline wl_cursor* cursor_nesw = nullptr;
-
             static inline void RegistryAdd(void* data,wl_registry* registry,uint32_t name, const char* interface,uint32_t version){
     
 
@@ -281,7 +294,6 @@ class KnstWindowSources{
             
             friend KNST_FORCE_INLINE void handle_android_cmd(int32_t cmd);
             friend KNST_FORCE_INLINE int32_t handle_android_input(AInputEvent* event);
-            friend class knst_window_opengl_content;
 
             friend class knst_display;
             static inline struct android_app* m_app;
@@ -355,8 +367,6 @@ class KnstWindowSources{
                 m_wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS | CS_OWNDC;
                 RegisterClassExW(&m_wc);    
             
-                
-
 
             #elif KNST_USING_LINUX_PLATFORM_X11
 
@@ -620,6 +630,7 @@ class KnstWindowSources{
                 m_ATOM = 0;
                 m_PRIMARY = 0;
                 
+
                 m_NET_WM_MOVERESIZE = 0;
                 m_XdndAware = 0;
                 m_XdndEnter = 0;
@@ -636,7 +647,7 @@ class KnstWindowSources{
 
             #elif KNST_USING_LINUX_PLATFORM_WAYLAND
     
-                // === EKLENEN: wl_output proxy'lerini temizle (leak fix) ===
+
                 for (auto& mon : knst_display::m_monitor_list) {
                     if (mon.output) {
                         wl_output_destroy(mon.output);
@@ -644,7 +655,7 @@ class KnstWindowSources{
                     }
                 }
                 knst_display::m_monitor_list.clear();
-                // === SON ===
+
 
                 if (pointer)
                 {
@@ -660,7 +671,7 @@ class KnstWindowSources{
                 if (xkb_ctx) { xkb_context_unref(xkb_ctx); xkb_ctx = nullptr; }
                 keyboard_focus_window = nullptr;
 
-                // === EKLENEN: Wayland pointer proxy'lerini temizle (leak fix) ===
+      
                 if (locked_pointer) {
                     zwp_locked_pointer_v1_destroy(locked_pointer);
                     locked_pointer = nullptr;
@@ -677,7 +688,7 @@ class KnstWindowSources{
                     zwp_relative_pointer_manager_v1_destroy(relative_pointer_manager);
                     relative_pointer_manager = nullptr;
                 }
-                // === SON ===
+
 
                 if (cursor_surface)
                 {
@@ -777,227 +788,163 @@ class KnstWindowSources{
 
 
 
-template<typename T>
-KNST_FORCE_INLINE void knst_default_redraw_callback(T& window, void* user_data) {
-   
-    (void)window;
-    (void)user_data;
-}
+
+struct knst_window_event {
+
+    #ifndef KNST_MAX_HELD_KEYS
+    #define KNST_MAX_HELD_KEYS 8
+    #endif
 
 
-struct knst_window_event{
-
-    private:
-
-
-
-    
-struct knst_held_key {
-    int key_code = 0;
-    int scancode = 0;
-    uint32_t last_key_time = 0;
-    uint32_t last_repeat_time = 0;
-    bool repeat_initialized = false;
-    bool active = false;
-};
-
-#ifndef KNST_MAX_HELD_KEYS
-#define KNST_MAX_HELD_KEYS 8
-#endif
-
-// new event system private class user dont need
-knst_held_key m_held_keys[KNST_MAX_HELD_KEYS];
-
-KNST_FORCE_INLINE knst_held_key* find_held_by_scancode(int scancode) noexcept {
-    for (auto& hk : m_held_keys)
-        if (hk.active && hk.scancode == scancode) return &hk;
-    return nullptr;
-}
-
-KNST_FORCE_INLINE knst_held_key* add_held_key(int key_code, int scancode, uint32_t now) noexcept {
-    for (auto& hk : m_held_keys) {
-        if (!hk.active) {
-            hk = {key_code, scancode, now, now, false, true};
-            return &hk;
-        }
-    }
-    return nullptr; // We disregard it.
-}
-
-KNST_FORCE_INLINE void remove_held_key(int scancode) noexcept {
-    for (auto& hk : m_held_keys)
-        if (hk.active && hk.scancode == scancode) hk.active = false;
-}
+    struct knst_held_key {
+        int32_t key_code = 0;
+        int32_t scancode = 0;
+        uint32_t last_key_time = 0;
+        uint32_t last_repeat_time = 0;
+        bool repeat_initialized = false;
+        bool active = false;
+    };
 
 
     #if KNST_USING_PLATFORM_WINDOWS
-        friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
+        friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(
+            HWND, UINT, WPARAM, LPARAM) noexcept;
     #elif KNST_USING_LINUX_PLATFORM_X11
-        friend KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic_event_t* ev) noexcept;
+        friend KNST_FORCE_INLINE void load_native_to_knst_event(
+            knst_window&, xcb_generic_event_t*) noexcept;
     #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-
         friend class knst_window_wayland_funcs;
         friend class knst_window;
-
     #elif defined(KNST_USING_PLATFORM_ANDROID)
-
-        friend KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* event);
-
+        friend KNST_FORCE_INLINE int32_t input_callback(
+            struct android_app*, AInputEvent*);
     #endif
+
+
+
     friend class knst_window_event_system;
     friend class knst_window;
 
-        uint32_t m_last_key_time = 0;
-        int m_last_key = 0;   
-        bool m_key_held = false;
-        int m_last_scancode = 0;
+    #ifndef KNST_WINDOW_KEY_REPEAT_DELAY
+        #define KNST_WINDOW_KEY_REPEAT_DELAY 100
+    #endif
+    #ifndef KNST_WINDOW_KEY_REPEAT_INTERVAL
+        #define KNST_WINDOW_KEY_REPEAT_INTERVAL 23
+    #endif
 
-        // The repeat timer, however, may vary from system to system.
-        uint32_t m_last_repeat_time = 0;
-        bool m_repeat_initialized = false;
-        static constexpr uint32_t KEY_REPEAT_DELAY = 150;
-        static constexpr uint32_t KEY_REPEAT_INTERVAL = 5;
-
-    public:
+    static constexpr uint32_t KEY_REPEAT_DELAY = KNST_WINDOW_KEY_REPEAT_DELAY;
+    static constexpr uint32_t KEY_REPEAT_INTERVAL = KNST_WINDOW_KEY_REPEAT_INTERVAL;
 
 
-        #if defined(KNST_USING_PLATFORM_ANDROID)
-   
-            int pointer_count = 0;
-            float pointer_x[10] = {0}; 
-            float pointer_y[10] = {0};
-            int pointer_id[10] = {0};
-            int touch_action = 0;  
-            
-            int content_left = 0;
-            int content_top = 0;
-            int content_right = 0;
-            int content_bottom = 0;
-            
-        
-            int orientation = 0;  // 0=portrait, 1=landscape
-            char language[4] = {0};
-            char country[4] = {0};
-            bool is_night_mode = false;
-            
-            // Memory status
-            bool is_low_memory = false;
-            
-            // Screen density
-            float density = 1.0f;
-            int screen_width_dp = 0;
-            int screen_height_dp = 0;
-            
-            // State status
-            void* saved_state = nullptr;
-            size_t saved_state_size = 0;
-        #endif
+    uint32_t type = 0;
+    uint32_t timestamp_ms = 0;
 
 
+    int32_t mods = 0;
+    int32_t mouse_x = 0;
+    int32_t mouse_y = 0;
+    int32_t mouse_root_x = 0;
+    int32_t mouse_root_y = 0;
+    int32_t window_width = 0;
+    int32_t window_height = 0;
+    int32_t window_root_x = 0;
+    int32_t window_root_y = 0;
+    bool is_focused = false;
+    bool mouse_on_window = false;
+    bool is_full_screen = false;
+    bool is_maximized = false;
+    bool is_minimized = false;
 
 
-
-        int type = 0;
-        int key_code = 0;       
-        int scancode = 0;       
-        int key_action = 0;         
-        int mods = 0;            
-        bool is_focused = 0;
-        bool mouse_on_window = 0;
-
-        int mouse_x = 0;
-        int mouse_y = 0;   
-
-        int mouse_root_x = 0;
-        int mouse_root_y = 0; 
-
-        int mouse_button = 0;              
-        int mouse_action = 0;               
-
-        int mouse_scroll_delta = 0;               
-    
-        int window_width = 0;
-        int window_height = 0; 
-
-        int window_root_x = 0;
-        int window_root_y = 0;
-
-       
+    union {
+        struct {
+            int32_t mouse_button;
+            int32_t mouse_action;
+            int32_t mouse_scroll_delta;
+        };
+        struct {
+            int32_t key_code;
+            int32_t scancode;
+            int32_t key_action;
+        };
+    };
 
 
-        bool is_full_screen = false;
+    std::shared_ptr<knst_vector<knst_c16string>> drop_files;
+    uint32_t drop_count = 0;
 
-        bool is_minimized = false;
-        bool is_maximized = false;
 
-        knst_vector<knst_c16string>drop_files;
-        
-        uint32_t drop_count = 0;
+    #if defined(KNST_USING_PLATFORM_ANDROID)
+        int pointer_count = 0;
+
+        float pointer_x[10] = {0};
+        float pointer_y[10] = {0};
+        int pointer_id[10] = {0};
+
+
+        int touch_action = 0;
+        int content_left = 0;
+        int content_top = 0;
+        int content_right = 0;
+        int content_bottom = 0;
+        int orientation = 0;
 
 
 
+        char language[4] = {0};
+        char country[4] = {0};
+        bool is_night_mode = false;
+        bool is_low_memory = false;
+        float density = 1.0f;
+        int screen_width_dp = 0;
+        int screen_height_dp = 0;
+        void* saved_state = nullptr;
+        size_t saved_state_size = 0;
+    #endif
 
+    KNST_FORCE_INLINE void begin(uint32_t ev_type) noexcept {
+        type = ev_type;
+        timestamp_ms = KnstWindowSources::get_current_time_ms();
 
-    
-        KNST_FORCE_INLINE void clear()noexcept{
-            key_code = 0;
-            scancode = 0;
-            key_action = 0;
-            mouse_button = 0;
-            mouse_action = 0;
-            mouse_scroll_delta = 0;
-            type = 0;        
-            
-        }
+        mouse_button = 0;
+        mouse_action = 0;
 
+        mouse_scroll_delta = 0;
 
+        key_code = 0;
+        scancode = 0;
+        key_action = 0;
+        drop_files.reset();
+        drop_count = 0;
+    }
 };
 
 
-//=======================**
-//category-specific
-//=======================**
-
-#ifndef KNST_MOUSE_EVENT_SLOTS
-    #define KNST_MOUSE_EVENT_SLOTS 8
-#endif
-#ifndef KNST_KEYBOARD_EVENT_SLOTS
-    #define KNST_KEYBOARD_EVENT_SLOTS 8
-#endif
-#ifndef KNST_FILEDROP_EVENT_SLOTS
-    #define KNST_FILEDROP_EVENT_SLOTS 4
-#endif
-#ifndef KNST_TOUCH_EVENT_SLOTS
-    #define KNST_TOUCH_EVENT_SLOTS 8
-#endif
 
 template<size_t N>
-struct knst_event_mini_ring {
-    static_assert((N & (N - 1)) == 0, "KNST slot count must be a power of two");
+struct knst_event_ring {
+    static_assert((N & (N - 1)) == 0, "KNST event ring size must be a power of two");
 
     knst_window_event data[N];
     size_t count = 0;
-    size_t head = 0;
+    size_t head  = 0;
 
     KNST_FORCE_INLINE void push(const knst_window_event& ev) noexcept {
         data[head] = ev;
         head = (head + 1) & (N - 1);
-        if (count < N) count++;
-        
+        if (count < N) ++count;
     }
 
     KNST_FORCE_INLINE size_t size() const noexcept { return count; }
 
-   
-    KNST_FORCE_INLINE const knst_window_event& at(size_t logical_index) const noexcept {
+    KNST_FORCE_INLINE const knst_window_event& at(size_t i) const noexcept {
         size_t start = (head + N - count) & (N - 1);
-        return data[(start + logical_index) & (N - 1)];
+        return data[(start + i) & (N - 1)];
     }
 
     KNST_FORCE_INLINE void clear() noexcept {
         count = 0;
-        head = 0;
-       
+        head  = 0;
     }
 };
 
@@ -1035,7 +982,7 @@ private:
     #if KNST_USING_PLATFORM_WINDOWS
 
         friend KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept;
-        friend class knst_window_opengl_content;
+       
         friend class knst_window_event_system;
 
         HWND m_window;
@@ -1052,7 +999,7 @@ private:
     #elif KNST_USING_LINUX_PLATFORM_X11
 
         friend KNST_FORCE_INLINE void load_native_to_knst_event(knst_window& window,xcb_generic_event_t* ev) noexcept;
-        friend class knst_window_opengl_content;
+    
         friend struct knst_window_event_system;
         xcb_window_t m_window = 0;
         xcb_window_t m_xdnd_source = 0;
@@ -1080,7 +1027,7 @@ private:
         
 
     #elif KNST_USING_LINUX_PLATFORM_WAYLAND
-        friend class knst_window_opengl_content;
+        
         friend class knst_window_wayland_funcs;
         friend struct knst_window_event_system;
         
@@ -1134,7 +1081,8 @@ private:
         
     #elif defined(KNST_USING_PLATFORM_ANDROID)
 
-        friend class knst_window_opengl_content;
+       
+        friend struct knst_window_event_system;
         friend KNST_FORCE_INLINE void cmd_callback(struct android_app* app, int32_t cmd);
         friend KNST_FORCE_INLINE int32_t input_callback(struct android_app* app, AInputEvent* event);
         
@@ -1143,39 +1091,27 @@ private:
 
 
 
-    double m_mouse_x = 0.0;
-    double m_mouse_y = 0.0;
+    
     bool m_input_transparent = false;
 
     
     knst_window_event m_knst_event;
 
-    // mutually sufficient categories
-    knst_window_event m_resize_event;
-    knst_window_event m_move_event;
-    knst_window_event m_focus_event;
-    knst_window_event m_window_state_event; 
-    knst_window_event m_expose_event;
-    knst_window_event m_misc_event; 
-    knst_window_event m_lifecycle_event; 
+    knst_window_event::knst_held_key m_held_keys[KNST_MAX_HELD_KEYS];
 
-  
-    knst_event_mini_ring<KNST_MOUSE_EVENT_SLOTS>    m_mouse_events;
-    knst_event_mini_ring<KNST_KEYBOARD_EVENT_SLOTS> m_keyboard_events;
-    knst_event_mini_ring<KNST_FILEDROP_EVENT_SLOTS> m_filedrop_events;
-    knst_event_mini_ring<KNST_TOUCH_EVENT_SLOTS>    m_touch_events;
+    knst_event_ring<256> m_events;
 
     knst_c16string m_title;
 
     bool m_should_close;
+
     bool m_disconnected = false;
 
     float m_opacity;
 
     void* m_user_data;
-    
 
-    void (*m_redraw_callback)(knst_window&, void*);
+    knst_function m_redraw_callback;
 
     knst_c16string clipboard_text;
 
@@ -1188,15 +1124,16 @@ private:
 
 
 public:
+    double m_mouse_x = 0.0;
+    double m_mouse_y = 0.0;
 
 
-
-            #if KNST_USING_LINUX_PLATFORM_X11
-                 xcb_sync_counter_t m_syncCounter = XCB_NONE;
-                xcb_sync_int64_t m_syncPendingValue{0, 0};
-                bool m_syncHasPendingValue = false;
-                bool m_syncRequestReceived = false;
-            #endif
+    #if KNST_USING_LINUX_PLATFORM_X11
+        xcb_sync_counter_t m_syncCounter = XCB_NONE;
+        xcb_sync_int64_t m_syncPendingValue{0, 0};
+        bool m_syncHasPendingValue = false;
+        bool m_syncRequestReceived = false;
+    #endif
     
     KNST_FORCE_INLINE const knst_c16string& get_clipboard() const noexcept{
         return clipboard_text;
@@ -1250,21 +1187,19 @@ public:
 
     #endif
 
+
     template<typename Callback>
     KNST_FORCE_INLINE void set_redraw_callback(Callback&& callback) noexcept {
-      
-        m_redraw_callback = std::forward<Callback>(callback);
-      
-    }
+        auto* self = this;
 
-  
-    KNST_FORCE_INLINE void set_redraw_callback(void (*callback)(knst_window&, void*)) noexcept {
-        m_redraw_callback = callback ? callback : knst_default_redraw_callback<knst_window>;
+        m_redraw_callback = [self, cb = std::forward<Callback>(callback)]() {
+            cb(*self, self->m_user_data);
+        };
     }
 
    
     KNST_FORCE_INLINE void call_redraw_callback() noexcept {
-        m_redraw_callback(*this, m_user_data);
+        if (m_redraw_callback) m_redraw_callback();
     }
     
 
@@ -1272,12 +1207,12 @@ public:
         destroy();
     }
     #if !defined(KNST_USING_PLATFORM_ANDROID)
-    KNST_FORCE_INLINE knst_window(int width = 800, int height = 800,knst_c16string title = u"Knst_Window",int root_x = KNST_DEFAULT, int root_y = KNST_DEFAULT, 
+    KNST_FORCE_INLINE knst_window(int width = 800, int height = 800,knst_c16string title = u"Knst_Window",int root_x = KNST_WINDOW_DEFAULT, int root_y = KNST_WINDOW_DEFAULT, 
         const knst_monitor& monitor = knst_monitor()) noexcept
         : m_title(title), 
           m_should_close(false), 
           m_opacity(1.0f),
-          m_redraw_callback(knst_default_redraw_callback<knst_window>),
+          m_redraw_callback(),
           m_custom_title_bar_height(-1),m_draw_custom_title_bar(false) {
         
 
@@ -1301,9 +1236,15 @@ public:
     }
     #else
 
-    KNST_FORCE_INLINE knst_window(int width = KNST_DEFAULT, int height = KNST_DEFAULT,knst_c16string title = u"Knst_Window",int root_x = KNST_DEFAULT, int root_y = KNST_DEFAULT, 
-        const knst_monitor& monitor = knst_monitor()){
-
+    KNST_FORCE_INLINE knst_window(int width = KNST_WINDOW_DEFAULT, int height = KNST_WINDOW_DEFAULT,knst_c16string title = u"Knst_Window",int root_x = KNST_WINDOW_DEFAULT, int root_y = KNST_WINDOW_DEFAULT, 
+        const knst_monitor& monitor = knst_monitor())
+        : m_title(title),
+          m_should_close(false),
+          m_opacity(1.0f),
+          m_user_data(nullptr),
+          m_custom_title_bar_height(-1),
+          m_draw_custom_title_bar(false) {
+            (void)width; (void)height; (void)root_x; (void)root_y; (void)monitor;
         }
 
     #endif
@@ -1312,179 +1253,120 @@ public:
     knst_window(const knst_window&) = delete;
     knst_window& operator=(const knst_window&) = delete;
 
-        KNST_FORCE_INLINE knst_window(knst_window&& other) noexcept;
+    KNST_FORCE_INLINE knst_window(knst_window&& other) noexcept;
 
 
 
-        KNST_FORCE_INLINE knst_window& operator=(knst_window&& other) noexcept;
+    KNST_FORCE_INLINE knst_window& operator=(knst_window&& other) noexcept;
 
-    KNST_FORCE_INLINE const knst_window_event& get_window_event_handle() const noexcept{
-        return m_knst_event;
+    
+    
+
+
+
+
+    KNST_FORCE_INLINE size_t event_count() const noexcept {
+        return m_events.size();
     }
 
-    KNST_FORCE_INLINE void clear_temporary_events() noexcept{
-        m_knst_event.clear();
-
-        m_resize_event.clear();
-        m_move_event.clear();
-        m_focus_event.clear();
-        m_window_state_event.clear();
-        m_expose_event.clear();
-        m_misc_event.clear();
-        m_lifecycle_event.clear();
-
-        m_mouse_events.clear();
-        m_keyboard_events.clear();
-        m_filedrop_events.clear();
-        m_touch_events.clear();
+    KNST_FORCE_INLINE const knst_window_event& get_window_event_handle(size_t i) const noexcept {
+        return m_events.at(i);
     }
 
-  
-    KNST_FORCE_INLINE void push_resize_event(const knst_window_event& ev) noexcept { m_resize_event = ev; }
-    KNST_FORCE_INLINE void push_move_event(const knst_window_event& ev) noexcept { m_move_event = ev; }
-    KNST_FORCE_INLINE void push_focus_event(const knst_window_event& ev) noexcept { m_focus_event = ev; }
-    KNST_FORCE_INLINE void push_window_state_event(const knst_window_event& ev) noexcept { m_window_state_event = ev; }
-    KNST_FORCE_INLINE void push_expose_event(const knst_window_event& ev) noexcept { m_expose_event = ev; }
-    KNST_FORCE_INLINE void push_misc_event(const knst_window_event& ev) noexcept { m_misc_event = ev; }
-    KNST_FORCE_INLINE void push_lifecycle_event(const knst_window_event& ev) noexcept { m_lifecycle_event = ev; }
+    KNST_FORCE_INLINE void clear_events() noexcept {
+        m_events.clear();
+    }
 
-    KNST_FORCE_INLINE void push_mouse_event(const knst_window_event& ev) noexcept { m_mouse_events.push(ev); }
-    KNST_FORCE_INLINE void push_keyboard_event(const knst_window_event& ev) noexcept { m_keyboard_events.push(ev); }
-    KNST_FORCE_INLINE void push_filedrop_event(const knst_window_event& ev) noexcept { m_filedrop_events.push(ev); }
-    KNST_FORCE_INLINE void push_touch_event(const knst_window_event& ev) noexcept { m_touch_events.push(ev); }
+    
 
-  
-    KNST_FORCE_INLINE void dispatch_event(const knst_window_event& ev) noexcept {
-        switch (ev.type) {
-            case KNST_UNKNOWN:
-                return;
+    KNST_FORCE_INLINE knst_window_event::knst_held_key* 
+    find_held_by_scancode(int sc) noexcept {
+        for (auto& hk : m_held_keys)
+            if (hk.active && hk.scancode == sc) return &hk;
+        return nullptr;
+    }
 
-            case KNST_MOUSE_EVENT:
-            case KNST_MOUSE_SCROLL:
-            case KNST_MOTION_NOTIFY:
-            case KNST_ENTER_NOTIFY:
-            case KNST_LEAVE_NOTIFY:
-                push_mouse_event(ev);
-                return;
-
-            case KNST_KEYBOARD_EVENT:
-                push_keyboard_event(ev);
-                return;
-
-            case KNST_FILE_DROP:
-            case KNST_FILE_DROP_ENTER:
-            case KNST_FILE_DROP_MOVE:
-            case KNST_FILE_DROP_LEAVE:
-                push_filedrop_event(ev);
-                return;
-
-            case KNST_WINDOW_RESIZE:
-                push_resize_event(ev);
-                return;
-
-            case KNST_WINDOW_MOVE:
-                push_move_event(ev);
-                return;
-
-            case KNST_FOCUS_IN:
-            case KNST_FOCUS_OUT:
-                push_focus_event(ev);
-                return;
-
-            case KNST_WINDOW_MAXIMIZE:
-            case KNST_WINDOW_MINIMIZE:
-            case KNST_WINDOW_RESTORE:
-            case KNST_WINDOW_FULL_SCREEN:
-                push_window_state_event(ev);
-                return;
-
-            case KNST_EXPOSE:
-                push_expose_event(ev);
-                return;
-
-            #if defined(KNST_USING_PLATFORM_ANDROID)
-            case KNST_MOBILE_TOUCH_EVENT:
-                push_touch_event(ev);
-                return;
-
-            case KNST_MOBILE_BACK_PRESS:
-            case KNST_MOBILE_HOME_PRESS:
-            case KNST_MOBILE_MENU_PRESS:
-            case KNST_MOBILE_SEARCH_PRESS:
-            case KNST_MOBILE_APP_SWITCH:
-            case KNST_MOBILE_RECENT_APPS:
-            case KNST_MOBILE_VOLUME_UP:
-            case KNST_MOBILE_VOLUME_DOWN:
-            case KNST_MOBILE_VOLUME_MUTE:
-            case KNST_MOBILE_MEDIA_PLAY_PAUSE:
-            case KNST_MOBILE_MEDIA_STOP:
-            case KNST_MOBILE_MEDIA_NEXT:
-            case KNST_MOBILE_MEDIA_PREVIOUS:
-            case KNST_MOBILE_MEDIA_REWIND:
-            case KNST_MOBILE_MEDIA_FAST_FORWARD:
-            case KNST_MOBILE_MEDIA_RECORD:
-            case KNST_MOBILE_MEDIA_PAUSE:
-            case KNST_MOBILE_POWER:
-            case KNST_MOBILE_CAMERA:
-            case KNST_MOBILE_HELP:
-            case KNST_MOBILE_SETTINGS:
-            case KNST_MOBILE_SLEEP:
-            case KNST_MOBILE_WAKEUP:
-            case KNST_MOBILE_ASSIST:
-            case KNST_MOBILE_BOOKMARK:
-            case KNST_MOBILE_CALCULATOR:
-            case KNST_MOBILE_CALENDAR:
-            case KNST_MOBILE_CONTACTS:
-            case KNST_MOBILE_EXPLORER:
-            case KNST_MOBILE_MUSIC:
-                push_keyboard_event(ev);
-                return;
-
-            case KNST_WINDOW_LOST:
-            case KNST_LOW_MEMORY:
-            case KNST_APP_STARTED:
-            case KNST_APP_RESUMED:
-            case KNST_APP_PAUSED:
-            case KNST_APP_STOPPED:
-            case KNST_SAVE_STATE:
-            case KNST_CONFIG_CHANGED:
-            case KNST_CONTENT_RECT_CHANGED:
-            case KNST_INPUT_CHANGED:
-                push_lifecycle_event(ev);
-                return;
-            #endif
-
-            default:
-                push_misc_event(ev);
-                return;
+    KNST_FORCE_INLINE knst_window_event::knst_held_key* 
+    add_held_key(int kc, int sc, uint32_t now) noexcept {
+        for (auto& hk : m_held_keys) {
+            if (!hk.active) {
+                hk.key_code = kc;
+                hk.scancode = sc;
+                hk.last_key_time = now;
+                hk.last_repeat_time = now;
+                hk.repeat_initialized = false;
+                hk.active = true;
+                return &hk;
+            }
         }
+        return nullptr;
+    }
+
+    KNST_FORCE_INLINE void remove_held_key(int sc) noexcept {
+        for (auto& hk : m_held_keys)
+            if (hk.active && hk.scancode == sc) hk.active = false;
+    }
+
+    KNST_FORCE_INLINE void clear_held_keys() noexcept {
+        for (auto& hk : m_held_keys) hk.active = false;
+    }
+
+    KNST_FORCE_INLINE bool is_key_held(int kc) const noexcept {
+        for (const auto& hk : m_held_keys)
+            if (hk.active && hk.key_code == kc) return true;
+        return false;
+    }
+
+    KNST_FORCE_INLINE bool is_caps_lock_on() const noexcept {
+            #if KNST_USING_PLATFORM_WINDOWS
+                return (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+            #elif KNST_USING_LINUX_PLATFORM_X11
+                XkbStateRec state;
+                if (XkbGetState(KnstWindowSources::m_xlib_display, XkbUseCoreKbd, &state) == Success) {
+                    return (state.locked_mods & LockMask) != 0;
+                }
+                return false;
+            #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+                if (!KnstWindowSources::xkb_st || !KnstWindowSources::xkb_map) return false;
+                xkb_mod_index_t idx = xkb_keymap_mod_get_index(KnstWindowSources::xkb_map, "Lock");
+                if (idx == XKB_MOD_INVALID) return false;
+                xkb_mod_mask_t locked = xkb_state_serialize_mods(
+                    KnstWindowSources::xkb_st, XKB_STATE_MODS_LOCKED);
+                return (locked & (1u << idx)) != 0;
+            #else
+                return false;
+            #endif
+    }
+
+    KNST_FORCE_INLINE bool is_num_lock_on() const noexcept {
+            #if KNST_USING_PLATFORM_WINDOWS
+                return (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
+            #elif KNST_USING_LINUX_PLATFORM_X11
+                XkbStateRec state;
+                if (XkbGetState(KnstWindowSources::m_xlib_display, XkbUseCoreKbd, &state) == Success) {
+                    return (state.locked_mods & Mod2Mask) != 0;
+                }
+                return false;
+            #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+                if (!KnstWindowSources::xkb_st || !KnstWindowSources::xkb_map) return false;
+                xkb_mod_index_t idx = xkb_keymap_mod_get_index(KnstWindowSources::xkb_map, "Mod2");
+                if (idx == XKB_MOD_INVALID) return false;
+                xkb_mod_mask_t locked = xkb_state_serialize_mods(
+                    KnstWindowSources::xkb_st, XKB_STATE_MODS_LOCKED);
+                return (locked & (1u << idx)) != 0;
+            #else
+                return false;
+            #endif
+    }
+
+    KNST_FORCE_INLINE void dispatch_event(const knst_window_event& ev) noexcept {
+        if (ev.type == KNST_WINDOW_EVENT_UNKNOWN) return;
+        m_events.push(ev);
     }
 
     KNST_FORCE_INLINE void dispatch_current_event() noexcept {
         dispatch_event(m_knst_event);
     }
-
-   
-    KNST_FORCE_INLINE const knst_window_event& get_resize_event() const noexcept { return m_resize_event; }
-    KNST_FORCE_INLINE const knst_window_event& get_move_event() const noexcept { return m_move_event; }
-    KNST_FORCE_INLINE const knst_window_event& get_focus_event() const noexcept { return m_focus_event; }
-    KNST_FORCE_INLINE const knst_window_event& get_window_state_event() const noexcept { return m_window_state_event; }
-    KNST_FORCE_INLINE const knst_window_event& get_expose_event() const noexcept { return m_expose_event; }
-    KNST_FORCE_INLINE const knst_window_event& get_misc_event() const noexcept { return m_misc_event; }
-    KNST_FORCE_INLINE const knst_window_event& get_lifecycle_event() const noexcept { return m_lifecycle_event; }
-
-    KNST_FORCE_INLINE size_t get_mouse_event_count() const noexcept { return m_mouse_events.size(); }
-    KNST_FORCE_INLINE const knst_window_event& get_mouse_event(size_t i) const noexcept { return m_mouse_events.at(i); }
-
-    KNST_FORCE_INLINE size_t get_touch_event_count() const noexcept { return m_touch_events.size(); }
-    KNST_FORCE_INLINE const knst_window_event& get_touch_event(size_t i) const noexcept { return m_touch_events.at(i); }
-
-    KNST_FORCE_INLINE size_t get_keyboard_event_count() const noexcept { return m_keyboard_events.size(); }
-    KNST_FORCE_INLINE const knst_window_event& get_keyboard_event(size_t i) const noexcept { return m_keyboard_events.at(i); }
-
-    KNST_FORCE_INLINE size_t get_filedrop_event_count() const noexcept { return m_filedrop_events.size(); }
-    KNST_FORCE_INLINE const knst_window_event& get_filedrop_event(size_t i) const noexcept { return m_filedrop_events.at(i); }
-
 
     KNST_FORCE_INLINE void should_close() noexcept{
         m_should_close = true;
@@ -1538,15 +1420,15 @@ public:
     void set_cursor(uint16_t cursor_type) noexcept;
     void set_bmp_cursor(const knst_byte_string& data,int width, int height, int hot_x = -1, int hot_y = -1) noexcept;
     
-    void set_minimum_size(int width = KNST_DEFAULT, int height = KNST_DEFAULT) noexcept;
-    void set_maximum_size(int width = KNST_DEFAULT, int height = KNST_DEFAULT) noexcept;
+    void set_minimum_size(int width = KNST_WINDOW_DEFAULT, int height = KNST_WINDOW_DEFAULT) noexcept;
+    void set_maximum_size(int width = KNST_WINDOW_DEFAULT, int height = KNST_WINDOW_DEFAULT) noexcept;
   
     void reset_cursor() noexcept;
 
-    void resize(int width = KNST_DEFAULT, int height = KNST_DEFAULT) noexcept;
+    void resize(int width = KNST_WINDOW_DEFAULT, int height = KNST_WINDOW_DEFAULT) noexcept;
     void set_cursor_mode(int mode) noexcept;
-    void set_cursor_pos_on_window(int x = KNST_DEFAULT, int y = KNST_DEFAULT) noexcept;
-    void set_cursor_pos_global(int root_x = KNST_DEFAULT, int root_y = KNST_DEFAULT) noexcept;
+    void set_cursor_pos_on_window(int x = KNST_WINDOW_DEFAULT, int y = KNST_WINDOW_DEFAULT) noexcept;
+    void set_cursor_pos_global(int root_x = KNST_WINDOW_DEFAULT, int root_y = KNST_WINDOW_DEFAULT) noexcept;
     void set_clipboard(const knst_c16string& text) noexcept;
     void request_clipboard() noexcept;
     void set_drag_drop_status(bool enabled) noexcept;
@@ -1571,26 +1453,25 @@ public:
 
 
 
-    KNST_FORCE_INLINE knst_window::knst_window(knst_window&& other) noexcept
-        : m_mouse_x(other.m_mouse_x), m_mouse_y(other.m_mouse_y),
-          m_input_transparent(other.m_input_transparent),
-          m_knst_event(other.m_knst_event),
-          m_resize_event(other.m_resize_event), m_move_event(other.m_move_event),
-          m_focus_event(other.m_focus_event), m_window_state_event(other.m_window_state_event),
-          m_expose_event(other.m_expose_event), m_misc_event(other.m_misc_event),
-          m_lifecycle_event(other.m_lifecycle_event),
-          m_mouse_events(other.m_mouse_events), m_keyboard_events(other.m_keyboard_events),
-          m_filedrop_events(other.m_filedrop_events), m_touch_events(other.m_touch_events),
-          m_title(std::move(other.m_title)),
-          m_should_close(other.m_should_close), m_disconnected(other.m_disconnected),
-          m_opacity(other.m_opacity), m_user_data(other.m_user_data),
-          m_redraw_callback(other.m_redraw_callback),
-          clipboard_text(std::move(other.clipboard_text)),
-          m_drag_drop_enabled(other.m_drag_drop_enabled),
-          m_custom_title_bar_height(other.m_custom_title_bar_height),
-          m_draw_custom_title_bar(other.m_draw_custom_title_bar)
-    {
+KNST_FORCE_INLINE knst_window::knst_window(knst_window&& other) noexcept
+    : m_input_transparent(other.m_input_transparent),
+            m_knst_event(other.m_knst_event),
+      m_events(other.m_events),
+      m_title(std::move(other.m_title)),
+      m_should_close(other.m_should_close), m_disconnected(other.m_disconnected),
+      m_opacity(other.m_opacity), m_user_data(other.m_user_data),
+      m_redraw_callback(std::move(other.m_redraw_callback)),
+      clipboard_text(std::move(other.clipboard_text)),
+      m_drag_drop_enabled(other.m_drag_drop_enabled),
+      m_custom_title_bar_height(other.m_custom_title_bar_height),
+      m_draw_custom_title_bar(other.m_draw_custom_title_bar),
+      m_mouse_x(other.m_mouse_x), m_mouse_y(other.m_mouse_y)
+{
+        for (uint32_t i = 0; i < KNST_MAX_HELD_KEYS; ++i)
+            m_held_keys[i] = other.m_held_keys[i];
+
         #if KNST_USING_PLATFORM_WINDOWS
+        
             m_window = other.m_window; other.m_window = nullptr;
             m_cursor = other.m_cursor; other.m_cursor = nullptr;
             m_system_cursor = other.m_system_cursor; other.m_system_cursor = nullptr;
@@ -1599,7 +1480,10 @@ public:
             m_prevStyle = other.m_prevStyle;
             m_drop_target = other.m_drop_target; other.m_drop_target = nullptr;
             if (m_window) SetWindowLongPtrW(m_window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+
+
         #elif KNST_USING_LINUX_PLATFORM_X11
+
             m_window = other.m_window; other.m_window = 0;
             m_xdnd_source = other.m_xdnd_source;
             m_xdnd_selected_type = other.m_xdnd_selected_type;
@@ -1610,7 +1494,10 @@ public:
             m_syncPendingValue = other.m_syncPendingValue;
             m_syncHasPendingValue = other.m_syncHasPendingValue;
             m_syncRequestReceived = other.m_syncRequestReceived;
+
+
         #elif KNST_USING_LINUX_PLATFORM_WAYLAND
+
             m_surface = other.m_surface; other.m_surface = nullptr;
             xdgSurface = other.xdgSurface; other.xdgSurface = nullptr;
             toplevel = other.toplevel; other.toplevel = nullptr;
@@ -1627,6 +1514,8 @@ public:
             m_always_on_top = other.m_always_on_top;
             m_layer_surface = other.m_layer_surface; other.m_layer_surface = nullptr;
             for (auto*& w : s_windows) { if (w == &other) w = this; }
+
+
         #endif
 
         knst_window_event_system::unregister_window(&other);
@@ -1635,21 +1524,26 @@ public:
 
     KNST_FORCE_INLINE knst_window& knst_window::operator=(knst_window&& other) noexcept {
         if (this == &other) return *this;
+
         destroy();
+
 
         m_mouse_x = other.m_mouse_x; m_mouse_y = other.m_mouse_y;
         m_input_transparent = other.m_input_transparent;
         m_knst_event = other.m_knst_event;
-        m_resize_event = other.m_resize_event; m_move_event = other.m_move_event;
-        m_focus_event = other.m_focus_event; m_window_state_event = other.m_window_state_event;
-        m_expose_event = other.m_expose_event; m_misc_event = other.m_misc_event;
-        m_lifecycle_event = other.m_lifecycle_event;
-        m_mouse_events = other.m_mouse_events; m_keyboard_events = other.m_keyboard_events;
-        m_filedrop_events = other.m_filedrop_events; m_touch_events = other.m_touch_events;
+
+
+
+        for (uint32_t i = 0; i < KNST_MAX_HELD_KEYS; ++i)
+            m_held_keys[i] = other.m_held_keys[i];
+
+
+
+        m_events = other.m_events;
         m_title = std::move(other.m_title);
         m_should_close = other.m_should_close; m_disconnected = other.m_disconnected;
         m_opacity = other.m_opacity; m_user_data = other.m_user_data;
-        m_redraw_callback = other.m_redraw_callback;
+        m_redraw_callback = std::move(other.m_redraw_callback);
         clipboard_text = std::move(other.clipboard_text);
         m_drag_drop_enabled = other.m_drag_drop_enabled;
         m_custom_title_bar_height = other.m_custom_title_bar_height;

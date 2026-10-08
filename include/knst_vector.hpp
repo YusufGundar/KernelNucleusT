@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 knst_vector.hpp
@@ -142,8 +148,8 @@ public:
         }
     }
 
-    KNST_FORCE_INLINE iterator erase(const_iterator pos) noexcept { // It deletes the element pointed to by the iterator. Upon deletion, it calls the destructor and shifts the subsequent elements one position to the left. It returns the new position (the location of the deleted element) as an iterator
-        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        KNST_FORCE_INLINE iterator erase(const_iterator pos) noexcept { // It deletes the element pointed to by the iterator. Upon deletion, it calls the destructor and shifts the subsequent elements one position to the left. It returns the new position (the location of the deleted element) as an iterator
+        uint32_t index = static_cast<uint32_t>(pos.get() - m_data);
         if (index >= m_size) return end();
         
         m_data[index].~T();
@@ -157,9 +163,9 @@ public:
         return iterator(m_data + index);
     }
 
-    KNST_FORCE_INLINE iterator erase(const_iterator first, const_iterator last) noexcept {
-        uint32_t start_idx = static_cast<uint32_t>(first.ptr - m_data);
-        uint32_t end_idx = static_cast<uint32_t>(last.ptr - m_data);
+        KNST_FORCE_INLINE iterator erase(const_iterator first, const_iterator last) noexcept {
+        uint32_t start_idx = static_cast<uint32_t>(first.get() - m_data);
+        uint32_t end_idx = static_cast<uint32_t>(last.get() - m_data);
         uint32_t count = end_idx - start_idx;
         
         for (uint32_t i = start_idx; i < end_idx; i++) {
@@ -320,7 +326,7 @@ KNST_FORCE_INLINE bool emplace_back(Args&&... args) noexcept {
 }
 
     KNST_FORCE_INLINE iterator insert(const_iterator pos, const T& value) noexcept {
-    uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+    uint32_t index = static_cast<uint32_t>(pos.get() - m_data);
     
     if (index > m_size) {
         push_back(value);
@@ -351,8 +357,8 @@ KNST_FORCE_INLINE bool emplace_back(Args&&... args) noexcept {
     return iterator(m_data + index);
 }
 
-    KNST_FORCE_INLINE iterator insert(const_iterator pos, T&& value) noexcept { // The move version of `insert`. It adds the element by moving it—faster than copying. The rest of the logic remains the same
-        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        KNST_FORCE_INLINE iterator insert(const_iterator pos, T&& value) noexcept { // The move version of `insert`. It adds the element by moving it—faster than copying. The rest of the logic remains the same
+        uint32_t index = static_cast<uint32_t>(pos.get() - m_data);
         
         if (index > m_size) {
             push_back(std::move(value));
@@ -377,10 +383,10 @@ KNST_FORCE_INLINE bool emplace_back(Args&&... args) noexcept {
         return iterator(m_data + index);
     }
    
-    KNST_FORCE_INLINE iterator insert(const_iterator pos, uint32_t count, const T& value) noexcept { // Inserts `count` copies of `value` at position `pos`. If there is insufficient space, it expands the container as needed and shifts subsequent elements to the right. Returns the position of the first inserted element
-        if (count == 0) return iterator(const_cast<T*>(pos.ptr));
+        KNST_FORCE_INLINE iterator insert(const_iterator pos, uint32_t count, const T& value) noexcept { // Inserts `count` copies of `value` at position `pos`. If there is insufficient space, it expands the container as needed and shifts subsequent elements to the right. Returns the position of the first inserted element
+        if (count == 0) return iterator(const_cast<T*>(pos.get()));
         
-        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        uint32_t index = static_cast<uint32_t>(pos.get() - m_data);
         
         if (index > m_size) {
             for (uint32_t i = 0; i < count; i++) {
@@ -413,18 +419,20 @@ KNST_FORCE_INLINE bool emplace_back(Args&&... args) noexcept {
         return iterator(m_data + index);
     }
     
-    template<typename InputIt>
+    // SFINAE: exclude integral types so that `insert(pos, count, value)`
+    // is not accidentally matched by this iterator-range overload.
+    template<typename InputIt, typename = std::enable_if_t<!std::is_integral_v<InputIt>>>
     KNST_FORCE_INLINE iterator insert(const_iterator pos, InputIt first, InputIt last) noexcept { // Inserts the elements in the range `[first, last)` at position `pos`. It first counts the elements, expands the container if there is insufficient space, shifts existing elements, and then copies the new ones. It returns the position of the first inserted element
-        if (first == last) return iterator(const_cast<T*>(pos.ptr));
+        if (first == last) return iterator(const_cast<T*>(pos.get()));
         
-        uint32_t index = static_cast<uint32_t>(pos.ptr - m_data);
+        uint32_t index = static_cast<uint32_t>(pos.get() - m_data);
         uint32_t count = 0;
         
         for (InputIt it = first; it != last; ++it) {
             count++;
         }
         
-        if (count == 0) return iterator(const_cast<T*>(pos.ptr));
+        if (count == 0) return iterator(const_cast<T*>(pos.get()));
         
         if (index > m_size) {
             for (InputIt it = first; it != last; ++it) {
@@ -515,7 +523,9 @@ KNST_FORCE_INLINE bool emplace_back(Args&&... args) noexcept {
         }
     }
 
-    template<typename InputIt>
+    // SFINAE: exclude integral types — `assign(count, value)` is a
+    // different overload.
+    template<typename InputIt, typename = std::enable_if_t<!std::is_integral_v<InputIt>>>
     KNST_FORCE_INLINE void assign(InputIt first, InputIt last) noexcept { // Replaces the contents with the elements in the range [first, last). It performs clear, then reserve if necessary, and finally copies all the elements
         clear();
         

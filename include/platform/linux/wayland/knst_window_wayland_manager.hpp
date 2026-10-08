@@ -1,3 +1,20 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+/*
+----------------------------
+knst_window_wayland_manager.hpp
+----------------------------
+
+    The function definitions for the Wayland backend are here.
+
+*/
+
+
+
+
 #pragma once
 
 #include <poll.h>       
@@ -11,7 +28,6 @@
 #if KNST_USING_LINUX_PLATFORM_WAYLAND
 
 
-static void knst_parse_uri_list_wayland(const std::string& uriList, knst_vector<knst_c16string>& out);
 
 
 inline void knst_window::creation() noexcept
@@ -166,16 +182,16 @@ inline void knst_window::set_cursor(uint16_t cursor_type) noexcept
     
     const char* cursor_name = "left_ptr";
     switch (cursor_type) {
-        case KNST_CURSOR_ARROW:         cursor_name = "left_ptr"; break;
-        case KNST_CURSOR_IBEAM:         cursor_name = "xterm"; break;
-        case KNST_CURSOR_CROSSHAIR:     cursor_name = "crosshair"; break;
-        case KNST_CURSOR_HAND:          cursor_name = "hand2"; break;
-        case KNST_CURSOR_HRESIZE:       cursor_name = "sb_h_double_arrow"; break;
-        case KNST_CURSOR_VRESIZE:       cursor_name = "sb_v_double_arrow"; break;
-        case KNST_CURSOR_MOVE:          cursor_name = "fleur"; break;
-        case KNST_CURSOR_WAIT:          cursor_name = "watch"; break;
-        case KNST_CURSOR_HELP:          cursor_name = "question_arrow"; break;
-        case KNST_CURSOR_NOT_ALLOWED:   cursor_name = "X_cursor"; break;
+        case KNST_WINDOW_CURSOR_ARROW:         cursor_name = "left_ptr"; break;
+        case KNST_WINDOW_CURSOR_IBEAM:         cursor_name = "xterm"; break;
+        case KNST_WINDOW_CURSOR_CROSSHAIR:     cursor_name = "crosshair"; break;
+        case KNST_WINDOW_CURSOR_HAND:          cursor_name = "hand2"; break;
+        case KNST_WINDOW_CURSOR_HRESIZE:       cursor_name = "sb_h_double_arrow"; break;
+        case KNST_WINDOW_CURSOR_VRESIZE:      cursor_name = "sb_v_double_arrow"; break;
+        case KNST_WINDOW_CURSOR_MOVE:          cursor_name = "fleur"; break;
+        case KNST_WINDOW_CURSOR_WAIT:          cursor_name = "watch"; break;
+        case KNST_WINDOW_CURSOR_HELP:          cursor_name = "question_arrow"; break;
+        case KNST_WINDOW_CURSOR_NOT_ALLOWED:   cursor_name = "X_cursor"; break;
         default:                        cursor_name = "left_ptr"; break;
     }
     
@@ -371,7 +387,7 @@ inline void knst_window::set_cursor_mode(int mode) noexcept
     if (KnstWindowSources::locked_pointer) { zwp_locked_pointer_v1_destroy(KnstWindowSources::locked_pointer); KnstWindowSources::locked_pointer = nullptr; }
     if (KnstWindowSources::confined_pointer) { zwp_confined_pointer_v1_destroy(KnstWindowSources::confined_pointer); KnstWindowSources::confined_pointer = nullptr; }
     
-    if (mode == KNST_CURSOR_NORMAL) {
+    if (mode == KNST_WINDOW_CURSOR_ARROW) {
         struct wl_cursor* cursor = wl_cursor_theme_get_cursor(KnstWindowSources::cursor_theme, "left_ptr");
         if (cursor && cursor->image_count > 0) {
             struct wl_cursor_image* image = cursor->images[0];
@@ -384,11 +400,11 @@ inline void knst_window::set_cursor_mode(int mode) noexcept
                 wl_surface_commit(KnstWindowSources::cursor_surface);
             }
         }
-    } else if (mode == KNST_CURSOR_HIDDEN) {
+    } else if (mode == KNST_WINDOW_CURSOR_HIDDEN) {
         wl_surface_attach(KnstWindowSources::cursor_surface, nullptr, 0, 0);
         wl_surface_commit(KnstWindowSources::cursor_surface);
         wl_pointer_set_cursor(KnstWindowSources::pointer, m_pointer_serial, KnstWindowSources::cursor_surface, 0, 0);
-    } else if (mode == KNST_CURSOR_DISABLED) {
+    } else if (mode == KNST_WINDOW_CURSOR_DISABLED) {
         wl_surface_attach(KnstWindowSources::cursor_surface, nullptr, 0, 0);
         wl_surface_commit(KnstWindowSources::cursor_surface);
         if (KnstWindowSources::pointer_constraints && m_surface) {
@@ -545,11 +561,11 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept
 {
     if (!toplevel) return;
     switch (attribute) {
-        case KNST_WINDOW_ATTRIB_DECORATED: 
+        case KNST_WINDOW_ATTR_DECORATED: 
             m_draw_custom_title_bar = !value;
             break;
             
-        case KNST_WINDOW_ATTRIB_RESIZABLE:
+        case KNST_WINDOW_ATTR_RESIZABLE:
             if (!value) {
                 xdg_toplevel_set_min_size(toplevel, m_knst_event.window_width, m_knst_event.window_height);
                 xdg_toplevel_set_max_size(toplevel, m_knst_event.window_width, m_knst_event.window_height);
@@ -561,11 +577,11 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept
             wl_display_flush(KnstWindowSources::wayland_display);
             break;
             
-        case KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP: 
+        case KNST_WINDOW_ATTR_ALWAYS_ON_TOP: 
             (void)value; 
             break;
             
-        case KNST_WINDOW_ATTRIB_TRANSPARENT:
+        case KNST_WINDOW_ATTR_TRANSPARENT:
             if (value) {
                 
                 if (m_surface && KnstWindowSources::compositor) {
@@ -609,13 +625,13 @@ inline bool knst_window::get_attribute(int attribute) const noexcept
 {
     if (!toplevel) return false;
     switch (attribute) {
-        case KNST_WINDOW_ATTRIB_DECORATED: 
+        case KNST_WINDOW_ATTR_DECORATED: 
             return !m_draw_custom_title_bar;
-        case KNST_WINDOW_ATTRIB_RESIZABLE: 
+        case KNST_WINDOW_ATTR_RESIZABLE: 
             return true;
-        case KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP: 
+        case KNST_WINDOW_ATTR_ALWAYS_ON_TOP: 
             return false;
-        case KNST_WINDOW_ATTRIB_TRANSPARENT: 
+        case KNST_WINDOW_ATTR_TRANSPARENT: 
             return m_input_transparent;
         default:
             return false;
@@ -633,10 +649,10 @@ inline void knst_window::apply_bmp_icon(const knst_byte_string& bytes, int icon_
 inline void knst_window::set_minimum_size(int width, int height) noexcept {
     if (!toplevel || !m_surface) return;
     
-    if (width == KNST_DEFAULT) {
+    if (width == KNST_WINDOW_DEFAULT) {
         width = 300;
     }
-    if (height == KNST_DEFAULT) {
+    if (height == KNST_WINDOW_DEFAULT) {
         height = 250;
     }
     
@@ -655,15 +671,15 @@ inline void knst_window::set_minimum_size(int width, int height) noexcept {
 inline void knst_window::set_maximum_size(int width, int height) noexcept {
     if (!toplevel || !m_surface) return;
     
-    if (width == KNST_DEFAULT && height == KNST_DEFAULT) {
+    if (width == KNST_WINDOW_DEFAULT && height == KNST_WINDOW_DEFAULT) {
         xdg_toplevel_set_max_size(toplevel, 0, 0);
         wl_surface_commit(m_surface);
         wl_display_flush(KnstWindowSources::wayland_display);
         return;
     }
     
-    int maxWidth = (width == KNST_DEFAULT) ? 0 : width;
-    int maxHeight = (height == KNST_DEFAULT) ? 0 : height;
+    int maxWidth = (width == KNST_WINDOW_DEFAULT) ? 0 : width;
+    int maxHeight = (height == KNST_WINDOW_DEFAULT) ? 0 : height;
     
     xdg_toplevel_set_max_size(toplevel, maxWidth, maxHeight);
     

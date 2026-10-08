@@ -1,3 +1,19 @@
+﻿// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+/*
+----------------------------
+knst_window_win32_event_manager.hpp
+----------------------------
+
+    Event handling for the Windows backend
+
+*/
+
+
 #pragma once
 
 #if KNST_USING_PLATFORM_WINDOWS
@@ -5,8 +21,8 @@
 #include <windowsx.h>
 
 #define KNST_RESIZE_BORDER 8
-#define KNST_CORNER_SIZE 12
-#define KNST_BUTTON_WIDTH 48
+#define KNST_CORNER_SIZE   12
+#define KNST_BUTTON_WIDTH  48
 #define KNST_RESIZE_TIMER_ID 0xA5F1 
 
 KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept{
@@ -14,7 +30,6 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
 
     if (window) {
         switch (msg) {
-
 
             case WM_NCHITTEST: {
             #ifdef KNST_DISABLE_TITLE_BAR
@@ -116,8 +131,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
         }
 
         case WM_LBUTTONDOWN: {
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_BUTTON_PRESS;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_PRESS;
             window->m_knst_event.mouse_button = 1;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -128,9 +143,9 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_y = pt.y;
             }
             window->m_knst_event.mods = 0;
-            if (wParam & MK_CONTROL) window->m_knst_event.mods |= KNST_MOD_CONTROL;
-            if (wParam & MK_SHIFT)   window->m_knst_event.mods |= KNST_MOD_SHIFT;
-            if (wParam & MK_ALT)     window->m_knst_event.mods |= KNST_MOD_ALT;
+            if (wParam & MK_CONTROL) window->m_knst_event.mods |= KNST_WINDOW_MOD_CONTROL;
+            if (wParam & MK_SHIFT)   window->m_knst_event.mods |= KNST_WINDOW_MOD_SHIFT;
+            if (wParam & MK_ALT)     window->m_knst_event.mods |= KNST_WINDOW_MOD_ALT;
 
             #ifdef KNST_DISABLE_TITLE_BAR
             if (window->m_draw_custom_title_bar) {
@@ -142,7 +157,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 if (my >= 0 && my <= titlebar_h) {
                     if (mx >= w - KNST_BUTTON_WIDTH) {
                         window->should_close();
-                        window->m_knst_event.type = KNST_CLOSE_WINDOW;
+                        window->m_knst_event.type = KNST_WINDOW_EVENT_CLOSE;
                         window->dispatch_current_event();
                         return 0;
                     }
@@ -165,8 +180,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
         }
 
         case WM_LBUTTONUP:
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_BUTTON_RELEASE;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_RELEASE;
             window->m_knst_event.mouse_button = 1;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -180,8 +195,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 0;
 
         case WM_RBUTTONDOWN:
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_BUTTON_PRESS;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_PRESS;
             window->m_knst_event.mouse_button = 3;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -195,8 +210,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 0;
 
         case WM_RBUTTONUP:
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_BUTTON_RELEASE;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_RELEASE;
             window->m_knst_event.mouse_button = 3;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -210,8 +225,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 0;
 
         case WM_MBUTTONDOWN:
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_BUTTON_PRESS;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_PRESS;
             window->m_knst_event.mouse_button = 2;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -225,8 +240,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 0;
 
         case WM_MBUTTONUP:
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_BUTTON_RELEASE;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_RELEASE;
             window->m_knst_event.mouse_button = 2;
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -240,8 +255,8 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 0;
 
         case WM_MOUSEWHEEL: {
-            window->m_knst_event.type = KNST_MOUSE_EVENT;
-            window->m_knst_event.mouse_action = KNST_MOUSE_SCROLL;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOUSE;
+            window->m_knst_event.mouse_action = KNST_WINDOW_MOUSE_ACTION_SCROLL;
             window->m_knst_event.mouse_scroll_delta = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
             POINT wheel_pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ScreenToClient(hwnd, &wheel_pt);
@@ -253,7 +268,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
 
         case WM_MOUSEMOVE:
             if (!window->m_knst_event.mouse_on_window) {
-                window->m_knst_event.type = KNST_ENTER_NOTIFY;
+                window->m_knst_event.type = KNST_WINDOW_EVENT_ENTER;
                 window->m_knst_event.mouse_on_window = true;
                 TRACKMOUSEEVENT tme;
                 tme.cbSize = sizeof(TRACKMOUSEEVENT);
@@ -261,7 +276,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 tme.hwndTrack = hwnd;
                 TrackMouseEvent(&tme);
             } else {
-                window->m_knst_event.type = KNST_MOTION_NOTIFY;
+                window->m_knst_event.type = KNST_WINDOW_EVENT_MOTION;
             }
             window->m_knst_event.mouse_x = GET_X_LPARAM(lParam);
             window->m_knst_event.mouse_y = GET_Y_LPARAM(lParam);
@@ -272,14 +287,14 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
                 window->m_knst_event.mouse_root_y = pt.y;
             }
             window->m_knst_event.mods = 0;
-            if (wParam & MK_CONTROL) window->m_knst_event.mods |= KNST_MOD_CONTROL;
-            if (wParam & MK_SHIFT)   window->m_knst_event.mods |= KNST_MOD_SHIFT;
-            if (wParam & MK_ALT)     window->m_knst_event.mods |= KNST_MOD_ALT;
+            if (wParam & MK_CONTROL) window->m_knst_event.mods |= KNST_WINDOW_MOD_CONTROL;
+            if (wParam & MK_SHIFT)   window->m_knst_event.mods |= KNST_WINDOW_MOD_SHIFT;
+            if (wParam & MK_ALT)     window->m_knst_event.mods |= KNST_WINDOW_MOD_ALT;
             window->dispatch_current_event();
             return 0;
 
         case WM_MOUSELEAVE:
-            window->m_knst_event.type = KNST_LEAVE_NOTIFY;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_LEAVE;
             window->m_knst_event.mouse_on_window = false;
             window->dispatch_current_event();
             return 0;
@@ -296,8 +311,7 @@ KNST_FORCE_INLINE LRESULT CALLBACK load_native_to_knst_event(HWND hwnd, UINT msg
             return 1;
 
         case WM_ENTERSIZEMOVE:
-        
-             SetTimer(hwnd, KNST_RESIZE_TIMER_ID, 4, nullptr);
+            SetTimer(hwnd, KNST_RESIZE_TIMER_ID, 4, nullptr);
             return 0;
 
 case WM_EXITSIZEMOVE: {
@@ -317,7 +331,7 @@ case WM_EXITSIZEMOVE: {
     window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
 
     window->m_knst_event.is_maximized = IsZoomed(hwnd);
-    window->m_knst_event.type = KNST_WINDOW_RESIZE;
+    window->m_knst_event.type = KNST_WINDOW_EVENT_RESIZE;
     
 
     
@@ -328,7 +342,7 @@ case WM_EXITSIZEMOVE: {
        case WM_TIMER: {
     if (wParam == KNST_RESIZE_TIMER_ID) {
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+            window->m_redraw_callback();
         #endif
         InvalidateRect(hwnd, NULL, FALSE);
     }
@@ -347,13 +361,13 @@ case WM_SIZING: {
         window->m_knst_event.window_height = clientRect.bottom - clientRect.top;
         window->m_knst_event.window_root_x = rect->left;
         window->m_knst_event.window_root_y = rect->top;
-        window->m_knst_event.type = KNST_WINDOW_RESIZE;
+        window->m_knst_event.type = KNST_WINDOW_EVENT_RESIZE;
 
         window->m_knst_event.is_maximized = IsZoomed(hwnd);
         
       
         #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-            window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+            window->m_redraw_callback();
         #endif
         
         window->dispatch_current_event();
@@ -375,16 +389,16 @@ case WM_SIZING: {
     window->m_knst_event.is_full_screen = false;
 
     if (wParam == SIZE_MINIMIZED) {
-        window->m_knst_event.type = KNST_WINDOW_MINIMIZE;
+        window->m_knst_event.type = KNST_WINDOW_EVENT_MINIMIZE;
         window->dispatch_current_event();
     } else if (wParam == SIZE_MAXIMIZED) {
-        window->m_knst_event.type = KNST_WINDOW_MAXIMIZE;
+        window->m_knst_event.type = KNST_WINDOW_EVENT_MAXIMIZE;
         
         
         window->dispatch_current_event();
         InvalidateRect(hwnd, NULL, FALSE);
     } else if (wParam == SIZE_RESTORED) {
-        window->m_knst_event.type = KNST_WINDOW_RESTORE;
+        window->m_knst_event.type = KNST_WINDOW_EVENT_RESTORE;
         
        
         
@@ -404,7 +418,7 @@ case WM_SIZING: {
 
 
             window->m_knst_event.is_maximized = IsZoomed(hwnd);
-            window->m_knst_event.type = KNST_WINDOW_MOVE;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_MOVE;
             window->dispatch_current_event();
             return 0;
         }
@@ -431,12 +445,12 @@ case WM_SIZING: {
 
                 if (coversFullScreen && !window->m_knst_event.is_full_screen) {
                     window->m_knst_event.is_full_screen = true;
-                    window->m_knst_event.type = KNST_WINDOW_FULL_SCREEN;
+                    window->m_knst_event.type = KNST_WINDOW_EVENT_FULLSCREEN;
                     window->dispatch_current_event();
                 }
                 else if (!coversFullScreen && window->m_knst_event.is_full_screen) {
                     window->m_knst_event.is_full_screen = false;
-                    window->m_knst_event.type = KNST_WINDOW_RESTORE;
+                    window->m_knst_event.type = KNST_WINDOW_EVENT_RESTORE;
                     window->dispatch_current_event();
                 }
 
@@ -445,13 +459,13 @@ case WM_SIZING: {
             return 0;
         }
         case WM_SETFOCUS:
-            window->m_knst_event.type = KNST_FOCUS_IN;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_FOCUS_IN;
             window->m_knst_event.is_focused = true;
             window->dispatch_current_event();
             return 0;
 
         case WM_KILLFOCUS:
-            window->m_knst_event.type = KNST_FOCUS_OUT;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_FOCUS_OUT;
             window->m_knst_event.is_focused = false;
             window->dispatch_current_event();
             return 0;
@@ -461,20 +475,20 @@ case WM_SYSKEYDOWN: {
     int vk = (int)wParam;
     int scancode = (lParam >> 16) & 0xFF;
 
-    if (window->m_knst_event.find_held_by_scancode(scancode)) {
+        if (window->find_held_by_scancode(scancode)) {
         return 0; 
     }
 
-    window->m_knst_event.add_held_key(vk, scancode, KnstWindowSources::get_current_time_ms());
+    window->add_held_key(vk, scancode, KnstWindowSources::get_current_time_ms());
 
-    window->m_knst_event.type = KNST_KEYBOARD_EVENT;
-    window->m_knst_event.key_action = KNST_KEY_PRESS;
+    window->m_knst_event.type = KNST_WINDOW_EVENT_KEYBOARD;
+    window->m_knst_event.key_action = KNST_WINDOW_KEY_ACTION_PRESS;
     window->m_knst_event.key_code = vk;
     window->m_knst_event.scancode = scancode;
     window->m_knst_event.mods = 0;
-    if (GetKeyState(VK_CONTROL) & 0x8000) window->m_knst_event.mods |= KNST_MOD_CONTROL;
-    if (GetKeyState(VK_SHIFT)   & 0x8000) window->m_knst_event.mods |= KNST_MOD_SHIFT;
-    if (GetKeyState(VK_MENU)    & 0x8000) window->m_knst_event.mods |= KNST_MOD_ALT;
+    if (GetKeyState(VK_CONTROL) & 0x8000) window->m_knst_event.mods |= KNST_WINDOW_MOD_CONTROL;
+    if (GetKeyState(VK_SHIFT)   & 0x8000) window->m_knst_event.mods |= KNST_WINDOW_MOD_SHIFT;
+    if (GetKeyState(VK_MENU)    & 0x8000) window->m_knst_event.mods |= KNST_WINDOW_MOD_ALT;
     window->dispatch_current_event();
     return 0;
 }
@@ -482,11 +496,11 @@ case WM_SYSKEYDOWN: {
 case WM_KEYUP:
 case WM_SYSKEYUP: {
     int scancode = (lParam >> 16) & 0xFF;
-    window->m_knst_event.type = KNST_KEYBOARD_EVENT;
-    window->m_knst_event.key_action = KNST_KEY_RELEASE;
+    window->m_knst_event.type = KNST_WINDOW_EVENT_KEYBOARD;
+    window->m_knst_event.key_action = KNST_WINDOW_KEY_ACTION_RELEASE;
     window->m_knst_event.key_code = (int)wParam;
     window->m_knst_event.scancode = scancode;
-    window->m_knst_event.remove_held_key(scancode);
+    window->remove_held_key(scancode);
     window->dispatch_current_event();
     return 0;
 }
@@ -501,13 +515,13 @@ case WM_SYSKEYUP: {
         }
 
         case WM_PAINT: {
-            window->m_knst_event.type = KNST_EXPOSE;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_EXPOSE;
             PAINTSTRUCT ps;
             BeginPaint(hwnd, &ps);
             EndPaint(hwnd, &ps);
             window->dispatch_current_event();
             #ifndef KNST_DISABLE_REDRAW_ON_EVENT_MANAGER
-               window->m_redraw_callback(*window, const_cast<void*>(window->get_user_data()));
+               window->m_redraw_callback();
             #endif
             
 
@@ -517,8 +531,12 @@ case WM_SYSKEYUP: {
         case WM_DROPFILES: {
             HDROP hDrop = (HDROP)wParam;
             
-            window->m_knst_event.type = KNST_FILE_DROP;
-            window->m_knst_event.drop_files.clear();
+            window->m_knst_event.type = KNST_WINDOW_EVENT_FILE_DROP;
+            if (!window->m_knst_event.drop_files) {
+                window->m_knst_event.drop_files = std::make_shared<knst_vector<knst_c16string>>();
+            } else {
+                window->m_knst_event.drop_files->clear();
+            }
             
             POINT pt;
             DragQueryPoint(hDrop, &pt);
@@ -531,7 +549,7 @@ case WM_SYSKEYUP: {
                 UINT pathLen = DragQueryFileW(hDrop, i, nullptr, 0);
                 wchar_t* buffer = new wchar_t[pathLen + 1];
                 DragQueryFileW(hDrop, i, buffer, pathLen + 1);
-                window->m_knst_event.drop_files.push_back(knst_c16string(buffer));
+                window->m_knst_event.drop_files->push_back(knst_c16string(buffer));
                 delete[] buffer;
             }
             
@@ -541,7 +559,9 @@ case WM_SYSKEYUP: {
         }
 
         case WM_CLOSE:
+            window->m_knst_event.type = KNST_WINDOW_EVENT_CLOSE;
             window->should_close();
+            window->dispatch_current_event();
             return 0;
 
         case WM_DESTROY: {
@@ -552,7 +572,7 @@ case WM_SYSKEYUP: {
         }
 
         default:
-            window->m_knst_event.type = KNST_UNKNOWN;
+            window->m_knst_event.type = KNST_WINDOW_EVENT_UNKNOWN;
             break;
                 }
             }

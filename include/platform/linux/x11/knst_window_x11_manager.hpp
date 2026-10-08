@@ -1,3 +1,18 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+/*
+----------------------------
+knst_window_x11_manager.hpp
+----------------------------
+
+   The function definitions for the X11 backend are here.
+
+*/
+
 #pragma once
 
 
@@ -151,7 +166,7 @@ if (protocols_reply) {
         XCB_ATOM_CARDINAL,
         32, 1, &m_syncCounter
     );
-}  // The part that wasted eight hours was a glitch; if it hadn't frozen, it kept giving me a hard time, so I finally decided to shut it down. ı open after 
+} 
 
 
     knst_window_event_system::register_window(this);
@@ -234,22 +249,23 @@ inline void knst_window::move(int root_x, int root_y, const knst_monitor& monito
             root_y = m_knst_event.window_root_y;
         }
 
-        int absolute_x = monitor.root_x + root_x;
-        int absolute_y = monitor.root_y + root_y;
 
-            xcb_client_message_event_t ev{};
-            ev.response_type = XCB_CLIENT_MESSAGE;
-            ev.format = 32;
-            ev.window = m_window;
-            ev.type = KnstWindowSources::m_netMoveResizeWindow;
+        const int absolute_x = monitor.root_x + root_x;
+        const int absolute_y = monitor.root_y + root_y;
 
-            uint32_t gravity_flags = XCB_GRAVITY_STATIC | (1 << 8) | (1 << 9) | (2 << 12);
+        xcb_client_message_event_t ev{};
+        ev.response_type = XCB_CLIENT_MESSAGE;
+        ev.format = 32;
+        ev.window = m_window;
+        ev.type = KnstWindowSources::m_netMoveResizeWindow;
 
-            ev.data.data32[0] = gravity_flags;
-            ev.data.data32[1] = (uint32_t)root_x;
-            ev.data.data32[2] = (uint32_t)root_y;
-            ev.data.data32[3] = 0;
-            ev.data.data32[4] = 0;
+        uint32_t gravity_flags = XCB_GRAVITY_STATIC | (1 << 8) | (1 << 9) | (2 << 12);
+
+        ev.data.data32[0] = gravity_flags;
+        ev.data.data32[1] = static_cast<uint32_t>(absolute_x);
+        ev.data.data32[2] = static_cast<uint32_t>(absolute_y);
+        ev.data.data32[3] = 0;
+        ev.data.data32[4] = 0;
 
         xcb_send_event(
             KnstWindowSources::m_connection,
@@ -718,7 +734,7 @@ inline void knst_window::set_cursor_mode(int mode) noexcept {
     Display* display = KnstWindowSources::m_xlib_display;
     if (!display) return;
     
-    if (mode == KNST_CURSOR_NORMAL) {
+        if (mode == KNST_WINDOW_CURSOR_ARROW) {
         
         uint32_t cursor_value = XCB_NONE;
         xcb_change_window_attributes(
@@ -732,7 +748,7 @@ inline void knst_window::set_cursor_mode(int mode) noexcept {
         xcb_ungrab_pointer(conn, XCB_CURRENT_TIME);
         xcb_flush(conn);
         
-    } else if (mode == KNST_CURSOR_HIDDEN) {
+        } else if (mode == KNST_WINDOW_CURSOR_HIDDEN) {
        
         Pixmap blank_pixmap = XCreatePixmap(display, DefaultRootWindow(display), 1, 1, 1);
         XColor dummy_color;
@@ -762,7 +778,7 @@ inline void knst_window::set_cursor_mode(int mode) noexcept {
         }
         xcb_flush(conn);
         
-    } else if (mode == KNST_CURSOR_DISABLED) {
+        } else if (mode == KNST_WINDOW_CURSOR_DISABLED) {
        
         Pixmap blank_pixmap = XCreatePixmap(display, DefaultRootWindow(display), 1, 1, 1);
         XColor dummy_color;
@@ -961,7 +977,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
     if (!m_window) return;
 
     switch (attribute) {
-        case KNST_WINDOW_ATTRIB_DECORATED: {
+        case KNST_WINDOW_ATTR_DECORATED: {
             xcb_atom_t motif_wm_hints = KnstWindowSources::m_MOTIF_WM_HINTS;
 
             struct {
@@ -970,7 +986,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
                 uint32_t decorations;
                 int32_t input_mode;
                 uint32_t status;
-            } hints = {0};
+            } hints = {};
 
             hints.flags = 2;
             hints.decorations = value ? 1 : 0;
@@ -992,7 +1008,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
             break;
         }
 
-        case KNST_WINDOW_ATTRIB_RESIZABLE: {
+        case KNST_WINDOW_ATTR_RESIZABLE: {
             xcb_atom_t wm_normal_hints;
             const char* name = "WM_NORMAL_HINTS";
             xcb_intern_atom_cookie_t cookie = xcb_intern_atom(
@@ -1025,7 +1041,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
             break;
         }
 
-        case KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP: {
+        case KNST_WINDOW_ATTR_ALWAYS_ON_TOP: {
             const char* name = "_NET_WM_STATE_ABOVE";
             xcb_intern_atom_cookie_t cookie = xcb_intern_atom(
                 KnstWindowSources::m_connection, 0, (uint16_t)strlen(name), name);
@@ -1055,7 +1071,7 @@ inline void knst_window::set_attribute(int attribute, bool value) noexcept {
             break;
         }
 
-        case KNST_WINDOW_ATTRIB_TRANSPARENT: {
+        case KNST_WINDOW_ATTR_TRANSPARENT: {
             if (value) {
                 XserverRegion region = XFixesCreateRegion(
                     KnstWindowSources::m_xlib_display, nullptr, 0);
@@ -1089,7 +1105,7 @@ inline bool knst_window::get_attribute(int attribute) const noexcept {
     if (!m_window) return false;
 
     switch (attribute) {
-        case KNST_WINDOW_ATTRIB_DECORATED: {
+        case KNST_WINDOW_ATTR_DECORATED: {
             if (m_draw_custom_title_bar) return false;
 
             xcb_atom_t motif_wm_hints = KnstWindowSources::m_MOTIF_WM_HINTS;
@@ -1109,13 +1125,13 @@ inline bool knst_window::get_attribute(int attribute) const noexcept {
             return true;
         }
 
-        case KNST_WINDOW_ATTRIB_RESIZABLE:
+        case KNST_WINDOW_ATTR_RESIZABLE:
             return true;
 
-        case KNST_WINDOW_ATTRIB_ALWAYS_ON_TOP:
+        case KNST_WINDOW_ATTR_ALWAYS_ON_TOP:
             return false;
 
-        case KNST_WINDOW_ATTRIB_TRANSPARENT:
+        case KNST_WINDOW_ATTR_TRANSPARENT:
             return m_input_transparent;
     }
     return false;
@@ -1266,10 +1282,10 @@ inline void knst_window::set_minimum_size(int width, int height) noexcept {
     }
     
     
-    if (width == KNST_DEFAULT) {
+    if (width == KNST_WINDOW_DEFAULT) {
         width = 300;  
     }
-    if (height == KNST_DEFAULT) {
+    if (height == KNST_WINDOW_DEFAULT) {
         height = 250; 
     }
     
@@ -1293,7 +1309,7 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
     if (!m_window) return;
     
    
-    if (width == KNST_DEFAULT && height == KNST_DEFAULT) {
+    if (width == KNST_WINDOW_DEFAULT && height == KNST_WINDOW_DEFAULT) {
         return;
     }
     
@@ -1328,12 +1344,12 @@ inline void knst_window::set_maximum_size(int width, int height) noexcept {
     }
     
     
-    if (width != KNST_DEFAULT) {
+    if (width != KNST_WINDOW_DEFAULT) {
         hints.flags |= XCB_ICCCM_SIZE_HINT_P_MAX_SIZE;
         hints.max_width = width;
     }
     
-    if (height != KNST_DEFAULT) {
+    if (height != KNST_WINDOW_DEFAULT) {
         hints.flags |= XCB_ICCCM_SIZE_HINT_P_MAX_SIZE;
         hints.max_height = height;
     }

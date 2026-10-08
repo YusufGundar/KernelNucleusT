@@ -1,9 +1,16 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+
 /*
 ----------------------------
 knst_window.hpp
 ----------------------------
 
-   It is an .hpp file that collectively includes all window-related resources; additionally, Vulkan and OpenGL contexts for the window are determined here using macros.
+   It is the unifying HPP file.
 
 */
 
@@ -33,25 +40,6 @@ knst_window.hpp
 
 
 #include "platform/knst_window/knst_window_core.hpp"
-
-
-
-
-#ifdef KNST_USING_OPENGL
-
-    #include "platform/knst_window/opengl_support/knst_window_opengl_manager.hpp"
-
-#endif
-
-
-
-#ifdef KNST_USING_VULKAN
-
-    #include "platform/knst_window/vulkan_support/knst_window_vulkan_manager.hpp"
-
-#endif
-
-
 
 
 

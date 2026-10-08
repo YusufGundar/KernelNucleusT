@@ -1,3 +1,18 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+/*
+----------------------------
+knst_window_android_manager.hpp
+----------------------------
+
+    The function definitions for the Android backend are here.
+
+*/
+
+
 #pragma once
 
 
@@ -30,7 +45,7 @@ inline void knst_window::creation() noexcept {
 
 inline void knst_window::show() noexcept {
     // We don't need to do anything it's already ready.
-    m_knst_event.type = KNST_EXPOSE;
+    m_knst_event.type = KNST_WINDOW_EVENT_EXPOSE;
     
 }
 

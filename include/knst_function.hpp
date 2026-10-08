@@ -1,3 +1,10 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+
 /*
 ----------------------------
 knst_function.hpp
@@ -39,9 +46,11 @@ private:
     static const vtable_t* vtable_for() noexcept { // Generates a table with 3 functions for the vtable.
 
         static const vtable_t vt = {
+            
             [](void* s) { (*static_cast<F*>(s))(); },
             [](void* s) { static_cast<F*>(s)->~F(); },
             [](void* from, void* to) {::new (to) F(std::move(*static_cast<F*>(from)));
+
             }
         };
         return &vt;
@@ -93,6 +102,7 @@ private:
             } else {
                 other.m_vtable->move(other.storage(), storage());
                 other.m_vtable->destroy(other.storage());
+
             }
         }
 

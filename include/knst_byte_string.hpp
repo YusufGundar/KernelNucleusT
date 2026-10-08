@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 knst_byte_string.hpp
@@ -304,7 +310,7 @@ public:
             }
     }
 
-    KNST_FORCE_INLINE basic_byte_string(const basic_byte_string & other) noexcept : m_allocator(other.m_allocator) { // Copy constructor — allocator'ı da paylaşır (pool allocator senaryosunda gereksiz yeni havuz oluşumunu engeller)
+    KNST_FORCE_INLINE basic_byte_string(const basic_byte_string & other) noexcept : m_allocator(other.m_allocator) { // Copy constructor 
             if (other.is_heap()) {
                 uint32_t str_capacity = other.heap_data.m_length + 1;
                 void* new_heap = this->m_allocator.allocate(str_capacity);
@@ -738,6 +744,14 @@ public:
 
     }
 
+    KNST_FORCE_INLINE size_t pool_count() const {
+        return m_allocator.pool_count();
+    }
+
+    KNST_FORCE_INLINE size_t max_block_size() const {
+        return m_allocator.max_block_size();
+    }
+
     KNST_FORCE_INLINE bool is_heap() const noexcept{
 
         return (this->stack_data.m_flag & 0x80) != 0; // If the highest bit is 1, it means we are in heap mode and it returns true.
@@ -972,40 +986,40 @@ public:
     }
 
 
-    KNST_FORCE_INLINE bool reserve(uint32_t new_capacity) noexcept { // Ensures the capacity is at least `new_capacity`. If it is already sufficient, it does nothing. If currently using the heap, it reallocates; if using SSO, it allocates a new heap buffer, copies the data, and switches to heap mode. Returns `false` on failure
-        if (new_capacity <= capacity()) {
+    KNST_FORCE_INLINE bool reserve(uint32_t new_total_byte_count) noexcept {
+
+        uint32_t new_cap = new_total_byte_count + 1;
+
+        if (new_cap <= capacity()) {
             return true;
         }
-        
-        
+
         if (is_heap()) {
             void* new_heap = m_allocator.reallocate(
                 heap_data.m_real_data,
-                new_capacity
+                new_cap
             );
             if (!new_heap) return false;
-            
+
             heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
-            heap_data.m_capacity = new_capacity;
+            heap_data.m_capacity = new_cap;
             set_heap_mode();
-            
+
         } else {
-        
             uint32_t old_len = get_sso_length();
-            
-            void* new_heap = m_allocator.allocate(new_capacity);
+
+            void* new_heap = m_allocator.allocate(new_cap);
             if (!new_heap) return false;
-            
 
             memcpy(new_heap, stack_data.m_real_data, old_len);
             static_cast<unsigned char*>(new_heap)[old_len] = '\0';
-        
+
             heap_data.m_real_data = static_cast<unsigned char*>(new_heap);
             heap_data.m_length = old_len;
-            heap_data.m_capacity = new_capacity;
+            heap_data.m_capacity = new_cap;
             set_heap_mode();
         }
-        
+
         return true;
     }
 

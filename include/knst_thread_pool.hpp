@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 knst_thread_pool.hpp
@@ -31,7 +37,7 @@ class knst_thread_pool {
 
 private:
     friend class knst_thread; // It declares the `knst_thread` class as a friend. This means `knst_thread` can access the private members of `knst_thread_pool` (such as `submit_to`), because the body of `knst_thread::start(pool, fn)` calls `submit_to`—which is private and inaccessible from the outside
-
+    std::atomic<int> m_worker_baseline_nice{-1};
     static size_t resolve_default_workers() noexcept { // It determines the default number of workers. It reads the number of CPU cores; if it returns 0 (meaning the count is unknown), it uses 3. In other words, it answers the question: "How many threads should be started if the user hasn't specified a number?"
         unsigned hc = std::thread::hardware_concurrency();
         return hc == 0 ? 3 : (size_t)hc;
@@ -71,17 +77,45 @@ private:
         return true;
     }
 
-    void apply_worker_baseline() noexcept { // It applies the worker's base priority. It reads the priority set by the pool and assigns it to the current thread. This is called after the task-based priority concludes—returning the worker to its normal state
+    void apply_worker_baseline() noexcept {
         auto requested = static_cast<knst_thread_priority>(m_worker_priority.load(std::memory_order_acquire));
-            
+        #if defined(__linux__)
+            if (requested == knst_thread_priority::inherit) {
+                int baseline = m_worker_baseline_nice.load(std::memory_order_acquire);
+                if (baseline >= 0) {
+                    int32_t tid = knst_current_native_tid();
+                    ::setpriority(PRIO_PROCESS, (id_t)tid, baseline);
+                }
+                m_worker_priority_achieved.store(static_cast<int8_t>(knst_thread_priority::inherit),std::memory_order_relaxed);
+                return;
+            }
+        #endif
+
+
         knst_thread_priority achieved;
         if (knst_apply_priority_self_graceful(requested, &achieved)) {
             m_worker_priority_achieved.store(static_cast<int8_t>(achieved),std::memory_order_relaxed);
-                                             
+            return;
         }
+
+
+        #if defined(__linux__)
+            {
+                int baseline = m_worker_baseline_nice.load(std::memory_order_acquire);
+                if (baseline >= 0) {
+                    int32_t tid = knst_current_native_tid();
+                    ::setpriority(PRIO_PROCESS, (id_t)tid, baseline);
+                }
+            }
+        #endif
     }
 
     void worker_loop() noexcept { // The worker thread's main loop. It first applies the base priority. Then, within an infinite loop: it waits on the condition variable (until work arrives or a shutdown occurs), pulls work from the queue in batches (of 8), and executes the tasks outside the lock. If there is no work and `!running` is true, it exits
+        #if defined(__linux__)
+            int cur_nice = ::getpriority(PRIO_PROCESS, (id_t)knst_current_native_tid());
+            int expected = -1;
+            m_worker_baseline_nice.compare_exchange_strong(expected, cur_nice);
+        #endif
         apply_worker_baseline();
 
         std::vector<std::shared_ptr<knst_thread_data>> batch;
@@ -146,18 +180,20 @@ private:
             apply_worker_baseline();
         }
 
-        {
-
-
+                {
             std::lock_guard<std::mutex> lock(data->mtx);
             data->finished_flag = true;
-
         }
         data->cv.notify_all();
         data->state.store((uint8_t)knst_thread_state::finished,std::memory_order_release);
-                          
 
-        if (m_pending.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+       
+        bool was_last = false;
+        {
+            std::lock_guard<std::mutex> lock(m_mtx);
+            was_last = (m_pending.fetch_sub(1, std::memory_order_acq_rel) == 1);
+        }
+        if (was_last) {
             m_done_cv.notify_all();
         }
     }
@@ -380,8 +416,6 @@ public:
         return static_cast<knst_thread_priority>(m_worker_priority_achieved.load(std::memory_order_relaxed));
             
     }
-
-
 
 };
 

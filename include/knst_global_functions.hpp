@@ -1,3 +1,8 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 /*
 ----------------------------
 knst_global_functions.hpp
@@ -228,7 +233,7 @@ KNST_FORCE_INLINE uint32_t knst_get_wchar_to_utf16_exact_length(const wchar_t* w
     
     #ifndef _WIN32
     
-    while(i + 3 < wchar_count) {
+       while (i < wchar_count && wchar_count - i >= 4) {
         char32_t c0 = static_cast<char32_t>(wstr[i]);
         char32_t c1 = static_cast<char32_t>(wstr[i+1]);
         char32_t c2 = static_cast<char32_t>(wstr[i+2]);
@@ -261,13 +266,13 @@ KNST_FORCE_INLINE uint32_t knst_get_char32_to_utf16_exact_length(const char32_t*
     uint32_t utf16_count = 0;
     uint32_t i = 0;
     
-    
-    while(i + 3 < char32_count) {
+
+    while (i < char32_count) {
+        if (char32_count - i < 4) break;
         char32_t c0 = str[i];
         char32_t c1 = str[i+1];
         char32_t c2 = str[i+2];
         char32_t c3 = str[i+3];
-        
         
         utf16_count += (c0 < 0x10000) ? 1 : 2;
         utf16_count += (c1 < 0x10000) ? 1 : 2;
@@ -276,7 +281,6 @@ KNST_FORCE_INLINE uint32_t knst_get_char32_to_utf16_exact_length(const char32_t*
         
         i += 4;
     }
-    
     
     for(; i < char32_count; ++i) {
         char32_t cp = str[i];
@@ -377,28 +381,18 @@ KNST_FORCE_INLINE void knst_convert_utf16_to_wchar(const char16_t* src, uint32_t
 
 
 // Returns in length , character count.
-KNST_FORCE_INLINE uint32_t knst_get_str_length(const char16_t * str) noexcept{
-
-    return std::char_traits<char16_t>::length(str);
-}
-
- 
-KNST_FORCE_INLINE uint32_t knst_get_str_length(const char * str) noexcept{
-
-    return std::char_traits<char>::length(str);
-}
-
-  
-KNST_FORCE_INLINE uint32_t knst_get_str_length(const wchar_t * str) noexcept{
-
-    return std::char_traits<wchar_t>::length(str);
-}
-
-KNST_FORCE_INLINE uint32_t knst_get_str_length(const char32_t * str) noexcept{
-
-    return std::char_traits<char32_t>::length(str);
-}
-
+    static KNST_FORCE_INLINE uint32_t knst_get_str_length(const char16_t* str) noexcept {
+        return static_cast<uint32_t>(std::char_traits<char16_t>::length(str));
+    }
+    static KNST_FORCE_INLINE uint32_t knst_get_str_length(const char* str) noexcept {
+        return static_cast<uint32_t>(std::char_traits<char>::length(str));
+    }
+    static KNST_FORCE_INLINE uint32_t knst_get_str_length(const wchar_t* str) noexcept {
+        return static_cast<uint32_t>(std::char_traits<wchar_t>::length(str));
+    }
+    static KNST_FORCE_INLINE uint32_t knst_get_str_length(const char32_t* str) noexcept {
+        return static_cast<uint32_t>(std::char_traits<char32_t>::length(str));
+    }
 
 
 
@@ -409,9 +403,17 @@ KNST_FORCE_INLINE uint32_t knst_get_str_length(const char32_t * str) noexcept{
 
 
 template<typename T>
+class knst_const_iterator;
+
+
+template<typename T>
 class knst_iterator{
 
     T* ptr;
+
+    // Allow knst_const_iterator to construct itself from a mutable
+    // iterator by reading our private `ptr` directly.
+    friend class knst_const_iterator<T>;
 
     public:
 
@@ -452,6 +454,10 @@ class knst_iterator{
     
     KNST_FORCE_INLINE reference operator[](difference_type n) const noexcept { return ptr[n]; }
 
+    // Raw pointer accessor — useful for pointer arithmetic when the
+    // underlying container needs to compute an index from an iterator.
+    KNST_FORCE_INLINE T* get() const noexcept { return ptr; }
+
 };
 
 template<typename T>
@@ -459,6 +465,12 @@ class knst_const_iterator {
     const T* ptr;  // const T*
 
 public:
+    // Implicit conversion from a mutable iterator. This lets you pass
+    // `v.begin()` (iterator) to functions that expect a `const_iterator`
+    // — e.g. basic_vector::insert / erase — exactly like std::vector.
+    KNST_FORCE_INLINE knst_const_iterator(const knst_iterator<T>& it) noexcept
+        : ptr(it.ptr) {}
+
     using value_type = T;
     using difference_type = std::ptrdiff_t;
     using pointer = const T*;           
@@ -492,6 +504,8 @@ public:
     KNST_FORCE_INLINE friend bool operator>=(knst_const_iterator a, knst_const_iterator b) noexcept { return a.ptr >= b.ptr; }
     
     KNST_FORCE_INLINE reference operator[](difference_type n) const noexcept { return ptr[n]; }
+
+    KNST_FORCE_INLINE const T* get() const noexcept { return ptr; }
 };
 
 

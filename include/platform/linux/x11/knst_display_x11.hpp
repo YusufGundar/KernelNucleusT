@@ -1,3 +1,19 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
+/*
+----------------------------
+knst_display_x11.hpp
+----------------------------
+
+    Retrieves monitor information for the X11 backend.
+
+*/
+
+
 #pragma once
 
 
@@ -154,7 +170,9 @@ inline void knst_display::refresh_screens() noexcept {
                         double diagonal_inch = diagonal_mm / 25.4;
                         
                         if (diagonal_inch > 0.0) {
-                            monitor.dpi_scale = std::round(diagonal_px / diagonal_inch * 1000.0) / 1000.0;
+                                                        monitor.dpi_scale = static_cast<float>(
+                                std::round(diagonal_px / diagonal_inch * 1000.0) / 1000.0
+                            );
                         }
                     }
                     

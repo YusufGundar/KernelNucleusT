@@ -1,3 +1,8 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 
 /*
 ----------------------------
@@ -5,7 +10,7 @@ knst_memory.hpp
 ----------------------------
 
    knst_pool_allocator is an alternative to malloc that provides fast memory allocation from pre-allocated block pools. It is significantly faster than malloc for small allocations (64–2048 bytes) and falls back to malloc for larger ones. It uses reference counting, so copying does not result in heap duplication. Thread safety is optional (via KNST_MEMORY_POOL_USE_MUTEX). Aliases ending in `_sm`—such as `knst_vector_sm` and `knst_byte_string_sm`—utilize this allocator
-For most basic structures, the special memory feature will be activated via the '_sm' suffix.
+    For most basic structures, the special memory feature will be activated via the '_sm' suffix.
 
 
 */
@@ -25,7 +30,7 @@ For most basic structures, the special memory feature will be activated via the 
 
 
 
-#ifdef KNST_MEMORY_POOL_USE_MUTEX This macro makes the class thread-safe
+#ifdef KNST_MEMORY_POOL_USE_MUTEX // This macro makes the class thread-safe
     #include <mutex>
 #endif
 

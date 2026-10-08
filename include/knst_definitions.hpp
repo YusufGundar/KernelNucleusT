@@ -1,3 +1,9 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 /*
 ----------------------------
 knst_definitions.hpp
@@ -15,14 +21,14 @@ knst_definitions.hpp
 
     #if defined(KNST_CLASS_ALIGN_64)
       
-        #define KNST_STRING_ALIGNMENT alignas(64)
+        #define KNST_CLASS_ALIGNMENT alignas(64)
         static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 31;
         static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 30;
 
     #elif defined(KNST_CLASS_ALIGN_32)
         
-        #define KNST_STRING_ALIGNMENT alignas(32)
-        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 15; 
+        #define KNST_CLASS_ALIGNMENT alignas(32)
+        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 15; KNST_CLASS_ALIGNMENT
         static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 14;
 
     #else
@@ -75,7 +81,6 @@ knst_definitions.hpp
             #define KNST_USING_PLATFORM_WINDOWS 0
             #define KNST_USING_LINUX_PLATFORM_X11 0
             #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
-            #define KNST_USING_LINUX_PLATFORM_ANDROID 1
             #define KNST_LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, "KNST", __VA_ARGS__)  
             #define KNST_LOG_ERROR(...) __android_log_print(ANDROID_LOG_ERROR, "KNST", __VA_ARGS__)
             #define KNST_LOG_WARN(...) __android_log_print(ANDROID_LOG_WARN, "KNST", __VA_ARGS__)  
@@ -88,49 +93,36 @@ knst_definitions.hpp
             #include <android/native_window.h>
 
 
-        #if defined(KNST_PLATFORM_ANDROID_OPENGL)
-            #define KNST_USING_OPENGL
-            
-                
-        #elif defined(KNST_PLATFORM_ANDROID_VULKAN)
-            #define KNST_USING_VULKAN
-           
-
-        #endif
+    #else
 
 
-    #endif
-
-   
-        
-        
-
-
-    #if defined(_WIN32) || defined(_WIN64)
-        #define KNST_USING_PLATFORM_WINDOWS 1
-        #define KNST_USING_LINUX_PLATFORM_X11 0
-        #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
-        #define KNST_USING_LINUX_PLATFORM_ANDROID 0
-    #elif defined(__linux__)
-        #define KNST_USING_PLATFORM_LINUX 1
-        #define KNST_USING_PLATFORM_WINDOWS 0
-        #define KNST_USING_LINUX_PLATFORM_ANDROID 0
-
-        #if defined(KNST_LINUX_PLATFORM_X11)
-            #define KNST_USING_LINUX_PLATFORM_X11 1
-            #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
-
-        #elif defined(KNST_LINUX_PLATFORM_WAYLAND)
-            #define KNST_USING_LINUX_PLATFORM_WAYLAND 1
+        #if defined(_WIN32) || defined(_WIN64)
+            #define KNST_USING_PLATFORM_WINDOWS 1
             #define KNST_USING_LINUX_PLATFORM_X11 0
+            #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
+        #elif defined(__linux__)
+            #define KNST_USING_PLATFORM_LINUX 1
+            #define KNST_USING_PLATFORM_WINDOWS 0
+
+            #if defined(KNST_LINUX_PLATFORM_X11)
+                #define KNST_USING_LINUX_PLATFORM_X11 1
+                #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
+
+            #elif defined(KNST_LINUX_PLATFORM_WAYLAND)
+                #define KNST_USING_LINUX_PLATFORM_WAYLAND 1
+                #define KNST_USING_LINUX_PLATFORM_X11 0
+
+            #endif
+                
 
         #endif
+
+    
 
     #endif
 
            
        
-
 
 
 
