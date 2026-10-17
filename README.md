@@ -533,11 +533,11 @@ There are 4 scripts under `examples/complex_structures/knst_window/android/`. Th
 Usage:
 
 ```bash
-# Linux / macOS — OpenGL
+# Linux — OpenGL
 cd examples/complex_structures/knst_window/android
 ./build-android-opengl.sh
 
-# Linux / macOS — Vulkan
+# Linux — Vulkan
 ./build-android-vulkan.sh
 ```
 
@@ -738,7 +738,7 @@ That one line is enough: include folders, platform macros, X11/Wayland libraries
 
 ---
 
-### 🔹 Linux / macOS (Bash)
+### 🔹 Linux (Bash)
 
 ```bash
 # ------------------------------------X11--------------------------------------------
@@ -804,7 +804,7 @@ That one line is enough: include folders, platform macros, X11/Wayland libraries
 > **Easiest path:** run the ready-made script. SDK/NDK/device detection, build, APK, install and logcat all in one command.
 
 ```bash
-# Ready-made script — Linux / macOS
+# Ready-made script — Linux
   cd examples/complex_structures/knst_window/android
   ./build-android-opengl.sh     # OpenGL ES
   ./build-android-vulkan.sh     # Vulkan
@@ -820,7 +820,7 @@ That one line is enough: include folders, platform macros, X11/Wayland libraries
 Manual CMake (only produces `.so` — no APK / install / logcat):
 
 ```bash
-# Env var (Linux / macOS)
+# Env var (Linux)
   export ANDROID_NDK=$HOME/Android/Sdk/ndk/<version>
 
 # Env var (Windows PowerShell)
@@ -845,7 +845,7 @@ Manual CMake (only produces `.so` — no APK / install / logcat):
 
 | Shell | `-D...=.cpp` argument |
 |-------|-----------------------------|
-| **Bash (Linux/macOS)** | Works unquoted |
+| **Bash (Linux)** | Works unquoted |
 | **cmd.exe (Windows)** | Works unquoted |
 | **PowerShell** | **Quoting required** |
 | **MSYS2 UCRT64** | Works either way; quoting is guaranteed |
