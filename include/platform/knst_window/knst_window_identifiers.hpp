@@ -5,58 +5,53 @@
 
 #pragma once
 
-
 /*
 ----------------------------
 knst_window_identifiers.hpp
 ----------------------------
 
-    The macros used by the library for event-related operations are defined in this .hpp file.
+    Macros used by the library for event-related operations.
 
 */
 
-
-
-//  Macro names mirror the fields of knst_window_event so that every comparison
-//  is self-documenting:
+// Macro names mirror the fields of knst_window_event so every
+// comparison reads as documentation:
 //
-//      m_event.type          → KNST_WINDOW_EVENT_*
-//      m_event.key_action    → KNST_WINDOW_KEY_ACTION_*
-//      m_event.key_code      → KNST_WINDOW_KEY_CODE_*
-//      m_event.mouse_action  → KNST_WINDOW_MOUSE_ACTION_*
-//      m_event.mouse_button  → KNST_WINDOW_MOUSE_BUTTON_*
-//      m_event.mods          → KNST_WINDOW_MOD_*
+//     m_event.type          -> KNST_WINDOW_EVENT_*
+//     m_event.key_action    -> KNST_WINDOW_KEY_ACTION_*
+//     m_event.key_code      -> KNST_WINDOW_KEY_CODE_*
+//     m_event.mouse_action  -> KNST_WINDOW_MOUSE_ACTION_*
+//     m_event.mouse_button  -> KNST_WINDOW_MOUSE_BUTTON_*
+//     m_event.mods          -> KNST_WINDOW_MOD_*
 //
-//  Event type ranges (safe, non-overlapping):
-//      0            UNKNOWN sentinel (never dispatched)
-//      100 .. 199   Mouse events
-//      200 .. 299   Keyboard events
-//      300 .. 399   Window state events
-//      400 .. 499   Focus events
-//      500 .. 599   File drop events
-//      600 .. 699   Mobile / Android events
-//      700 .. 799   Application lifecycle events
+// Event type ranges (non-overlapping):
+//     0            UNKNOWN sentinel (never dispatched)
+//     100 .. 199   Mouse
+//     200 .. 299   Keyboard
+//     300 .. 399   Window state
+//     400 .. 499   Focus
+//     500 .. 599   File drop
+//     600 .. 699   Mobile / Android
+//     700 .. 799   App lifecycle
 //
-//  Action values are small integers (1, 2, 3) — they never collide with event
-//  type ranges. Modifier values are single-bit flags so multiple modifiers can
-//  be combined in a single integer.
-// ============================================================================
+// Action values are small ints (1, 2, 3) — they can't collide with the
+// type ranges. Modifier values are single bits so multiple modifiers
+// combine into one integer.
 
-// ============================================================================
-//  1) EVENT TYPES — m_event.type
-// ============================================================================
+// ─── 1) Event types — m_event.type ─────────────────────────────────────────
 #define KNST_WINDOW_EVENT_UNKNOWN                   0
 
-// ── Mouse events (100..199) ────────────────────────────────────────────────
+// Mouse events.
 #define KNST_WINDOW_EVENT_MOUSE                     100
 #define KNST_WINDOW_EVENT_MOTION                    101
 #define KNST_WINDOW_EVENT_ENTER                     102
 #define KNST_WINDOW_EVENT_LEAVE                     103
 
-// ── Keyboard events (200..299) ─────────────────────────────────────────────
+// Keyboard events.
 #define KNST_WINDOW_EVENT_KEYBOARD                  200
+#define KNST_WINDOW_EVENT_TEXT_INPUT                201
 
-// ── Window state events (300..399) ─────────────────────────────────────────
+// Window state events.
 #define KNST_WINDOW_EVENT_RESIZE                    300
 #define KNST_WINDOW_EVENT_MOVE                      301
 #define KNST_WINDOW_EVENT_MAXIMIZE                  302
@@ -66,25 +61,65 @@ knst_window_identifiers.hpp
 #define KNST_WINDOW_EVENT_EXPOSE                    306
 #define KNST_WINDOW_EVENT_CLOSE                     307
 #define KNST_WINDOW_EVENT_DISCONNECT                308
+// HiDPI / fractional-scale change. App should update framebuffer size
+// and glViewport.
+#define KNST_WINDOW_EVENT_SCALE_CHANGED             309
 
-// ── Focus events (400..499) ────────────────────────────────────────────────
+// Focus events.
 #define KNST_WINDOW_EVENT_FOCUS_IN                  400
 #define KNST_WINDOW_EVENT_FOCUS_OUT                 401
 
-// ── File drop events (500..599) ────────────────────────────────────────────
+// File drop events.
 #define KNST_WINDOW_EVENT_FILE_DROP                 500
 #define KNST_WINDOW_EVENT_FILE_DROP_ENTER           501
 #define KNST_WINDOW_EVENT_FILE_DROP_MOVE            502
 #define KNST_WINDOW_EVENT_FILE_DROP_LEAVE           503
 
-// ── Mobile events (600..699) ───────────────────────────────────────────────
-#define KNST_WINDOW_EVENT_MOBILE_TOUCH              600
-#define KNST_WINDOW_EVENT_MOBILE_BACK               601
-#define KNST_WINDOW_EVENT_MOBILE_HOME               602
+// Clipboard events.
+#define KNST_WINDOW_EVENT_CLIPBOARD_UPDATE          450
+// Fires when an async clipboard read completes. X11 SELECTION_NOTIFY,
+// Wayland read done; Windows reads synchronously and fires immediately.
+#define KNST_WINDOW_EVENT_CLIPBOARD_DATA            451
+
+// IME (input method editor) events.
+// From Wayland text-input-v3. Typing CJK: IME shows a "preedit" (text
+// not yet committed). App writes preedit into its text buffer; when the
+// user confirms with Space/Enter, commit arrives — preedit clears, real
+// text comes in.
+#define KNST_WINDOW_EVENT_TEXT_PREEDIT              452
+// IME wants to delete existing text behind the cursor. Example: user
+// typed 3 chars and IME's long suggestion replaces them. If
+// after_length > 0, chars after the cursor are affected too.
+#define KNST_WINDOW_EVENT_TEXT_DELETE_SURROUNDING   453
+
+// Touch (600..609) — cross-platform (Win/X11/Wayland/Android).
+#define KNST_WINDOW_EVENT_TOUCH                     600
+
+// Legacy alias — kept for backward compatibility.
+#define KNST_WINDOW_EVENT_MOBILE_TOUCH              KNST_WINDOW_EVENT_TOUCH
+
+// Touch actions — cross-platform.
+#define KNST_WINDOW_TOUCH_ACTION_PRESS               0
+#define KNST_WINDOW_TOUCH_ACTION_RELEASE             1
+#define KNST_WINDOW_TOUCH_ACTION_MOVE                2
+#define KNST_WINDOW_TOUCH_ACTION_CANCEL              3
+#define KNST_WINDOW_TOUCH_ACTION_OUTSIDE             4
+#define KNST_WINDOW_TOUCH_ACTION_POINTER_PRESS       5
+#define KNST_WINDOW_TOUCH_ACTION_POINTER_RELEASE     6
+
+// Mobile events (610..699) — Android-only.
+//
+// MOBILE_BACK and MOBILE_CAMERA used to both be 611 — pressing the
+// camera key closed the app. MOBILE_HOME and MOBILE_HELP were both
+// 612. BACK and HOME moved to 631/632 to break the clash.
+#define KNST_WINDOW_EVENT_MOBILE_BACK               631
+#define KNST_WINDOW_EVENT_MOBILE_HOME               632
 #define KNST_WINDOW_EVENT_MOBILE_MENU               603
 #define KNST_WINDOW_EVENT_MOBILE_SEARCH             604
 #define KNST_WINDOW_EVENT_MOBILE_APP_SWITCH         605
-#define KNST_WINDOW_EVENT_MOBILE_RECENT_APPS        606
+// 606 is free — MOBILE_RECENT_APPS never produced an event and has no
+// references in the codebase. Can be reused later.
+// #define KNST_WINDOW_EVENT_MOBILE_RECENT_APPS     606  // (removed)
 #define KNST_WINDOW_EVENT_MOBILE_VOLUME_UP          607
 #define KNST_WINDOW_EVENT_MOBILE_VOLUME_DOWN        608
 #define KNST_WINDOW_EVENT_MOBILE_VOLUME_MUTE        609
@@ -110,7 +145,7 @@ knst_window_identifiers.hpp
 #define KNST_WINDOW_EVENT_MOBILE_MEDIA_RECORD       629
 #define KNST_WINDOW_EVENT_MOBILE_MEDIA_PAUSE        630
 
-// ── App lifecycle events (700..799) ────────────────────────────────────────
+// App lifecycle events.
 #define KNST_WINDOW_EVENT_APP_STARTED               700
 #define KNST_WINDOW_EVENT_APP_RESUMED               701
 #define KNST_WINDOW_EVENT_APP_PAUSED                702
@@ -122,43 +157,32 @@ knst_window_identifiers.hpp
 #define KNST_WINDOW_EVENT_APP_CONTENT_RECT          708
 #define KNST_WINDOW_EVENT_APP_WINDOW_LOST           709
 
-// ============================================================================
-//  2) KEY ACTIONS — m_event.key_action
-// ============================================================================
+// ─── 2) Key actions — m_event.key_action ───────────────────────────────────
 #define KNST_WINDOW_KEY_ACTION_PRESS                1
 #define KNST_WINDOW_KEY_ACTION_RELEASE              2
 #define KNST_WINDOW_KEY_ACTION_REPEAT               3
 
-// ============================================================================
-//  3) MOUSE ACTIONS — m_event.mouse_action
-// ============================================================================
+// ─── 3) Mouse actions — m_event.mouse_action ───────────────────────────────
 #define KNST_WINDOW_MOUSE_ACTION_PRESS              1
 #define KNST_WINDOW_MOUSE_ACTION_RELEASE            2
 #define KNST_WINDOW_MOUSE_ACTION_SCROLL             3
 
-// ============================================================================
-//  4) MOUSE BUTTONS — m_event.mouse_button
-//  Values follow the X11 / POSIX convention: 1=left, 2=middle, 3=right.
-//  8 and 9 are the standard "back" and "forward" side buttons.
-// ============================================================================
+// ─── 4) Mouse buttons — m_event.mouse_button ───────────────────────────────
+// X11 / POSIX convention: 1=left, 2=middle, 3=right. 8 and 9 are the
+// standard "back" and "forward" side buttons.
 #define KNST_WINDOW_MOUSE_BUTTON_LEFT               1
 #define KNST_WINDOW_MOUSE_BUTTON_MIDDLE             2
 #define KNST_WINDOW_MOUSE_BUTTON_RIGHT              3
 #define KNST_WINDOW_MOUSE_BUTTON_BACK               8
 #define KNST_WINDOW_MOUSE_BUTTON_FORWARD            9
 
-// ============================================================================
-//  5) SCROLL DELTA SIGN — m_event.mouse_scroll_delta
-// ============================================================================
+// ─── 5) Scroll delta sign — m_event.mouse_scroll_delta ─────────────────────
 #define KNST_WINDOW_MOUSE_SCROLL_UP                 1
 #define KNST_WINDOW_MOUSE_SCROLL_DOWN              (-1)
 
-// ============================================================================
-//  6) MODIFIER BITS — m_event.mods
-//  These are unified single-bit flags. Every platform handler MUST translate
-//  its own native state mask into these bit positions before storing the
-//  value into m_event.mods.
-// ============================================================================
+// ─── 6) Modifier bits — m_event.mods ───────────────────────────────────────
+// Unified single-bit flags. Every platform handler MUST translate its
+// native state mask into these bit positions before storing.
 #define KNST_WINDOW_MOD_SHIFT                       (1 << 0)   // 1
 #define KNST_WINDOW_MOD_CONTROL                     (1 << 1)   // 2
 #define KNST_WINDOW_MOD_ALT                         (1 << 2)   // 4
@@ -166,32 +190,31 @@ knst_window_identifiers.hpp
 #define KNST_WINDOW_MOD_CAPS_LOCK                   (1 << 4)   // 16
 #define KNST_WINDOW_MOD_NUM_LOCK                    (1 << 5)   // 32
 
-// ============================================================================
-//  7) WINDOW ATTRIBUTES — set_attribute() / get_attribute()
-// ============================================================================
+// ─── 7) Window attributes — set_attribute() / get_attribute() ──────────────
 #define KNST_WINDOW_ATTR_DECORATED                  1
 #define KNST_WINDOW_ATTR_RESIZABLE                  2
 #define KNST_WINDOW_ATTR_ALWAYS_ON_TOP              3
-#define KNST_WINDOW_ATTR_TRANSPARENT                4
+// The old name KNST_WINDOW_ATTR_TRANSPARENT was misleading — it wasn't
+// visual transparency but click-through (mouse events pass the window).
+// New name is CLICK_THROUGH; the old one stays as an alias for
+// backward compatibility.
+#define KNST_WINDOW_ATTR_CLICK_THROUGH              4
+#define KNST_WINDOW_ATTR_TRANSPARENT                KNST_WINDOW_ATTR_CLICK_THROUGH
 
-// ============================================================================
-//  8) DEFAULT SENTINEL
-// ============================================================================
+// ─── 8) Default sentinel ───────────────────────────────────────────────────
 #define KNST_WINDOW_DEFAULT                         (-10000)
 
-// ============================================================================
-//  9) PLATFORM-SPECIFIC KEY CODE VALUES
-//  Same macro names on every platform; native values differ.
-// ============================================================================
+// ─── 9) Platform-specific key code values ──────────────────────────────────
+// Same macro names everywhere; native values differ per platform.
 
 
-// ────────────────────────────────────────────────────────────────────────────
-//  WINDOWS  (Virtual-Key codes)
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
+//  WINDOWS (Virtual-Key codes)
+// ────────────────────────────────────────────────────────────────────
 #if KNST_USING_PLATFORM_WINDOWS
     #include <windows.h>
 
-    // ── Letters A..Z ───────────────────────────────────────────────────────
+    // Letters A..Z.
     #define KNST_WINDOW_KEY_CODE_A                  'A'
     #define KNST_WINDOW_KEY_CODE_B                  'B'
     #define KNST_WINDOW_KEY_CODE_C                  'C'
@@ -219,7 +242,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_Y                  'Y'
     #define KNST_WINDOW_KEY_CODE_Z                  'Z'
 
-    // ── Turkish characters ─────────────────────────────────────────────────
+    // Turkish characters.
     #define KNST_WINDOW_KEY_CODE_C_CEDILLA          VK_OEM_4      // Ç
     #define KNST_WINDOW_KEY_CODE_G_BREVE            VK_OEM_5      // Ğ
     #define KNST_WINDOW_KEY_CODE_I_DOTLESS          VK_OEM_6      // ı
@@ -227,7 +250,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_S_CEDILLA          VK_OEM_8      // Ş
     #define KNST_WINDOW_KEY_CODE_U_DIAERESIS        VK_OEM_102    // Ü
 
-    // ── Digits ─────────────────────────────────────────────────────────────
+    // Digits.
     #define KNST_WINDOW_KEY_CODE_0                  '0'
     #define KNST_WINDOW_KEY_CODE_1                  '1'
     #define KNST_WINDOW_KEY_CODE_2                  '2'
@@ -239,7 +262,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_8                  '8'
     #define KNST_WINDOW_KEY_CODE_9                  '9'
 
-    // ── Numpad ─────────────────────────────────────────────────────────────
+    // Numpad.
     #define KNST_WINDOW_KEY_CODE_NUMPAD_0           VK_NUMPAD0
     #define KNST_WINDOW_KEY_CODE_NUMPAD_1           VK_NUMPAD1
     #define KNST_WINDOW_KEY_CODE_NUMPAD_2           VK_NUMPAD2
@@ -257,7 +280,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_NUMPAD_DECIMAL     VK_DECIMAL
     #define KNST_WINDOW_KEY_CODE_NUMPAD_ENTER       VK_RETURN
 
-    // ── Function keys ──────────────────────────────────────────────────────
+    // Function keys.
     #define KNST_WINDOW_KEY_CODE_F1                 VK_F1
     #define KNST_WINDOW_KEY_CODE_F2                 VK_F2
     #define KNST_WINDOW_KEY_CODE_F3                 VK_F3
@@ -271,7 +294,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_F11                VK_F11
     #define KNST_WINDOW_KEY_CODE_F12                VK_F12
 
-    // ── Special keys ───────────────────────────────────────────────────────
+    // Special keys.
     #define KNST_WINDOW_KEY_CODE_ESCAPE             VK_ESCAPE
     #define KNST_WINDOW_KEY_CODE_ENTER              VK_RETURN
     #define KNST_WINDOW_KEY_CODE_SPACE              VK_SPACE
@@ -281,20 +304,20 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_NUM_LOCK           VK_NUMLOCK
     #define KNST_WINDOW_KEY_CODE_SCROLL_LOCK        VK_SCROLL
 
-    // ── Modifier keys ──────────────────────────────────────────────────────
+    // Modifier keys.
     #define KNST_WINDOW_KEY_CODE_SHIFT              VK_SHIFT
     #define KNST_WINDOW_KEY_CODE_CONTROL            VK_CONTROL
     #define KNST_WINDOW_KEY_CODE_ALT                VK_MENU
     #define KNST_WINDOW_KEY_CODE_SUPER              VK_LWIN
     #define KNST_WINDOW_KEY_CODE_MENU               VK_APPS
 
-    // ── Arrow keys ─────────────────────────────────────────────────────────
+    // Arrows.
     #define KNST_WINDOW_KEY_CODE_LEFT               VK_LEFT
     #define KNST_WINDOW_KEY_CODE_RIGHT              VK_RIGHT
     #define KNST_WINDOW_KEY_CODE_UP                 VK_UP
     #define KNST_WINDOW_KEY_CODE_DOWN               VK_DOWN
 
-    // ── Navigation ─────────────────────────────────────────────────────────
+    // Navigation.
     #define KNST_WINDOW_KEY_CODE_HOME               VK_HOME
     #define KNST_WINDOW_KEY_CODE_END                VK_END
     #define KNST_WINDOW_KEY_CODE_PAGE_UP            VK_PRIOR
@@ -305,7 +328,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_PAUSE              VK_PAUSE
     #define KNST_WINDOW_KEY_CODE_BREAK              VK_CANCEL
 
-    // ── Symbol keys ────────────────────────────────────────────────────────
+    // Symbol keys.
     #define KNST_WINDOW_KEY_CODE_SEMICOLON          VK_OEM_1
     #define KNST_WINDOW_KEY_CODE_SLASH              VK_OEM_2
     #define KNST_WINDOW_KEY_CODE_GRAVE              VK_OEM_3
@@ -329,7 +352,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_RIGHT_BRACE        VK_OEM_6
     #define KNST_WINDOW_KEY_CODE_UNDERSCORE         VK_OEM_MINUS
 
-    // ── Media keys ─────────────────────────────────────────────────────────
+    // Media keys.
     #define KNST_WINDOW_KEY_CODE_VOLUME_UP          VK_VOLUME_UP
     #define KNST_WINDOW_KEY_CODE_VOLUME_DOWN        VK_VOLUME_DOWN
     #define KNST_WINDOW_KEY_CODE_VOLUME_MUTE        VK_VOLUME_MUTE
@@ -339,7 +362,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_MEDIA_PREV         VK_MEDIA_PREV_TRACK
     #define KNST_WINDOW_KEY_CODE_MEDIA_PAUSE        VK_MEDIA_PLAY_PAUSE
 
-    // ── Browser keys ───────────────────────────────────────────────────────
+    // Browser keys.
     #define KNST_WINDOW_KEY_CODE_BROWSER_HOME       VK_BROWSER_HOME
     #define KNST_WINDOW_KEY_CODE_BROWSER_BACK       VK_BROWSER_BACK
     #define KNST_WINDOW_KEY_CODE_BROWSER_FORWARD    VK_BROWSER_FORWARD
@@ -347,8 +370,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_BROWSER_SEARCH     VK_BROWSER_SEARCH
     #define KNST_WINDOW_KEY_CODE_BROWSER_FAVORITES  VK_BROWSER_FAVORITES
 
-    // ── Cursors ────────────────────────────────────────────────────────────
-
+    // Cursors.
     #define KNST_WINDOW_CURSOR_ARROW                32512   // OCR_NORMAL
     #define KNST_WINDOW_CURSOR_IBEAM                32513   // OCR_IBEAM
     #define KNST_WINDOW_CURSOR_CROSSHAIR            32515   // OCR_CROSS
@@ -359,13 +381,18 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_CURSOR_WAIT                 32514   // OCR_WAIT
     #define KNST_WINDOW_CURSOR_HELP                 32651   // OCR_HELP
     #define KNST_WINDOW_CURSOR_NOT_ALLOWED          32648   // OCR_NO
-    #define KNST_WINDOW_CURSOR_HIDDEN               0
-    #define KNST_WINDOW_CURSOR_DISABLED             0
+    #define KNST_WINDOW_CURSOR_NWSE_RESIZE          32642   // OCR_SIZENWSE
+    #define KNST_WINDOW_CURSOR_NESW_RESIZE          32643   // OCR_SIZENESW
+    // HIDDEN and DISABLED used to share the same value (0), which made
+    // the DISABLED branch in set_cursor_mode dead code. Give DISABLED
+    // its own marker.
+    #define KNST_WINDOW_CURSOR_HIDDEN               0x10001
+    #define KNST_WINDOW_CURSOR_DISABLED             0x10000
 
 
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
 //  LINUX / X11
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
 #elif KNST_USING_LINUX_PLATFORM_X11
     #include <X11/Xlib.h>
     #include <X11/XF86keysym.h>
@@ -377,7 +404,7 @@ knst_window_identifiers.hpp
     #include <X11/extensions/sync.h>
     #include <X11/extensions/syncconst.h>
 
-    // ── Letters A..Z (uppercase — X11 handler normalizes lowercase) ────────
+    // Letters A..Z (uppercase — X11 handler normalizes lowercase).
     #define KNST_WINDOW_KEY_CODE_A                  XK_A
     #define KNST_WINDOW_KEY_CODE_B                  XK_B
     #define KNST_WINDOW_KEY_CODE_C                  XK_C
@@ -405,15 +432,21 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_Y                  XK_Y
     #define KNST_WINDOW_KEY_CODE_Z                  XK_Z
 
-    // ── Turkish characters (normalized to uppercase by handler) ────────────
+    // Turkish characters.
+    //
+    // I_DOTLESS used to be defined as XK_I — collided with the ASCII
+    // `I` key. Turkish keyboards send XK_idotless for `ı`, and the
+    // handler normalized it back to XK_I, so `ı` and `I` looked
+    // identical. Give dotless-I its own key code space outside the
+    // X11 keysym range (which is < 0x2000000).
     #define KNST_WINDOW_KEY_CODE_C_CEDILLA          XK_Ccedilla
     #define KNST_WINDOW_KEY_CODE_G_BREVE            XK_Gbreve
-    #define KNST_WINDOW_KEY_CODE_I_DOTLESS          XK_I
+    #define KNST_WINDOW_KEY_CODE_I_DOTLESS          (0x20000000 + 1)  // sentinel
     #define KNST_WINDOW_KEY_CODE_O_DIAERESIS        XK_Odiaeresis
     #define KNST_WINDOW_KEY_CODE_S_CEDILLA          XK_Scedilla
     #define KNST_WINDOW_KEY_CODE_U_DIAERESIS        XK_Udiaeresis
 
-    // ── Digits ─────────────────────────────────────────────────────────────
+    // Digits.
     #define KNST_WINDOW_KEY_CODE_0                  XK_0
     #define KNST_WINDOW_KEY_CODE_1                  XK_1
     #define KNST_WINDOW_KEY_CODE_2                  XK_2
@@ -425,7 +458,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_8                  XK_8
     #define KNST_WINDOW_KEY_CODE_9                  XK_9
 
-    // ── Numpad ─────────────────────────────────────────────────────────────
+    // Numpad.
     #define KNST_WINDOW_KEY_CODE_NUMPAD_0           XK_KP_0
     #define KNST_WINDOW_KEY_CODE_NUMPAD_1           XK_KP_1
     #define KNST_WINDOW_KEY_CODE_NUMPAD_2           XK_KP_2
@@ -443,7 +476,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_NUMPAD_DECIMAL     XK_KP_Decimal
     #define KNST_WINDOW_KEY_CODE_NUMPAD_ENTER       XK_KP_Enter
 
-    // ── Function keys ──────────────────────────────────────────────────────
+    // Function keys.
     #define KNST_WINDOW_KEY_CODE_F1                 XK_F1
     #define KNST_WINDOW_KEY_CODE_F2                 XK_F2
     #define KNST_WINDOW_KEY_CODE_F3                 XK_F3
@@ -457,7 +490,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_F11                XK_F11
     #define KNST_WINDOW_KEY_CODE_F12                XK_F12
 
-    // ── Special keys ───────────────────────────────────────────────────────
+    // Special keys.
     #define KNST_WINDOW_KEY_CODE_ESCAPE             XK_Escape
     #define KNST_WINDOW_KEY_CODE_ENTER              XK_Return
     #define KNST_WINDOW_KEY_CODE_SPACE              XK_space
@@ -467,20 +500,20 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_NUM_LOCK           XK_Num_Lock
     #define KNST_WINDOW_KEY_CODE_SCROLL_LOCK        XK_Scroll_Lock
 
-    // ── Modifier keys ──────────────────────────────────────────────────────
+    // Modifier keys.
     #define KNST_WINDOW_KEY_CODE_SHIFT              XK_Shift_L
     #define KNST_WINDOW_KEY_CODE_CONTROL            XK_Control_L
     #define KNST_WINDOW_KEY_CODE_ALT                XK_Alt_L
     #define KNST_WINDOW_KEY_CODE_SUPER              XK_Super_L
     #define KNST_WINDOW_KEY_CODE_MENU               XK_Menu
 
-    // ── Arrow keys ─────────────────────────────────────────────────────────
+    // Arrows.
     #define KNST_WINDOW_KEY_CODE_LEFT               XK_Left
     #define KNST_WINDOW_KEY_CODE_RIGHT              XK_Right
     #define KNST_WINDOW_KEY_CODE_UP                 XK_Up
     #define KNST_WINDOW_KEY_CODE_DOWN               XK_Down
 
-    // ── Navigation ─────────────────────────────────────────────────────────
+    // Navigation.
     #define KNST_WINDOW_KEY_CODE_HOME               XK_Home
     #define KNST_WINDOW_KEY_CODE_END                XK_End
     #define KNST_WINDOW_KEY_CODE_PAGE_UP            XK_Page_Up
@@ -491,7 +524,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_PAUSE              XK_Pause
     #define KNST_WINDOW_KEY_CODE_BREAK              XK_Break
 
-    // ── Symbol keys ────────────────────────────────────────────────────────
+    // Symbol keys.
     #define KNST_WINDOW_KEY_CODE_SEMICOLON          XK_semicolon
     #define KNST_WINDOW_KEY_CODE_SLASH              XK_slash
     #define KNST_WINDOW_KEY_CODE_GRAVE              XK_grave
@@ -515,7 +548,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_RIGHT_BRACE        XK_braceright
     #define KNST_WINDOW_KEY_CODE_UNDERSCORE         XK_underscore
 
-    // ── Media keys ─────────────────────────────────────────────────────────
+    // Media keys.
     #define KNST_WINDOW_KEY_CODE_VOLUME_UP          XF86XK_AudioRaiseVolume
     #define KNST_WINDOW_KEY_CODE_VOLUME_DOWN        XF86XK_AudioLowerVolume
     #define KNST_WINDOW_KEY_CODE_VOLUME_MUTE        XF86XK_AudioMute
@@ -525,7 +558,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_MEDIA_PREV         XF86XK_AudioPrev
     #define KNST_WINDOW_KEY_CODE_MEDIA_PAUSE        XF86XK_AudioPause
 
-    // ── Browser keys ───────────────────────────────────────────────────────
+    // Browser keys.
     #define KNST_WINDOW_KEY_CODE_BROWSER_HOME       XF86XK_HomePage
     #define KNST_WINDOW_KEY_CODE_BROWSER_BACK       XF86XK_Back
     #define KNST_WINDOW_KEY_CODE_BROWSER_FORWARD    XF86XK_Forward
@@ -533,7 +566,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_BROWSER_SEARCH     XF86XK_Search
     #define KNST_WINDOW_KEY_CODE_BROWSER_FAVORITES  XF86XK_Favorites
 
-    // ── Cursors ────────────────────────────────────────────────────────────
+    // Cursors.
     #define KNST_WINDOW_CURSOR_ARROW                XC_left_ptr
     #define KNST_WINDOW_CURSOR_IBEAM                XC_xterm
     #define KNST_WINDOW_CURSOR_CROSSHAIR            XC_crosshair
@@ -544,23 +577,46 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_CURSOR_WAIT                 XC_watch
     #define KNST_WINDOW_CURSOR_HELP                 XC_question_arrow
     #define KNST_WINDOW_CURSOR_NOT_ALLOWED          XC_X_cursor
-    #define KNST_WINDOW_CURSOR_HIDDEN               0
-    #define KNST_WINDOW_CURSOR_DISABLED             0
+    // The X11 font cursor set has no true NWSE/NESW diagonal resize.
+    // Use the closest-looking corners. Modern Xcursor theme cursors
+    // (nwse-resize) can be loaded with XcursorLibraryLoadCursor, but
+    // the XC_ font cursor set doesn't include them.
+    //
+    // Abstract IDs outside the X11 font cursor range (0..154). The
+    // Wayland code uses the same macros, so these values must not
+    // collide with any real font cursor.
+    #define KNST_WINDOW_CURSOR_NWSE_RESIZE          0xFFF0
+    #define KNST_WINDOW_CURSOR_NESW_RESIZE          0xFFF1
+    // XC_X_cursor == 0 (same as NOT_ALLOWED) -> HIDDEN needs a distinct
+    // marker.
+    #define KNST_WINDOW_CURSOR_HIDDEN               0x10001
+    #define KNST_WINDOW_CURSOR_DISABLED             0x10000
 
 
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
 //  LINUX / WAYLAND
-// ────────────────────────────────────────────────────────────────────────────
-#elif KNST_USING_LINUX_PLATFORM_WAYLAND
+// ────────────────────────────────────────────────────────────────────
+#endif
+
+#if KNST_USING_LINUX_PLATFORM_WAYLAND
     #include <xkbcommon/xkbcommon-keysyms.h>
     #include <wayland-client.h>
     #include "../linux/wayland/protocol_files/xdg-shell-client-protocol.h"
-    #include "../linux/wayland/protocol_files/xdg-output-client-protocol.h"
     #include "../linux/wayland/protocol_files/xdg-decoration-client-protocol.h"
     #include "../linux/wayland/protocol_files/relative-pointer-unstable-v1-client-protocol.h"
     #include "../linux/wayland/protocol_files/pointer-constraints-unstable-v1-client-protocol.h"
+    #include "../linux/wayland/protocol_files/xdg-decoration-client-protocol.h"
+    #include "../linux/wayland/protocol_files/cursor-shape-client-protocol.h"
+    #include "../linux/wayland/protocol_files/fractional-scale-client-protocol.h"
+    #include "../linux/wayland/protocol_files/viewporter-client-protocol.h"
+    #include "../linux/wayland/protocol_files/xdg-activation-client-protocol.h"
+    #include "../linux/wayland/protocol_files/primary-selection-client-protocol.h"
+    #include "../linux/wayland/protocol_files/idle-inhibit-client-protocol.h"
+    #include "../linux/wayland/protocol_files/text-input-v3-client-protocol.h"
+    #include "../linux/wayland/protocol_files/xdg-toplevel-icon-client-protocol.h"
 
-    // ── Letters A..Z ───────────────────────────────────────────────────────
+#if !KNST_USING_LINUX_PLATFORM_X11
+    // Letters A..Z (single-Wayland mode only — dual mode uses X11 values).
     #define KNST_WINDOW_KEY_CODE_A                  XKB_KEY_A
     #define KNST_WINDOW_KEY_CODE_B                  XKB_KEY_B
     #define KNST_WINDOW_KEY_CODE_C                  XKB_KEY_C
@@ -588,7 +644,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_Y                  XKB_KEY_Y
     #define KNST_WINDOW_KEY_CODE_Z                  XKB_KEY_Z
 
-    // ── Turkish characters ─────────────────────────────────────────────────
+    // Turkish characters.
     #define KNST_WINDOW_KEY_CODE_C_CEDILLA          XKB_KEY_Ccedilla
     #define KNST_WINDOW_KEY_CODE_G_BREVE            XKB_KEY_Gbreve
     #define KNST_WINDOW_KEY_CODE_I_DOTLESS          XKB_KEY_I
@@ -596,7 +652,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_S_CEDILLA          XKB_KEY_Scedilla
     #define KNST_WINDOW_KEY_CODE_U_DIAERESIS        XKB_KEY_Udiaeresis
 
-    // ── Digits ─────────────────────────────────────────────────────────────
+    // Digits.
     #define KNST_WINDOW_KEY_CODE_0                  XKB_KEY_0
     #define KNST_WINDOW_KEY_CODE_1                  XKB_KEY_1
     #define KNST_WINDOW_KEY_CODE_2                  XKB_KEY_2
@@ -608,7 +664,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_8                  XKB_KEY_8
     #define KNST_WINDOW_KEY_CODE_9                  XKB_KEY_9
 
-    // ── Numpad ─────────────────────────────────────────────────────────────
+    // Numpad.
     #define KNST_WINDOW_KEY_CODE_NUMPAD_0           XKB_KEY_KP_0
     #define KNST_WINDOW_KEY_CODE_NUMPAD_1           XKB_KEY_KP_1
     #define KNST_WINDOW_KEY_CODE_NUMPAD_2           XKB_KEY_KP_2
@@ -626,7 +682,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_NUMPAD_DECIMAL     XKB_KEY_KP_Decimal
     #define KNST_WINDOW_KEY_CODE_NUMPAD_ENTER       XKB_KEY_KP_Enter
 
-    // ── Function keys ──────────────────────────────────────────────────────
+    // Function keys.
     #define KNST_WINDOW_KEY_CODE_F1                 XKB_KEY_F1
     #define KNST_WINDOW_KEY_CODE_F2                 XKB_KEY_F2
     #define KNST_WINDOW_KEY_CODE_F3                 XKB_KEY_F3
@@ -640,7 +696,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_F11                XKB_KEY_F11
     #define KNST_WINDOW_KEY_CODE_F12                XKB_KEY_F12
 
-    // ── Special keys ───────────────────────────────────────────────────────
+    // Special keys.
     #define KNST_WINDOW_KEY_CODE_ESCAPE             XKB_KEY_Escape
     #define KNST_WINDOW_KEY_CODE_ENTER              XKB_KEY_Return
     #define KNST_WINDOW_KEY_CODE_SPACE              XKB_KEY_space
@@ -650,20 +706,20 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_NUM_LOCK           XKB_KEY_Num_Lock
     #define KNST_WINDOW_KEY_CODE_SCROLL_LOCK        XKB_KEY_Scroll_Lock
 
-    // ── Modifier keys ──────────────────────────────────────────────────────
+    // Modifier keys.
     #define KNST_WINDOW_KEY_CODE_SHIFT              XKB_KEY_Shift_L
     #define KNST_WINDOW_KEY_CODE_CONTROL            XKB_KEY_Control_L
     #define KNST_WINDOW_KEY_CODE_ALT                XKB_KEY_Alt_L
     #define KNST_WINDOW_KEY_CODE_SUPER              XKB_KEY_Super_L
     #define KNST_WINDOW_KEY_CODE_MENU               XKB_KEY_Menu
 
-    // ── Arrow keys ─────────────────────────────────────────────────────────
+    // Arrows.
     #define KNST_WINDOW_KEY_CODE_LEFT               XKB_KEY_Left
     #define KNST_WINDOW_KEY_CODE_RIGHT              XKB_KEY_Right
     #define KNST_WINDOW_KEY_CODE_UP                 XKB_KEY_Up
     #define KNST_WINDOW_KEY_CODE_DOWN               XKB_KEY_Down
 
-    // ── Navigation ─────────────────────────────────────────────────────────
+    // Navigation.
     #define KNST_WINDOW_KEY_CODE_HOME               XKB_KEY_Home
     #define KNST_WINDOW_KEY_CODE_END                XKB_KEY_End
     #define KNST_WINDOW_KEY_CODE_PAGE_UP            XKB_KEY_Page_Up
@@ -674,7 +730,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_PAUSE              XKB_KEY_Pause
     #define KNST_WINDOW_KEY_CODE_BREAK              XKB_KEY_Break
 
-    // ── Symbol keys ────────────────────────────────────────────────────────
+    // Symbol keys.
     #define KNST_WINDOW_KEY_CODE_SEMICOLON          XKB_KEY_semicolon
     #define KNST_WINDOW_KEY_CODE_SLASH              XKB_KEY_slash
     #define KNST_WINDOW_KEY_CODE_GRAVE              XKB_KEY_grave
@@ -698,7 +754,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_RIGHT_BRACE        XKB_KEY_braceright
     #define KNST_WINDOW_KEY_CODE_UNDERSCORE         XKB_KEY_underscore
 
-    // ── Media keys ─────────────────────────────────────────────────────────
+    // Media keys.
     #define KNST_WINDOW_KEY_CODE_VOLUME_UP          XKB_KEY_XF86AudioRaiseVolume
     #define KNST_WINDOW_KEY_CODE_VOLUME_DOWN        XKB_KEY_XF86AudioLowerVolume
     #define KNST_WINDOW_KEY_CODE_VOLUME_MUTE        XKB_KEY_XF86AudioMute
@@ -708,7 +764,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_MEDIA_PREV         XKB_KEY_XF86AudioPrev
     #define KNST_WINDOW_KEY_CODE_MEDIA_PAUSE        XKB_KEY_XF86AudioPause
 
-    // ── Browser keys ───────────────────────────────────────────────────────
+    // Browser keys.
     #define KNST_WINDOW_KEY_CODE_BROWSER_HOME       XKB_KEY_XF86HomePage
     #define KNST_WINDOW_KEY_CODE_BROWSER_BACK       XKB_KEY_XF86Back
     #define KNST_WINDOW_KEY_CODE_BROWSER_FORWARD    XKB_KEY_XF86Forward
@@ -716,7 +772,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_BROWSER_SEARCH     XKB_KEY_XF86Search
     #define KNST_WINDOW_KEY_CODE_BROWSER_FAVORITES  XKB_KEY_XF86Favorites
 
-    // ── Cursors (abstract IDs) ─────────────────────────────────────────────
+    // Cursors (abstract IDs).
     #define KNST_WINDOW_CURSOR_ARROW                1
     #define KNST_WINDOW_CURSOR_IBEAM                2
     #define KNST_WINDOW_CURSOR_CROSSHAIR            3
@@ -727,16 +783,41 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_CURSOR_WAIT                 8
     #define KNST_WINDOW_CURSOR_HELP                 9
     #define KNST_WINDOW_CURSOR_NOT_ALLOWED          10
-    #define KNST_WINDOW_CURSOR_HIDDEN               11
-    #define KNST_WINDOW_CURSOR_DISABLED             12
+    #define KNST_WINDOW_CURSOR_NWSE_RESIZE          13   // Wayland manager maps to wp_cursor_shape
+    #define KNST_WINDOW_CURSOR_NESW_RESIZE          14
+    #define KNST_WINDOW_CURSOR_HIDDEN               0x10001
+    #define KNST_WINDOW_CURSOR_DISABLED             0x10000
+#endif   // end of key codes for single-Wayland mode
+#endif   // end of Wayland headers
 
-
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
 //  ANDROID
-// ────────────────────────────────────────────────────────────────────────────
-#elif defined(KNST_USING_PLATFORM_ANDROID)
+// ────────────────────────────────────────────────────────────────────
+#if defined(KNST_USING_PLATFORM_ANDROID)
 
-    // ── Letters A..Z (normalized to ASCII by handler) ──────────────────────
+    // Android key code strategy.
+    //
+    // AKEYCODE_* values collide with ASCII:
+    //   AKEYCODE_ENTER   = 66 == 'B'
+    //   AKEYCODE_DEL     = 67 == 'C'
+    //   AKEYCODE_ESCAPE  = 111 == 'o'
+    //   AKEYCODE_MENU    = 82 == 'R'
+    //   AKEYCODE_COMMA   = 55 == '7'
+    //   AKEYCODE_PERIOD  = 56 == '8'
+    //   AKEYCODE_ALT_L   = 57 == '9'
+    //   ... dozens of collisions
+    //
+    // So:
+    //   - A-Z -> 'A'..'Z' (ASCII, matches other platforms)
+    //   - 0-9 -> '0'..'9' (ASCII)
+    //   - Every other AKEYCODE_* -> AKEYCODE_X + 0x10000
+    //     (far from ASCII, no collisions possible)
+    //
+    // input_callback() applies the same offset. User code uses the
+    // KNST_WINDOW_KEY_CODE_* macros, so nothing needs to change.
+    #define KNST_ANDROID_KEY_OFFSET                 0x10000
+
+    // Letters A..Z (normalized to ASCII).
     #define KNST_WINDOW_KEY_CODE_A                  'A'
     #define KNST_WINDOW_KEY_CODE_B                  'B'
     #define KNST_WINDOW_KEY_CODE_C                  'C'
@@ -764,7 +845,7 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_Y                  'Y'
     #define KNST_WINDOW_KEY_CODE_Z                  'Z'
 
-    // ── Digits (normalized to ASCII) ───────────────────────────────────────
+    // Digits.
     #define KNST_WINDOW_KEY_CODE_0                  '0'
     #define KNST_WINDOW_KEY_CODE_1                  '1'
     #define KNST_WINDOW_KEY_CODE_2                  '2'
@@ -776,102 +857,126 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_KEY_CODE_8                  '8'
     #define KNST_WINDOW_KEY_CODE_9                  '9'
 
-    // ── Function keys ──────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_F1                 AKEYCODE_F1
-    #define KNST_WINDOW_KEY_CODE_F2                 AKEYCODE_F2
-    #define KNST_WINDOW_KEY_CODE_F3                 AKEYCODE_F3
-    #define KNST_WINDOW_KEY_CODE_F4                 AKEYCODE_F4
-    #define KNST_WINDOW_KEY_CODE_F5                 AKEYCODE_F5
-    #define KNST_WINDOW_KEY_CODE_F6                 AKEYCODE_F6
-    #define KNST_WINDOW_KEY_CODE_F7                 AKEYCODE_F7
-    #define KNST_WINDOW_KEY_CODE_F8                 AKEYCODE_F8
-    #define KNST_WINDOW_KEY_CODE_F9                 AKEYCODE_F9
-    #define KNST_WINDOW_KEY_CODE_F10                AKEYCODE_F10
-    #define KNST_WINDOW_KEY_CODE_F11                AKEYCODE_F11
-    #define KNST_WINDOW_KEY_CODE_F12                AKEYCODE_F12
+    // Function keys.
+    #define KNST_WINDOW_KEY_CODE_F1                 (AKEYCODE_F1 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F2                 (AKEYCODE_F2 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F3                 (AKEYCODE_F3 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F4                 (AKEYCODE_F4 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F5                 (AKEYCODE_F5 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F6                 (AKEYCODE_F6 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F7                 (AKEYCODE_F7 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F8                 (AKEYCODE_F8 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F9                 (AKEYCODE_F9 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F10                (AKEYCODE_F10 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F11                (AKEYCODE_F11 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_F12                (AKEYCODE_F12 + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Special keys ───────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_ESCAPE             AKEYCODE_ESCAPE
-    #define KNST_WINDOW_KEY_CODE_ENTER              AKEYCODE_ENTER
-    #define KNST_WINDOW_KEY_CODE_SPACE              AKEYCODE_SPACE
-    #define KNST_WINDOW_KEY_CODE_BACKSPACE          AKEYCODE_DEL
-    #define KNST_WINDOW_KEY_CODE_TAB                AKEYCODE_TAB
-    #define KNST_WINDOW_KEY_CODE_CAPS_LOCK          AKEYCODE_CAPS_LOCK
-    #define KNST_WINDOW_KEY_CODE_NUM_LOCK           AKEYCODE_NUM_LOCK
-    #define KNST_WINDOW_KEY_CODE_SCROLL_LOCK        AKEYCODE_SCROLL_LOCK
-    #define KNST_WINDOW_KEY_CODE_DELETE             AKEYCODE_FORWARD_DEL
-    #define KNST_WINDOW_KEY_CODE_INSERT             AKEYCODE_INSERT
+    // Special keys.
+    #define KNST_WINDOW_KEY_CODE_ESCAPE             (AKEYCODE_ESCAPE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_ENTER              (AKEYCODE_ENTER + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_SPACE              (AKEYCODE_SPACE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_BACKSPACE          (AKEYCODE_DEL + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_TAB                (AKEYCODE_TAB + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_CAPS_LOCK          (AKEYCODE_CAPS_LOCK + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUM_LOCK           (AKEYCODE_NUM_LOCK + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_SCROLL_LOCK        (AKEYCODE_SCROLL_LOCK + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_DELETE             (AKEYCODE_FORWARD_DEL + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_INSERT             (AKEYCODE_INSERT + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Modifier keys ──────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_SHIFT              AKEYCODE_SHIFT_LEFT
-    #define KNST_WINDOW_KEY_CODE_CONTROL            AKEYCODE_CTRL_LEFT
-    #define KNST_WINDOW_KEY_CODE_ALT                AKEYCODE_ALT_LEFT
-    #define KNST_WINDOW_KEY_CODE_SUPER              AKEYCODE_META_LEFT
-    #define KNST_WINDOW_KEY_CODE_MENU               AKEYCODE_MENU
+    // Modifier keys.
+    #define KNST_WINDOW_KEY_CODE_SHIFT              (AKEYCODE_SHIFT_LEFT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_CONTROL            (AKEYCODE_CTRL_LEFT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_ALT                (AKEYCODE_ALT_LEFT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_SUPER              (AKEYCODE_META_LEFT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_MENU               (AKEYCODE_MENU + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Arrow keys ─────────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_LEFT               AKEYCODE_DPAD_LEFT
-    #define KNST_WINDOW_KEY_CODE_RIGHT              AKEYCODE_DPAD_RIGHT
-    #define KNST_WINDOW_KEY_CODE_UP                 AKEYCODE_DPAD_UP
-    #define KNST_WINDOW_KEY_CODE_DOWN               AKEYCODE_DPAD_DOWN
+    // Arrows.
+    #define KNST_WINDOW_KEY_CODE_LEFT               (AKEYCODE_DPAD_LEFT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_RIGHT              (AKEYCODE_DPAD_RIGHT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_UP                 (AKEYCODE_DPAD_UP + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_DOWN               (AKEYCODE_DPAD_DOWN + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Navigation ─────────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_HOME               AKEYCODE_MOVE_HOME
-    #define KNST_WINDOW_KEY_CODE_END                AKEYCODE_MOVE_END
-    #define KNST_WINDOW_KEY_CODE_PAGE_UP            AKEYCODE_PAGE_UP
-    #define KNST_WINDOW_KEY_CODE_PAGE_DOWN          AKEYCODE_PAGE_DOWN
-    #define KNST_WINDOW_KEY_CODE_PRINT              AKEYCODE_SYSRQ
-    #define KNST_WINDOW_KEY_CODE_PAUSE              AKEYCODE_MEDIA_PAUSE
-    #define KNST_WINDOW_KEY_CODE_BREAK              AKEYCODE_BREAK
+    // Navigation.
+    #define KNST_WINDOW_KEY_CODE_HOME               (AKEYCODE_MOVE_HOME + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_END                (AKEYCODE_MOVE_END + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PAGE_UP            (AKEYCODE_PAGE_UP + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PAGE_DOWN          (AKEYCODE_PAGE_DOWN + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PRINT              (AKEYCODE_SYSRQ + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PAUSE              (AKEYCODE_MEDIA_PAUSE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_BREAK              (AKEYCODE_BREAK + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Numpad ─────────────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_0           AKEYCODE_NUMPAD_0
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_1           AKEYCODE_NUMPAD_1
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_2           AKEYCODE_NUMPAD_2
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_3           AKEYCODE_NUMPAD_3
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_4           AKEYCODE_NUMPAD_4
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_5           AKEYCODE_NUMPAD_5
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_6           AKEYCODE_NUMPAD_6
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_7           AKEYCODE_NUMPAD_7
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_8           AKEYCODE_NUMPAD_8
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_9           AKEYCODE_NUMPAD_9
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_ADD         AKEYCODE_NUMPAD_ADD
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_SUBTRACT    AKEYCODE_NUMPAD_SUBTRACT
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_MULTIPLY    AKEYCODE_NUMPAD_MULTIPLY
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_DIVIDE      AKEYCODE_NUMPAD_DIVIDE
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_DECIMAL     AKEYCODE_NUMPAD_DOT
-    #define KNST_WINDOW_KEY_CODE_NUMPAD_ENTER       AKEYCODE_NUMPAD_ENTER
+    // Numpad.
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_0           (AKEYCODE_NUMPAD_0 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_1           (AKEYCODE_NUMPAD_1 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_2           (AKEYCODE_NUMPAD_2 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_3           (AKEYCODE_NUMPAD_3 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_4           (AKEYCODE_NUMPAD_4 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_5           (AKEYCODE_NUMPAD_5 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_6           (AKEYCODE_NUMPAD_6 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_7           (AKEYCODE_NUMPAD_7 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_8           (AKEYCODE_NUMPAD_8 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_9           (AKEYCODE_NUMPAD_9 + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_ADD         (AKEYCODE_NUMPAD_ADD + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_SUBTRACT    (AKEYCODE_NUMPAD_SUBTRACT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_MULTIPLY    (AKEYCODE_NUMPAD_MULTIPLY + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_DIVIDE      (AKEYCODE_NUMPAD_DIVIDE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_DECIMAL     (AKEYCODE_NUMPAD_DOT + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_NUMPAD_ENTER       (AKEYCODE_NUMPAD_ENTER + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Symbol keys ────────────────────────────────────────────────────────
-    #define KNST_WINDOW_KEY_CODE_SEMICOLON          AKEYCODE_SEMICOLON
-    #define KNST_WINDOW_KEY_CODE_SLASH              AKEYCODE_SLASH
-    #define KNST_WINDOW_KEY_CODE_GRAVE              AKEYCODE_GRAVE
-    #define KNST_WINDOW_KEY_CODE_LEFT_BRACKET       AKEYCODE_LEFT_BRACKET
-    #define KNST_WINDOW_KEY_CODE_BACKSLASH          AKEYCODE_BACKSLASH
-    #define KNST_WINDOW_KEY_CODE_RIGHT_BRACKET      AKEYCODE_RIGHT_BRACKET
-    #define KNST_WINDOW_KEY_CODE_APOSTROPHE         AKEYCODE_APOSTROPHE
-    #define KNST_WINDOW_KEY_CODE_PERIOD             AKEYCODE_PERIOD
-    #define KNST_WINDOW_KEY_CODE_COMMA              AKEYCODE_COMMA
-    #define KNST_WINDOW_KEY_CODE_MINUS              AKEYCODE_MINUS
-    #define KNST_WINDOW_KEY_CODE_PLUS               AKEYCODE_PLUS
-    #define KNST_WINDOW_KEY_CODE_EQUAL              AKEYCODE_EQUALS
+    // Symbol keys.
+    #define KNST_WINDOW_KEY_CODE_SEMICOLON          (AKEYCODE_SEMICOLON + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_SLASH              (AKEYCODE_SLASH + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_GRAVE              (AKEYCODE_GRAVE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_LEFT_BRACKET       (AKEYCODE_LEFT_BRACKET + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_BACKSLASH          (AKEYCODE_BACKSLASH + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_RIGHT_BRACKET      (AKEYCODE_RIGHT_BRACKET + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_APOSTROPHE         (AKEYCODE_APOSTROPHE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PERIOD             (AKEYCODE_PERIOD + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_COMMA              (AKEYCODE_COMMA + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_MINUS              (AKEYCODE_MINUS + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PLUS               (AKEYCODE_PLUS + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_EQUAL              (AKEYCODE_EQUALS + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Mobile touch actions — m_event.touch_action ────────────────────────
-    #define KNST_WINDOW_TOUCH_ACTION_PRESS          0
-    #define KNST_WINDOW_TOUCH_ACTION_RELEASE        1
-    #define KNST_WINDOW_TOUCH_ACTION_MOVE           2
-    #define KNST_WINDOW_TOUCH_ACTION_CANCEL         3
-    #define KNST_WINDOW_TOUCH_ACTION_OUTSIDE        4
-    #define KNST_WINDOW_TOUCH_ACTION_POINTER_PRESS  5
-    #define KNST_WINDOW_TOUCH_ACTION_POINTER_RELEASE 6
+    // These used to be missing on Android — user code that used them
+    // failed to compile. Now mapped to the correct AKEYCODE_* so the
+    // runtime value matches physical keys.
+    #define KNST_WINDOW_KEY_CODE_QUOTE              (AKEYCODE_APOSTROPHE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_COLON              (AKEYCODE_SEMICOLON + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_TILDE              (AKEYCODE_GRAVE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_LESS               (AKEYCODE_COMMA + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_GREATER            (AKEYCODE_PERIOD + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_QUESTION           (AKEYCODE_SLASH + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_PIPE               (AKEYCODE_BACKSLASH + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_LEFT_BRACE         (AKEYCODE_LEFT_BRACKET + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_RIGHT_BRACE        (AKEYCODE_RIGHT_BRACKET + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_UNDERSCORE         (AKEYCODE_MINUS + KNST_ANDROID_KEY_OFFSET)
 
-    // ── Screen orientation — m_event.orientation ───────────────────────────
+    // Turkish characters (no native AKEYCODE — use an offset range
+    // that can't collide with real keys).
+    #define KNST_WINDOW_KEY_CODE_C_CEDILLA          (0x20000010 + 0)
+    #define KNST_WINDOW_KEY_CODE_G_BREVE            (0x20000010 + 1)
+    #define KNST_WINDOW_KEY_CODE_I_DOTLESS          (0x20000010 + 2)
+    #define KNST_WINDOW_KEY_CODE_O_DIAERESIS        (0x20000010 + 3)
+    #define KNST_WINDOW_KEY_CODE_S_CEDILLA          (0x20000010 + 4)
+    #define KNST_WINDOW_KEY_CODE_U_DIAERESIS        (0x20000010 + 5)
+
+    // Media keys.
+    #define KNST_WINDOW_KEY_CODE_MEDIA_PLAY         (AKEYCODE_MEDIA_PLAY_PAUSE + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_MEDIA_STOP         (AKEYCODE_MEDIA_STOP       + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_MEDIA_NEXT         (AKEYCODE_MEDIA_NEXT       + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_MEDIA_PREV         (AKEYCODE_MEDIA_PREVIOUS   + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_MEDIA_PAUSE        (AKEYCODE_MEDIA_PAUSE      + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_VOLUME_UP          (AKEYCODE_VOLUME_UP        + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_VOLUME_DOWN        (AKEYCODE_VOLUME_DOWN      + KNST_ANDROID_KEY_OFFSET)
+    #define KNST_WINDOW_KEY_CODE_VOLUME_MUTE        (AKEYCODE_VOLUME_MUTE      + KNST_ANDROID_KEY_OFFSET)
+
+    // Screen orientation — m_event.orientation.
     #define KNST_WINDOW_ORIENTATION_UNDEFINED       0
     #define KNST_WINDOW_ORIENTATION_PORTRAIT        1
     #define KNST_WINDOW_ORIENTATION_LANDSCAPE       2
     #define KNST_WINDOW_ORIENTATION_SQUARE          3
 
-    // ── Cursors (Android has no cursor; stubs for API compatibility) ───────
+    // Cursors (Android has no cursor; stubs for API compatibility).
     #define KNST_WINDOW_CURSOR_ARROW                1
     #define KNST_WINDOW_CURSOR_IBEAM                2
     #define KNST_WINDOW_CURSOR_CROSSHAIR            3
@@ -882,7 +987,9 @@ knst_window_identifiers.hpp
     #define KNST_WINDOW_CURSOR_WAIT                 8
     #define KNST_WINDOW_CURSOR_HELP                 9
     #define KNST_WINDOW_CURSOR_NOT_ALLOWED          10
+    #define KNST_WINDOW_CURSOR_NWSE_RESIZE          13
+    #define KNST_WINDOW_CURSOR_NESW_RESIZE          14
     #define KNST_WINDOW_CURSOR_HIDDEN               11
-    #define KNST_WINDOW_CURSOR_DISABLED             12
+    #define KNST_WINDOW_CURSOR_DISABLED             0x10000   // distinct marker
 
 #endif

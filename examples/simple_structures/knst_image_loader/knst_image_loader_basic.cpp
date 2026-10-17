@@ -1,9 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// SPDX-License-Identifier: MPL-2.0
-
-
 /*
   knst_image_loader_basic.cpp
 
@@ -21,8 +15,6 @@
   If nothing is found, the demo just skips the load steps - that is
   not an error.
 
-  Build:
-        g++ -std=c++20 -O2 knst_image_loader_basic.cpp -o knst_image_loader_basic
 */
 
 #include "../../../include/KernelNucleusT.hpp"

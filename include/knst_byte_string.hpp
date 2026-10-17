@@ -175,8 +175,16 @@ public:
         if (count <= KNST_SSO_BUFFER_LENGTH) {
             set_stack_mode(count);
             #pragma GCC diagnostic push
+            #if defined(__GNUC__) && !defined(__clang__)
+            #if defined(__GNUC__) && !defined(__clang__)
             #pragma GCC diagnostic ignored "-Wstringop-overread"
+            #endif
+            #endif
+            #if defined(__GNUC__) && !defined(__clang__)
+            #if defined(__GNUC__) && !defined(__clang__)
             #pragma GCC diagnostic ignored "-Wstringop-overflow"
+            #endif
+            #endif
                 memcpy(this->stack_data.m_real_data, str, count);
             #pragma GCC diagnostic pop
             this->stack_data.m_real_data[count] = '\0';
@@ -627,17 +635,21 @@ public:
         
         if (new_size == old_len) return;
         
-        if (new_size < old_len) {
+                if (new_size < old_len) {
             if (is_heap()) {
                 if (new_size <= KNST_SSO_BUFFER_LENGTH) {
                     unsigned char temp[KNST_SSO_BUFFER_CAPACITY];
-                    memcpy(temp, heap_data.m_real_data, new_size);
-                    temp[new_size] = '\0';
+                  
+                    const uint32_t n = (new_size > KNST_SSO_BUFFER_LENGTH)
+                                        ? KNST_SSO_BUFFER_LENGTH
+                                        : new_size;
+                    memcpy(temp, heap_data.m_real_data, n);
+                    temp[n] = '\0';
                     
                     m_allocator.deallocate(heap_data.m_real_data, heap_data.m_capacity);
-                    set_stack_mode(new_size);
-                    memcpy(stack_data.m_real_data, temp, new_size);
-                    stack_data.m_real_data[new_size] = '\0';
+                    set_stack_mode(n);
+                    memcpy(stack_data.m_real_data, temp, n);
+                    stack_data.m_real_data[n] = '\0';
                 } else {
                     heap_data.m_real_data[new_size] = '\0';
                     heap_data.m_length = new_size;
@@ -699,8 +711,16 @@ public:
             
                 result.set_stack_mode(size);
                 #pragma GCC diagnostic push
+                #if defined(__GNUC__) && !defined(__clang__)
+                #if defined(__GNUC__) && !defined(__clang__)
                 #pragma GCC diagnostic ignored "-Wstringop-overread"
+                #endif
+                #endif
+                #if defined(__GNUC__) && !defined(__clang__)
+                #if defined(__GNUC__) && !defined(__clang__)
                 #pragma GCC diagnostic ignored "-Wstringop-overflow"
+                #endif
+                #endif
                     memcpy(result.stack_data.m_real_data, data, size);
                 #pragma GCC diagnostic pop
                 

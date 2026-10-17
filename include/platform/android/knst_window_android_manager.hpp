@@ -8,70 +8,136 @@
 knst_window_android_manager.hpp
 ----------------------------
 
-    The function definitions for the Android backend are here.
+    Function definitions for the Android backend.
 
 */
 
-
 #pragma once
-
 
 #if defined(KNST_USING_PLATFORM_ANDROID)
 
-
+// Include the JNI bridge — this is what compiles every extern "C"
+// JNIEXPORT function into the .so. Skip it and Java throws
+// UnsatisfiedLinkError at runtime.
+#include "knst_window_android_jni.hpp"
 
 
 inline void knst_window::creation() noexcept {
-   
-    m_knst_event.window_width = ANativeWindow_getWidth(KnstWindowSources::m_app->window);
-    m_knst_event.window_height = ANativeWindow_getHeight(KnstWindowSources::m_app->window);
-    m_knst_event.window_root_x = 0;
-    m_knst_event.window_root_y = 0;
-    m_knst_event.is_focused = true;
+
+    // Reset the destroy() double-call guard so a fresh window can be
+    // torn down normally again.
+    m_destroyed = false;
+
+    // Init might have failed, or CleanUp might have run before us.
+    // Without this check, every m_app-> access below would crash.
+    if (KnstWindowSources::m_app == nullptr) {
+        return;
+    }
+
+    // Touch is always available on Android.
+    m_touch_supported  = true;
+    m_max_touch_points = 10;
+    #if defined(KNST_WINDOW_ENABLE_TOUCH_SCREEN)
+        m_touch_enabled = true;
+    #else
+        m_touch_enabled = true;   // fundamental on Android, always on
+    #endif
+
+    // Between Init() and creation() the app might have been
+    // backgrounded — m_app or m_app->window could be NULL.
+    if (KnstWindowSources::m_app && KnstWindowSources::m_app->window) {
+        m_knst_event.window_width = ANativeWindow_getWidth(KnstWindowSources::m_app->window);
+        m_knst_event.window_height = ANativeWindow_getHeight(KnstWindowSources::m_app->window);
+    } else {
+        m_knst_event.window_width  = 0;
+        m_knst_event.window_height = 0;
+    }
+    m_knst_event.window_root_x   = 0;
+    m_knst_event.window_root_y   = 0;
+    m_knst_event.is_focused      = true;
     m_knst_event.mouse_on_window = true;
-   
-   
-    KnstWindowSources::m_app->userData = this;
-    KnstWindowSources::m_app->onAppCmd = cmd_callback;
+
+    KnstWindowSources::m_app->userData     = this;
+    KnstWindowSources::m_app->onAppCmd     = cmd_callback;
     KnstWindowSources::m_app->onInputEvent = input_callback;
-   
-    
-    
+
     knst_window_event_system::register_window(this);
-    
+
+    // Register with the JNI bridge so IME text events land in this
+    // window's queue.
+    knst_android_jni::set_active_window(this);
+
+    // Fire the density event manually here. Why not wait for
+    // APP_CMD_INIT_WINDOW? Because that event fires during
+    // KnstWindowSources::Init() — before onAppCmd is even installed
+    // (creation() hasn't run yet). So the callback is never invoked
+    // and g_ui_scale stays 1.0 → tiny UI on high-DPI phones.
+    //
+    // Fix: emit it ourselves now that onAppCmd is wired up.
+    if (KnstWindowSources::m_app != nullptr &&
+        KnstWindowSources::m_app->config != nullptr) {
+
+        int density = AConfiguration_getDensity(
+            KnstWindowSources::m_app->config);
+
+        // DENSITY_ANY / NONE are sentinels — fall back to 1.0x.
+        if (density == ACONFIGURATION_DENSITY_ANY ||
+            density == ACONFIGURATION_DENSITY_NONE ||
+            density <= 0) {
+            density = 160;
+        }
+
+        m_knst_event.begin(KNST_WINDOW_EVENT_APP_CONFIG_CHANGED);
+        m_knst_event.density = (float)density / 160.0f;
+        dispatch_current_event();
+    }
 }
 
-
-
 inline void knst_window::show() noexcept {
-    // We don't need to do anything it's already ready.
+    // Nothing to do — the activity's surface is already visible.
     m_knst_event.type = KNST_WINDOW_EVENT_EXPOSE;
-    
 }
 
 
 inline void knst_window::destroy() noexcept {
 
+    // Double-call guard: the example calls destroy() explicitly and
+    // then the destructor calls it again.
+    if (m_destroyed) return;
+    m_destroyed = true;
+
     knst_window_event_system::unregister_window(this);
 
+    // Drop the JNI registration so IME events stop reaching us.
+    if (knst_android_jni::get_active_window() == this) {
+        knst_android_jni::set_active_window(nullptr);
+    }
 
+    notify_window_destroyed();
+
+    // Null out app->userData if it still points to us. The callbacks
+    // (onAppCmd / onInputEvent) stay installed — they check userData
+    // and return early when it's null. Keeping them avoids fighting
+    // native_app_glue during reset / cleanup.
+    if (KnstWindowSources::m_app &&
+        KnstWindowSources::m_app->userData == this) {
+        KnstWindowSources::m_app->userData = nullptr;
+    }
 }
 
 
-
-
 inline void knst_window::toggle_fullscreen(bool fullscreen) noexcept {
-   // The Android side does not support it.
+    // Android does not support this.
     m_knst_event.is_full_screen = fullscreen;
 }
 
 inline void knst_window::set_minimized() noexcept {
-    // The Android side does not support it.
+    // Android does not support this.
     m_knst_event.is_minimized = true;
 }
 
 inline void knst_window::set_maximized() noexcept {
-    // The Android side does not support it.
+    // Android does not support this.
     m_knst_event.is_maximized = true;
 }
 
@@ -82,9 +148,7 @@ inline void knst_window::restore() noexcept {
 }
 
 
-
 inline void knst_window::move(int root_x, int root_y, const knst_monitor& monitor) noexcept {
-   // The Android side does not support it.
     (void)root_x; (void)root_y; (void)monitor;
 }
 
@@ -93,30 +157,27 @@ inline void knst_window::move(int root_x, int root_y) noexcept {
 }
 
 inline void knst_window::resize(int width, int height) noexcept {
-    // The Android side does not support it.
     (void)width; (void)height;
 }
 
 inline void knst_window::hide() noexcept {
-   // The Android side does not support it.
+    // Android does not support this.
 }
 
 inline void knst_window::focus() noexcept {
-    // The Android side does not support it.
+    // Android does not support this.
 }
 
-
 inline void knst_window::set_title(const knst_c16string& title) noexcept {
-    // The Android side does not support it.
+    // Android does not support this.
     m_title = title;
 }
 
 inline void knst_window::set_opacity(float opacity) noexcept {
-    //null for now
+    // null for now
 }
 
 inline void knst_window::set_attribute(int attribute, bool value) noexcept {
-    // The Android side does not support it.
     (void)attribute; (void)value;
 }
 
@@ -126,9 +187,7 @@ inline bool knst_window::get_attribute(int attribute) const noexcept {
 }
 
 
-
 inline void knst_window::set_cursor(uint16_t cursor_type) noexcept {
-    // The Android side does not support it.
     (void)cursor_type;
 }
 
@@ -137,7 +196,7 @@ inline void knst_window::set_bmp_cursor(const knst_byte_string& data, int width,
 }
 
 inline void knst_window::reset_cursor() noexcept {
-   // The Android side does not support it.
+    // Android does not support this.
 }
 
 inline void knst_window::set_cursor_mode(int mode) noexcept {
@@ -153,258 +212,272 @@ inline void knst_window::set_cursor_pos_global(int root_x, int root_y) noexcept 
 }
 
 
-
 inline void knst_window::set_clipboard(const knst_c16string& text) noexcept {
     android_app* app = KnstWindowSources::m_app;
     if (app == nullptr || app->activity == nullptr) return;
-    
-   
+
     clipboard_text = text;
-    
+
     JavaVM* vm = app->activity->vm;
     JNIEnv* env = nullptr;
     bool attached = false;
-    
+
     int result = vm->GetEnv((void**)&env, JNI_VERSION_1_6);
     if (result == JNI_EDETACHED) {
         if (vm->AttachCurrentThread(&env, nullptr) != 0) return;
         attached = true;
     }
-    
+
     if (env == nullptr) {
         if (attached) vm->DetachCurrentThread();
         return;
     }
-    
-    jobject activity = app->activity->clazz;
-    
-    
-    jclass contextClass = env->GetObjectClass(activity);
-    jfieldID clipboardServiceField = env->GetStaticFieldID(
-        contextClass,
-        "CLIPBOARD_SERVICE",
-        "Ljava/lang/String;"
-    );
-    jstring clipboardServiceStr = (jstring)env->GetStaticObjectField(
-        contextClass,
-        clipboardServiceField
-    );
-    
-    jmethodID getSystemServiceMethod = env->GetMethodID(
-        contextClass,
-        "getSystemService",
-        "(Ljava/lang/String;)Ljava/lang/Object;"
-    );
-    jobject clipboardManager = env->CallObjectMethod(
-        activity,
-        getSystemServiceMethod,
-        clipboardServiceStr
-    );
-    
-    if (clipboardManager == nullptr) {
+
+    // PushLocalFrame auto-frees every local ref on PopLocalFrame, even
+    // on error paths. Keeps us under the 512 local ref JNI limit
+    // without manual DeleteLocalRef everywhere.
+    if (env->PushLocalFrame(16) != 0) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
         if (attached) vm->DetachCurrentThread();
         return;
     }
-    
-    
-    jclass clipboardClass = env->GetObjectClass(clipboardManager);
-    
-   
-    jmethodID setPrimaryClipMethod = env->GetMethodID(
-        clipboardClass,
-        "setPrimaryClip",
-        "(Landroid/content/ClipData;)V"
-    );
-    
-   
-    jclass clipDataClass = env->FindClass("android/content/ClipData");
-    jmethodID newPlainTextMethod = env->GetStaticMethodID(
-        clipDataClass,
-        "newPlainText",
-        "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;"
-    );
-    
-    
-    knst_byte_string utf8Text(text);
-    jstring jText = env->NewStringUTF((const char*)utf8Text.data());
-    
-    jobject clipData = env->CallStaticObjectMethod(
-        clipDataClass,
-        newPlainTextMethod,
-        jText,// label
-        jText// text
-    );
-    
-    env->CallVoidMethod(clipboardManager, setPrimaryClipMethod, clipData);
-    
-    
-    env->DeleteLocalRef(jText);
-    env->DeleteLocalRef(clipData);
-    env->DeleteLocalRef(clipboardManager);
-    env->DeleteLocalRef(clipboardClass);
-    env->DeleteLocalRef(clipDataClass);
-    env->DeleteLocalRef(contextClass);
-    env->DeleteLocalRef(clipboardServiceStr);
-    
-    if (attached) {
-        vm->DetachCurrentThread();
+
+    jobject activity = app->activity->clazz;
+
+    jclass contextClass = env->GetObjectClass(activity);
+    if (contextClass != nullptr) {
+        jfieldID clipboardServiceField = env->GetStaticFieldID(
+            contextClass, "CLIPBOARD_SERVICE", "Ljava/lang/String;");
+
+        jstring clipboardServiceStr = nullptr;
+        if (clipboardServiceField) {
+            clipboardServiceStr = (jstring)env->GetStaticObjectField(
+                contextClass, clipboardServiceField);
+        }
+
+        jobject clipboardManager = nullptr;
+        if (clipboardServiceStr) {
+            jmethodID getSystemServiceMethod = env->GetMethodID(
+                contextClass, "getSystemService",
+                "(Ljava/lang/String;)Ljava/lang/Object;");
+            if (getSystemServiceMethod) {
+                clipboardManager = env->CallObjectMethod(
+                    activity, getSystemServiceMethod, clipboardServiceStr);
+            }
+        }
+
+        if (clipboardManager != nullptr) {
+            jclass clipboardClass = env->GetObjectClass(clipboardManager);
+            jmethodID setPrimaryClipMethod = clipboardClass
+                ? env->GetMethodID(clipboardClass, "setPrimaryClip",
+                    "(Landroid/content/ClipData;)V")
+                : nullptr;
+
+            jclass clipDataClass = env->FindClass("android/content/ClipData");
+            jmethodID newPlainTextMethod = clipDataClass
+                ? env->GetStaticMethodID(clipDataClass, "newPlainText",
+                    "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)"
+                    "Landroid/content/ClipData;")
+                : nullptr;
+
+            if (setPrimaryClipMethod && newPlainTextMethod) {
+                // NewStringUTF expects modified UTF-8 — a 4-byte emoji
+                // would abort under CheckJNI or corrupt the text. Use
+                // the UTF-16 API. knst_c16string is already UTF-16, so
+                // it goes straight through.
+                jstring jText = env->NewString(
+                    reinterpret_cast<const jchar*>(text.data()),
+                    (jsize)text.length());
+                if (jText) {
+                    jobject clipData = env->CallStaticObjectMethod(
+                        clipDataClass, newPlainTextMethod, jText, jText);
+                    if (clipData) {
+                        env->CallVoidMethod(clipboardManager,setPrimaryClipMethod, clipData);
+                    }
+                }
+            }
+        }
     }
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+    }
+
+    env->PopLocalFrame(nullptr);
+
+    if (attached) vm->DetachCurrentThread();
 }
 
 inline void knst_window::request_clipboard() noexcept {
     android_app* app = KnstWindowSources::m_app;
-    if (app == nullptr || app->activity == nullptr) return;
-    
+    if (app == nullptr || app->activity == nullptr) {
+        m_knst_event.begin(KNST_WINDOW_EVENT_CLIPBOARD_DATA);
+        dispatch_current_event();
+        return;
+    }
+
     JavaVM* vm = app->activity->vm;
     JNIEnv* env = nullptr;
     bool attached = false;
-    
+
     int result = vm->GetEnv((void**)&env, JNI_VERSION_1_6);
     if (result == JNI_EDETACHED) {
-        if (vm->AttachCurrentThread(&env, nullptr) != 0) return;
+        if (vm->AttachCurrentThread(&env, nullptr) != 0) {
+            m_knst_event.begin(KNST_WINDOW_EVENT_CLIPBOARD_DATA);
+            dispatch_current_event();
+            return;
+        }
         attached = true;
     }
-    
+
     if (env == nullptr) {
         if (attached) vm->DetachCurrentThread();
+        m_knst_event.begin(KNST_WINDOW_EVENT_CLIPBOARD_DATA);
+        dispatch_current_event();
         return;
     }
-    
-    jobject activity = app->activity->clazz;
-    
-   
-    jclass contextClass = env->GetObjectClass(activity);
-    jfieldID clipboardServiceField = env->GetStaticFieldID(
-        contextClass,
-        "CLIPBOARD_SERVICE",
-        "Ljava/lang/String;"
-    );
-    jstring clipboardServiceStr = (jstring)env->GetStaticObjectField(
-        contextClass,
-        clipboardServiceField
-    );
-    
-    jmethodID getSystemServiceMethod = env->GetMethodID(
-        contextClass,
-        "getSystemService",
-        "(Ljava/lang/String;)Ljava/lang/Object;"
-    );
-    jobject clipboardManager = env->CallObjectMethod(
-        activity,
-        getSystemServiceMethod,
-        clipboardServiceStr
-    );
-    
-    if (clipboardManager == nullptr) {
-        if (attached) vm->DetachCurrentThread();
-        return;
-    }
-    jclass clipboardClass = env->GetObjectClass(clipboardManager);
-    jmethodID getPrimaryClipMethod = env->GetMethodID(
-        clipboardClass,
-        "getPrimaryClip",
-        "()Landroid/content/ClipData;"
-    );
-    jobject clipData = env->CallObjectMethod(clipboardManager, getPrimaryClipMethod);
-    
-    if (clipData != nullptr) {
-        
-        jclass clipDataClass = env->GetObjectClass(clipData);
-        jmethodID getItemCountMethod = env->GetMethodID(
-            clipDataClass,
-            "getItemCount",
-            "()I"
-        );
-        jint count = env->CallIntMethod(clipData, getItemCountMethod);
-        
-        if (count > 0) {
-            jmethodID getItemAtMethod = env->GetMethodID(
-                clipDataClass,
-                "getItemAt",
-                "(I)Landroid/content/ClipData$Item;"
-            );
-            jobject clipItem = env->CallObjectMethod(clipData, getItemAtMethod, 0);
-            
-            if (clipItem != nullptr) {
-                jclass clipItemClass = env->GetObjectClass(clipItem);
-                jmethodID getTextMethod = env->GetMethodID(
-                    clipItemClass,
-                    "getText",
-                    "()Ljava/lang/CharSequence;"
-                );
-                jobject text = env->CallObjectMethod(clipItem, getTextMethod);
-                
-                if (text != nullptr) {
-                   
-                    jclass charSequenceClass = env->GetObjectClass(text);
-                    jmethodID toStringMethod = env->GetMethodID(
-                        charSequenceClass,
-                        "toString",
-                        "()Ljava/lang/String;"
-                    );
-                jstring jText = (jstring)env->CallObjectMethod(text, toStringMethod);
-                    
-                   
-                    const char* utf8 = env->GetStringUTFChars(jText, nullptr);
-                    clipboard_text = knst_c16string(utf8);
-                    env->ReleaseStringUTFChars(jText, utf8);
-                    
-                    env->DeleteLocalRef(jText);
-                    env->DeleteLocalRef(text);
-                    env->DeleteLocalRef(charSequenceClass);
-                }
-                env->DeleteLocalRef(clipItem);
-                env->DeleteLocalRef(clipItemClass);
+
+    // PushLocalFrame — every local ref is freed on PopLocalFrame.
+    if (env->PushLocalFrame(16) == 0) {
+        jobject activity = app->activity->clazz;
+
+        jclass contextClass = env->GetObjectClass(activity);
+        jobject clipboardManager = nullptr;
+
+        if (contextClass) {
+            jfieldID clipboardServiceField = env->GetStaticFieldID(
+                contextClass, "CLIPBOARD_SERVICE", "Ljava/lang/String;");
+            jstring clipboardServiceStr = clipboardServiceField
+                ? (jstring)env->GetStaticObjectField(
+                    contextClass, clipboardServiceField)
+                : nullptr;
+
+            jmethodID getSystemServiceMethod = env->GetMethodID(
+                contextClass, "getSystemService",
+                "(Ljava/lang/String;)Ljava/lang/Object;");
+            if (clipboardServiceStr && getSystemServiceMethod) {
+                clipboardManager = env->CallObjectMethod(
+                    activity, getSystemServiceMethod, clipboardServiceStr);
             }
         }
-        env->DeleteLocalRef(clipData);
-        env->DeleteLocalRef(clipDataClass);
-    }
-    
-  
-    env->DeleteLocalRef(clipboardManager);
-    env->DeleteLocalRef(clipboardClass);
-    env->DeleteLocalRef(contextClass);
-    env->DeleteLocalRef(clipboardServiceStr);
-    
-    if (attached) {
-        vm->DetachCurrentThread();
-    }
-}
 
+        if (clipboardManager) {
+            jclass clipboardClass = env->GetObjectClass(clipboardManager);
+            jmethodID getPrimaryClipMethod = clipboardClass
+                ? env->GetMethodID(clipboardClass, "getPrimaryClip",
+                    "()Landroid/content/ClipData;")
+                : nullptr;
+            jobject clipData = getPrimaryClipMethod
+                ? env->CallObjectMethod(clipboardManager, getPrimaryClipMethod)
+                : nullptr;
+
+            if (clipData) {
+                jclass clipDataClass = env->GetObjectClass(clipData);
+                jmethodID getItemCountMethod = clipDataClass
+                    ? env->GetMethodID(clipDataClass, "getItemCount", "()I")
+                    : nullptr;
+                jint count = getItemCountMethod
+                    ? env->CallIntMethod(clipData, getItemCountMethod)
+                    : 0;
+
+                if (count > 0) {
+                    jmethodID getItemAtMethod = env->GetMethodID(
+                        clipDataClass, "getItemAt",
+                        "(I)Landroid/content/ClipData$Item;");
+                    jobject clipItem = getItemAtMethod
+                        ? env->CallObjectMethod(clipData, getItemAtMethod, 0)
+                        : nullptr;
+
+                    if (clipItem) {
+                        jclass clipItemClass = env->GetObjectClass(clipItem);
+                        jmethodID getTextMethod = clipItemClass
+                            ? env->GetMethodID(clipItemClass, "getText",
+                                "()Ljava/lang/CharSequence;")
+                            : nullptr;
+                        jobject text = getTextMethod
+                            ? env->CallObjectMethod(clipItem, getTextMethod)
+                            : nullptr;
+
+                        if (text) {
+                            jclass charSequenceClass = env->GetObjectClass(text);
+                            jmethodID toStringMethod = charSequenceClass
+                                ? env->GetMethodID(charSequenceClass,
+                                    "toString", "()Ljava/lang/String;")
+                                : nullptr;
+                            jstring jText = toStringMethod
+                                ? (jstring)env->CallObjectMethod(
+                                    text, toStringMethod)
+                                : nullptr;
+
+                            if (jText) {
+                                // GetStringUTFChars returns modified UTF-8
+                                // — emoji get corrupted or CheckJNI aborts.
+                                // Use the UTF-16 API.
+                                const jchar* ch = env->GetStringChars(
+                                    jText, nullptr);
+                                if (ch) {
+                                    const jsize n = env->GetStringLength(jText);
+                                    knst_c16string tmp;
+                                    for (jsize k = 0; k < n; ++k) {
+                                        tmp += static_cast<char16_t>(ch[k]);
+                                    }
+                                    clipboard_text = tmp;
+                                    env->ReleaseStringChars(jText, ch);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+        env->PopLocalFrame(nullptr);
+    }
+
+    if (attached) vm->DetachCurrentThread();
+
+    m_knst_event.begin(KNST_WINDOW_EVENT_CLIPBOARD_DATA);
+    dispatch_current_event();
+}
 
 
 inline void knst_window::set_drag_drop_status(bool enabled) noexcept {
-    // The Android side does not support it.
-    (void)enabled;
+    // No OS-level DnD on Android. We still store the flag so
+    // get_attribute() stays consistent with other platforms.
+    m_drag_drop_enabled = enabled;
+}
+
+inline void knst_window::enable_touch_screen(bool enable) noexcept {
+    // Android always reports touch. The flag only controls whether the
+    // app receives KNST_WINDOW_EVENT_TOUCH events.
+    m_touch_enabled = enable;
 }
 
 
-
 inline void knst_window::apply_bmp_icon(const knst_byte_string& data, int width, int height) noexcept {
-    // The Android side does not support it.
     (void)data; (void)width; (void)height;
 }
 
 
-
 inline void knst_window::set_minimum_size(int width, int height) noexcept {
-   // The Android side does not support it.
     (void)width; (void)height;
 }
 
 inline void knst_window::set_maximum_size(int width, int height) noexcept {
-    // The Android side does not support it.
     (void)width; (void)height;
 }
 
 
+// ─── knst_mobile_keyboard — Android soft keyboard bridge ───────────────────
 
-
-
-knst_mobile_keyboard::jni_scope::jni_scope(JavaVM* vm) : vm(vm) {
+inline knst_mobile_keyboard::jni_scope::jni_scope(JavaVM* vm) : vm(vm) {
     if (vm == nullptr) return;
-    
+
     int result = vm->GetEnv((void**)&env, JNI_VERSION_1_6);
     if (result == JNI_EDETACHED) {
         if (vm->AttachCurrentThread(&env, nullptr) == 0) {
@@ -413,16 +486,16 @@ knst_mobile_keyboard::jni_scope::jni_scope(JavaVM* vm) : vm(vm) {
     }
 }
 
-knst_mobile_keyboard::jni_scope::~jni_scope() {
+inline knst_mobile_keyboard::jni_scope::~jni_scope() {
     if (attached && vm != nullptr) {
         vm->DetachCurrentThread();
     }
 }
 
 
-void knst_mobile_keyboard::Init(struct android_app* app) {
+inline void knst_mobile_keyboard::Init(struct android_app* app) {
     std::lock_guard<std::mutex> lock(s_mutex);
-    
+
     if (s_initialized) return;
     if (app == nullptr || app->activity == nullptr) return;
 
@@ -492,141 +565,117 @@ void knst_mobile_keyboard::Init(struct android_app* app) {
 }
 
 
-bool knst_mobile_keyboard::show() {
+inline bool knst_mobile_keyboard::show() {
     std::lock_guard<std::mutex> lock(s_mutex);
-    
+
     if (!s_initialized) return false;
     if (s_javaVM == nullptr) return false;
-    if (s_visible) return true;
+    if (s_activityClass == nullptr) return false;
 
     jni_scope scope(s_javaVM);
     if (!scope.valid()) return false;
 
     JNIEnv* env = scope.get();
 
-    jstring serviceName = env->NewStringUTF("input_method");
-    jobject imm = env->CallObjectMethod(s_activity, s_getSystemService, serviceName);
-    env->DeleteLocalRef(serviceName);
-
-    if (imm == nullptr) return false;
-
-    jobject window = env->CallObjectMethod(s_activity, s_getWindow);
-    if (window == nullptr) {
-        env->DeleteLocalRef(imm);
+    // Do NOT FindClass("com/knst/window/KnstActivity") from the native
+    // thread — app classes only resolve through the UI thread's
+    // ClassLoader, so FindClass returns null here.
+    //
+    // s_activityClass (cached in Init) already points at KnstActivity.
+    // GetStaticMethodID searches parents, so showKeyboard resolves.
+    jmethodID method = env->GetStaticMethodID(s_activityClass, "showKeyboard", "()Z");
+    if (method == nullptr) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
         return false;
     }
 
-    jobject decorView = env->CallObjectMethod(window, s_getDecorView);
-    env->DeleteLocalRef(window);
-
-    if (decorView == nullptr) {
-        env->DeleteLocalRef(imm);
+    jboolean ok = env->CallStaticBooleanMethod(s_activityClass, method);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
         return false;
     }
 
-    jboolean result = env->CallBooleanMethod(imm, s_showSoftInput, decorView, 0);
-    
-    env->DeleteLocalRef(imm);
-    env->DeleteLocalRef(decorView);
-
-    if (result) {
-        s_visible = true;
-    }
-    return result;
+    if (ok) s_visible = true;
+    return ok;
 }
 
-
-bool knst_mobile_keyboard::hide() {
+inline bool knst_mobile_keyboard::hide() {
     std::lock_guard<std::mutex> lock(s_mutex);
-    
-    if (!s_initialized) return false;
+
+    if (!s_initialized)  return false;
     if (s_javaVM == nullptr) return false;
-    if (!s_visible) return true;
+    if (s_activityClass == nullptr) return false;
 
     jni_scope scope(s_javaVM);
     if (!scope.valid()) return false;
 
     JNIEnv* env = scope.get();
 
-    jstring serviceName = env->NewStringUTF("input_method");
-    jobject imm = env->CallObjectMethod(s_activity, s_getSystemService, serviceName);
-    env->DeleteLocalRef(serviceName);
-
-    if (imm == nullptr) return false;
-
-    jobject window = env->CallObjectMethod(s_activity, s_getWindow);
-    if (window == nullptr) {
-        env->DeleteLocalRef(imm);
-        return false;
-    }
-
-    jobject decorView = env->CallObjectMethod(window, s_getDecorView);
-    env->DeleteLocalRef(window);
-
-    if (decorView == nullptr) {
-        env->DeleteLocalRef(imm);
-        return false;
-    }
-
-    jobject windowToken = env->CallObjectMethod(decorView, s_getWindowToken);
-    env->DeleteLocalRef(decorView);
-
-    if (windowToken == nullptr) {
-        env->DeleteLocalRef(imm);
-        return false;
-    }
-
-    jboolean result = env->CallBooleanMethod(imm, s_hideSoftInput, windowToken, 0);
-    
-    env->DeleteLocalRef(imm);
-    env->DeleteLocalRef(windowToken);
-
-    if (result) {
+    jmethodID method = env->GetStaticMethodID(
+        s_activityClass, "hideKeyboard", "()Z");
+    if (method == nullptr) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
         s_visible = false;
-    } else {
-        s_visible = false;
+        return false;
     }
+
+    env->CallStaticBooleanMethod(s_activityClass, method);
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        s_visible = false;
+        return false;
+    }
+
+    s_visible = false;
     return true;
 }
 
 
-void knst_mobile_keyboard::toggle() {
-  
+inline void knst_mobile_keyboard::toggle() {
+    // Old code was `if (s_visible) return;` — never hid the keyboard,
+    // and reading s_visible without the mutex was a data race. Now:
+    // read via is_visible() (mutex-protected), then act.
+    //
+    // Debounce filters out rapid duplicate calls (double-tap on a key,
+    // event flooding during animations).
     static uint64_t lastToggleTime = 0;
     uint64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()
     ).count();
-    
+
+
     if (now - lastToggleTime < 300) {
         return;
     }
-    lastToggleTime = now;
-    
-   
-    if (s_visible) {
-        return;
-    }
-    
 
-    show();
+    lastToggleTime = now;
+
+    if (is_visible()) {
+        hide();
+    } else {
+        show();
+    }
 }
 
 
-bool knst_mobile_keyboard::is_visible() {
+inline bool knst_mobile_keyboard::is_visible() {
     std::lock_guard<std::mutex> lock(s_mutex);
     return s_visible;
 }
 
 
-void knst_mobile_keyboard::shutdown() {
+inline void knst_mobile_keyboard::shutdown() {
     std::lock_guard<std::mutex> lock(s_mutex);
-    
+
     if (!s_initialized) return;
+
 
     jni_scope scope(s_javaVM);
     if (scope.valid()) {
         JNIEnv* env = scope.get();
-        
+
         if (s_activity != nullptr) {
             env->DeleteGlobalRef(s_activity);
             s_activity = nullptr;
@@ -653,6 +702,32 @@ void knst_mobile_keyboard::shutdown() {
 }
 
 
+// ─── Android — platform-parity no-ops ──────────────────────────────────────
+// These exist in the API surface and do real work on other platforms.
+// Android has no hardware/protocol support, so they must be defined as
+// no-ops or the linker complains.
 
+inline void knst_window::set_raw_mouse_mode(bool enable) noexcept {
+    (void)enable;
+}
+
+inline void knst_window::set_display_affinity(bool protect) noexcept {
+    (void)protect;
+}
+
+inline void knst_window::set_primary_selection(const knst_c16string& text) noexcept {
+    (void)text;
+}
+
+inline void knst_window::request_primary_selection() noexcept {
+}
+
+inline void knst_window::set_idle_inhibit(bool enable) noexcept {
+    (void)enable;
+}
+
+inline void knst_window::csd_handle_hit(csd_hit hit, int x, int y, uint32_t input_serial) noexcept {
+    (void)hit; (void)x; (void)y; (void)input_serial;
+}
 
 #endif

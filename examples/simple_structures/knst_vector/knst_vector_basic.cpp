@@ -1,9 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// SPDX-License-Identifier: MPL-2.0
-
-
 /*
   knst_vector_basic.cpp
 
@@ -95,6 +89,7 @@ int main() {
     section("3) Indexing");
     // =====================================================================
     // operator[] has no bounds check — fast.
+    // The 'at' function has been added; you can use it to access elements safely with a static assert.
     {
         knst_vector<int> v = { 100, 200, 300 };
 

@@ -40,7 +40,7 @@ knst_image_loader.hpp
 #include <type_traits>
 
 
-#if KNST_USING_PLATFORM_LINUX
+#if defined(KNST_USING_PLATFORM_LINUX) && KNST_USING_PLATFORM_LINUX
     #include <sys/mman.h>
     #include <sys/stat.h>
     #include <fcntl.h>
@@ -852,7 +852,7 @@ private:
                     UnmapViewOfFile(data);
                 #endif
                 } else if (m_mode == 2) {
-                #if KNST_USING_PLATFORM_LINUX
+                #if defined(KNST_USING_PLATFORM_LINUX) && KNST_USING_PLATFORM_LINUX
                     munmap(data, size);
                 #endif
                 } else if (m_mode == 3) {
@@ -2281,11 +2281,13 @@ static bool decode_png(const uint8_t* data, size_t size, uint32_t& W, uint32_t& 
                     cnt += 8;
                 }
             }
-            inline uint32_t Get(int n) {
-                if (n == 0) return 0;
-                if (cnt < n) Fill();
-                uint32_t v = buf >> (32 - n);
-                buf <<= n; cnt -= n;
+                        // ⚠️ `n` parametresi `JpegDecoder::n` üyesini gölgeliyordu
+            //    → -Wshadow uyarısı.  Yeniden adlandır.
+            inline uint32_t Get(int nbits) {
+                if (nbits == 0) return 0;
+                if (cnt < nbits) Fill();
+                uint32_t v = buf >> (32 - nbits);
+                buf <<= nbits; cnt -= nbits;
                 return v;
             }
             inline int Bit() { return (int)Get(1); }

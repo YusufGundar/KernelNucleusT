@@ -1,21 +1,16 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// SPDX-License-Identifier: MPL-2.0
-
-
 /*
-  knst_window_multi.cpp
+  knst_window_multi_basic.cpp
 
   Two knst_window instances running side by side.
 
-  Each window has its own callback. The "tag" ("A" / "B") just tells
-  us which window an event came from in the console output.
+  Each window gets its own callback. The "tag" ("A" / "B") is just a
+  label so we can tell which window an event came from in the console.
 
   Close each window with ESC or its X button.
 */
 
-// In Linux Wayland, you are required to draw, but this example doesn't involve any drawing, so the program runs but doesn't display anything.
+// On Wayland, drawing is required for the window to appear at all.
+// Since this example doesn't draw, the program runs but shows nothing.
 
 #include "../../../../include/KernelNucleusT.hpp"
 #include <iostream>
@@ -26,7 +21,7 @@ KNST_FORCE_INLINE static void handle_window_events(knst_window& w, const char* t
     for (size_t i = 0; i < w.event_count(); ++i) {
         const knst_window_event& m_event = w.get_window_event_handle(i);
 
-        // Close request (X button)
+        // Close request (X button).
         if (m_event.type == KNST_WINDOW_EVENT_CLOSE) {
             std::cout << "[" << tag << "] close requested\n";
             w.should_close();
@@ -34,11 +29,11 @@ KNST_FORCE_INLINE static void handle_window_events(knst_window& w, const char* t
             break;
         }
 
-        // Keyboard
+        // Keyboard.
         if (m_event.type == KNST_WINDOW_EVENT_KEYBOARD) {
-            const bool shift = (m_event.mods & KNST_WINDOW_MOD_SHIFT)   != 0;
-            const bool ctrl  = (m_event.mods & KNST_WINDOW_MOD_CONTROL) != 0;
-            const bool alt   = (m_event.mods & KNST_WINDOW_MOD_ALT)     != 0;
+            const bool shift = (m_event.mods & KNST_WINDOW_MOD_SHIFT) != 0;
+            const bool ctrl = (m_event.mods & KNST_WINDOW_MOD_CONTROL) != 0;
+            const bool alt = (m_event.mods & KNST_WINDOW_MOD_ALT) != 0;
 
             if (m_event.key_action == KNST_WINDOW_KEY_ACTION_PRESS) {
                 if (m_event.key_code == KNST_WINDOW_KEY_CODE_T) {
@@ -75,6 +70,7 @@ KNST_FORCE_INLINE static void handle_window_events(knst_window& w, const char* t
                 }
             }
             else if (m_event.key_action == KNST_WINDOW_KEY_ACTION_REPEAT) {
+                // Auto-repeat — good for movement input.
                 if (!ctrl && !alt && m_event.key_code == KNST_WINDOW_KEY_CODE_W)
                     std::cout << "[" << tag << "] W repeating (move forward)\n";
                 else if (!ctrl && !alt && m_event.key_code == KNST_WINDOW_KEY_CODE_A)
@@ -85,12 +81,11 @@ KNST_FORCE_INLINE static void handle_window_events(knst_window& w, const char* t
                     std::cout << "[" << tag << "] D repeating (move right)\n";
             }
         }
-        // Mouse
+        // Mouse.
         else if (m_event.type == KNST_WINDOW_EVENT_MOUSE) {
             if (m_event.mouse_action == KNST_WINDOW_MOUSE_ACTION_PRESS) {
                 if (m_event.mouse_button == KNST_WINDOW_MOUSE_BUTTON_LEFT) {
-                    std::cout << "[" << tag << "] Left mouse button pressed at ("
-                              << m_event.mouse_x << ", " << m_event.mouse_y << ")\n";
+                    std::cout << "[" << tag << "] Left mouse button pressed at (" << m_event.mouse_x << ", " << m_event.mouse_y << ")\n";
                 }
                 else if (m_event.mouse_button == KNST_WINDOW_MOUSE_BUTTON_RIGHT) {
                     std::cout << "[" << tag << "] Right mouse button pressed\n";
@@ -108,11 +103,10 @@ KNST_FORCE_INLINE static void handle_window_events(knst_window& w, const char* t
                 }
             }
             else if (m_event.mouse_action == KNST_WINDOW_MOUSE_ACTION_SCROLL) {
-                std::cout << "[" << tag << "] Mouse scrolled: "
-                          << (m_event.mouse_scroll_delta > 0 ? "up" : "down") << "\n";
+                std::cout << "[" << tag << "] Mouse scrolled: " << (m_event.mouse_scroll_delta > 0 ? "up" : "down") << "\n";
             }
         }
-        // Drag and drop
+        // Drag and drop.
         else if (m_event.type == KNST_WINDOW_EVENT_FILE_DROP_ENTER) {
             std::cout << "[" << tag << "] Drag entered window\n";
         }
@@ -126,8 +120,7 @@ KNST_FORCE_INLINE static void handle_window_events(knst_window& w, const char* t
             std::cout << "[" << tag << "] Files dropped: " << m_event.drop_count << "\n";
             if (m_event.drop_files) {
                 for (uint32_t j = 0; j < m_event.drop_count; ++j) {
-                    std::cout << "[" << tag << "]   [" << j << "] "
-                              << (*m_event.drop_files)[j] << "\n";
+                    std::cout << "[" << tag << "]   [" << j << "] " << (*m_event.drop_files)[j] << "\n";
                 }
             }
         }
@@ -171,8 +164,8 @@ int main() {
     while (!window_a.is_should_close() || !window_b.is_should_close()) {
         knst_window_event_system::non_block_pool_event();
 
-        window_a.call_redraw_callback();
-        window_b.call_redraw_callback();
+        if (!window_a.is_should_close()) window_a.call_redraw_callback();
+        if (!window_b.is_should_close()) window_b.call_redraw_callback();
 
         if (!a_reported && window_a.is_should_close()) {
             std::cout << "A closed\n";

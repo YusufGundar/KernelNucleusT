@@ -1,21 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  This Source Code Form is subject to the terms of the Mozilla Public
-  License, v. 2.0. If a copy of the MPL was not distributed with this
-  file, You can obtain one at https://mozilla.org/MPL/2.0/.
-  SPDX-License-Identifier: MPL-2.0
--->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.knst.test">
 
-    <application
-        android:hasCode="false">
+    <!-- Vulkan backend requires API 24 (Android 7.0). -->
+    <uses-sdk
+        android:minSdkVersion="24"
+        android:targetSdkVersion="34" />
 
-        <activity
-            android:name="android.app.NativeActivity"
+    <!-- The app uses the GPU; make it required on the Play Store. -->
+    <uses-feature
+        android:glEsVersion="0x00030000"
+        android:required="true" />
+
+            <application
+        android:hasCode="true"
+        android:label="KernelNucleusT App">
+
+                <activity
+            android:name="com.knst.window.KnstActivity"
             android:exported="true"
-            android:configChanges="orientation|keyboardHidden|screenSize">
+            android:label="KernelNucleusT App"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode|density|navigation"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize|stateHidden">
 
             <meta-data
                 android:name="android.app.lib_name"
@@ -23,7 +31,6 @@
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 

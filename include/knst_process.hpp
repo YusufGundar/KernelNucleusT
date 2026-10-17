@@ -2460,9 +2460,12 @@ inline knst_process knst_process::spawn_win(const knst_c16string& program,const 
     HANDLE file_in = INVALID_HANDLE_VALUE, file_out = INVALID_HANDLE_VALUE, file_err = INVALID_HANDLE_VALUE;
 
     auto fail = [&]() {
-        if (sr) CloseHandle(sr); if (sw) CloseHandle(sw);
-        if (or_) CloseHandle(or_); if (ow) CloseHandle(ow);
-        if (er) CloseHandle(er); if (ew) CloseHandle(ew);
+        if (sr) CloseHandle(sr);
+        if (sw) CloseHandle(sw);
+        if (or_) CloseHandle(or_);
+        if (ow) CloseHandle(ow);
+        if (er) CloseHandle(er);
+        if (ew) CloseHandle(ew);
         if (nul_in  != INVALID_HANDLE_VALUE) CloseHandle(nul_in);
         if (nul_out != INVALID_HANDLE_VALUE) CloseHandle(nul_out);
         if (nul_err != INVALID_HANDLE_VALUE) CloseHandle(nul_err);
@@ -2611,7 +2614,9 @@ inline knst_process knst_process::spawn_win(const knst_c16string& program,const 
         }
     }
 
-    if (sr) CloseHandle(sr); if (ow) CloseHandle(ow); if (ew) CloseHandle(ew);
+    if (sr) CloseHandle(sr);
+    if (ow) CloseHandle(ow);
+    if (ew) CloseHandle(ew);
     if (nul_in  != INVALID_HANDLE_VALUE) CloseHandle(nul_in);
     if (nul_out != INVALID_HANDLE_VALUE) CloseHandle(nul_out);
     if (nul_err != INVALID_HANDLE_VALUE) CloseHandle(nul_err);
@@ -2625,7 +2630,9 @@ inline knst_process knst_process::spawn_win(const knst_c16string& program,const 
         if (e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND) p.error = knst_process_error::NotFound;
         else if (e == ERROR_ACCESS_DENIED) p.error = knst_process_error::PermissionDenied;
         else p.error = knst_process_error::ExecFailed;
-        if (sw) CloseHandle(sw); if (or_) CloseHandle(or_); if (er) CloseHandle(er);
+        if (sw) CloseHandle(sw);
+        if (or_) CloseHandle(or_);
+        if (er) CloseHandle(er);
         return p;
     }
 

@@ -274,7 +274,11 @@ class KNST_CLASS_ALIGNMENT basic_c16string{
         
 
         #pragma GCC diagnostic push
+        #if defined(__GNUC__) && !defined(__clang__)
+        #if defined(__GNUC__) && !defined(__clang__)
         #pragma GCC diagnostic ignored "-Wstringop-overread"
+        #endif
+        #endif
             memcpy(get_real_heap_m_data(), str, str_length * sizeof(char16_t));
         #pragma GCC diagnostic pop
         get_real_heap_m_data()[str_length]= u'\0';
@@ -2421,8 +2425,16 @@ public:
 
                 if(new_size <=KNST_SSO_BUFFER_LENGTH){
                     #pragma GCC diagnostic push
+                    #if defined(__GNUC__) && !defined(__clang__)
+                    #if defined(__GNUC__) && !defined(__clang__)
                     #pragma GCC diagnostic ignored "-Wstringop-overread"
+                    #endif
+                    #endif
+                    #if defined(__GNUC__) && !defined(__clang__)
+                    #if defined(__GNUC__) && !defined(__clang__)
                     #pragma GCC diagnostic ignored "-Wstringop-overflow"
+                    #endif
+                    #endif
                     char16_t temp[KNST_SSO_BUFFER_CAPACITY];
                     memcpy(temp, get_real_heap_m_data(), new_size * sizeof(char16_t));
                     temp[new_size] = u'\0';
@@ -2602,8 +2614,16 @@ public:
 
                 if(new_size <=KNST_SSO_BUFFER_LENGTH){
                     #pragma GCC diagnostic push
+                    #if defined(__GNUC__) && !defined(__clang__)
+                    #if defined(__GNUC__) && !defined(__clang__)
                     #pragma GCC diagnostic ignored "-Wstringop-overread"
+                    #endif
+                    #endif
+                    #if defined(__GNUC__) && !defined(__clang__)
+                    #if defined(__GNUC__) && !defined(__clang__)
                     #pragma GCC diagnostic ignored "-Wstringop-overflow"
+                    #endif
+                    #endif
                     char16_t temp[KNST_SSO_BUFFER_CAPACITY];
                     memcpy(temp, get_real_heap_m_data(), new_size * sizeof(char16_t));
                     temp[new_size] = u'\0';
@@ -2694,8 +2714,16 @@ public:
 
                 if(new_size <=KNST_SSO_BUFFER_LENGTH){
                     #pragma GCC diagnostic push
+                    #if defined(__GNUC__) && !defined(__clang__)
+                    #if defined(__GNUC__) && !defined(__clang__)
                     #pragma GCC diagnostic ignored "-Wstringop-overread"
+                    #endif
+                    #endif
+                    #if defined(__GNUC__) && !defined(__clang__)
+                    #if defined(__GNUC__) && !defined(__clang__)
                     #pragma GCC diagnostic ignored "-Wstringop-overflow"
+                    #endif
+                    #endif
                     char16_t temp[KNST_SSO_BUFFER_CAPACITY];
                     memcpy(temp, get_real_heap_m_data(), new_size * sizeof(char16_t));
                     temp[new_size] = u'\0';
@@ -2770,8 +2798,8 @@ public:
 
         if(!is_heap()) return;
 
-        uint32_t str_lenght = this->heap_data.m_length;
-        uint32_t str_capacity = this->heap_data.m_capacity;
+                uint32_t str_lenght = this->heap_data.m_length;
+        [[maybe_unused]] uint32_t str_capacity = this->heap_data.m_capacity;
 
 
         if(str_lenght <= KNST_SSO_BUFFER_LENGTH) {

@@ -1,37 +1,30 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// SPDX-License-Identifier: MPL-2.0
-
-
 /*
   knst_window_basic.cpp
 
-  Basic usage of knst_window — a single window that prints events.
+  Simplest possible knst_window example — one window that prints events.
+  Shows keyboard press/release/repeat, modifier combos, mouse buttons
+  and scroll, and file drag-and-drop.
 
-  Shows: keyboard press/release/repeat, modifier combinations,
-  mouse buttons and scroll, and file drag-and-drop.
-
-  Close the window with ESC or the X button.
+  Close with ESC or the X button.
 */
 
-
-// In Linux Wayland, you are required to draw, but this example doesn't involve any drawing, so the program runs but doesn't display anything.
+// On Wayland, drawing is required for the window to appear at all.
+// Since this example doesn't draw, the program runs but shows nothing.
 
 #include "../../../../include/KernelNucleusT.hpp"
 #include <iostream>
 
 
-// Called once per frame. Walks the event queue and prints whatever
-// happened since the last frame.
+// Runs once per frame. Walks the event queue and prints whatever
+// happened since the last call.
 KNST_FORCE_INLINE static void on_frame(knst_window& w, void* /*user_data*/) {
     for (size_t i = 0; i < w.event_count(); ++i) {
         const knst_window_event& m_event = w.get_window_event_handle(i);
 
         if (m_event.type == KNST_WINDOW_EVENT_KEYBOARD) {
-            const bool shift = (m_event.mods & KNST_WINDOW_MOD_SHIFT)   != 0;
-            const bool ctrl  = (m_event.mods & KNST_WINDOW_MOD_CONTROL) != 0;
-            const bool alt   = (m_event.mods & KNST_WINDOW_MOD_ALT)     != 0;
+            const bool shift = (m_event.mods & KNST_WINDOW_MOD_SHIFT) != 0;
+            const bool ctrl = (m_event.mods & KNST_WINDOW_MOD_CONTROL) != 0;
+            const bool alt = (m_event.mods & KNST_WINDOW_MOD_ALT) != 0;
 
             if (m_event.key_action == KNST_WINDOW_KEY_ACTION_PRESS) {
                 if (m_event.key_code == KNST_WINDOW_KEY_CODE_T) {
@@ -66,6 +59,9 @@ KNST_FORCE_INLINE static void on_frame(knst_window& w, void* /*user_data*/) {
                 }
             }
             else if (m_event.key_action == KNST_WINDOW_KEY_ACTION_REPEAT) {
+                // Auto-repeat — the OS keeps firing PRESS for held keys
+                // (or we synthesize it for platforms that don't). Handy
+                // for movement in a game.
                 if (!ctrl && !alt && m_event.key_code == KNST_WINDOW_KEY_CODE_W)
                     std::cout << "W repeating (move forward)\n";
                 else if (!ctrl && !alt && m_event.key_code == KNST_WINDOW_KEY_CODE_A)
@@ -79,8 +75,7 @@ KNST_FORCE_INLINE static void on_frame(knst_window& w, void* /*user_data*/) {
         else if (m_event.type == KNST_WINDOW_EVENT_MOUSE) {
             if (m_event.mouse_action == KNST_WINDOW_MOUSE_ACTION_PRESS) {
                 if (m_event.mouse_button == KNST_WINDOW_MOUSE_BUTTON_LEFT) {
-                    std::cout << "Left mouse button pressed at ("
-                              << m_event.mouse_x << ", " << m_event.mouse_y << ")\n";
+                    std::cout << "Left mouse button pressed at ("  << m_event.mouse_x << ", " << m_event.mouse_y << ")\n";
                 }
                 else if (m_event.mouse_button == KNST_WINDOW_MOUSE_BUTTON_RIGHT) {
                     std::cout << "Right mouse button pressed\n";
@@ -98,8 +93,7 @@ KNST_FORCE_INLINE static void on_frame(knst_window& w, void* /*user_data*/) {
                 }
             }
             else if (m_event.mouse_action == KNST_WINDOW_MOUSE_ACTION_SCROLL) {
-                std::cout << "Mouse scrolled: "
-                          << (m_event.mouse_scroll_delta > 0 ? "up" : "down") << "\n";
+                std::cout << "Mouse scrolled: " << (m_event.mouse_scroll_delta > 0 ? "up" : "down") << "\n";
             }
         }
         else if (m_event.type == KNST_WINDOW_EVENT_FILE_DROP_ENTER) {
@@ -121,7 +115,8 @@ KNST_FORCE_INLINE static void on_frame(knst_window& w, void* /*user_data*/) {
         }
     }
 
-    // Clear the buffer so the same events are not processed again next frame.
+    // The event ring is fixed size — not clearing it drops new events
+    // once it fills up.
     w.clear_events();
 }
 
@@ -134,10 +129,19 @@ int main() {
     window.creation_and_show();
     window.set_drag_drop_status(true);
 
-    // Main loop: poll OS events, then run the frame callback.
+    // Main loop: drain OS events, then run the frame callback.
+    //
+    // call_redraw_callback() runs present_pre() + your draw code +
+    // present_post() under the hood, so the backend sync (X11 counter,
+    // Wayland ack_configure) is already handled. You only see your
+    // own callback.
     while (!window.is_should_close()) {
         knst_window_event_system::non_block_pool_event();
         window.call_redraw_callback();
+
+        // Yield so the CPU isn't pinned and the WM gets a chance to
+        // process events.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     window.destroy();

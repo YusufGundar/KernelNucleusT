@@ -758,6 +758,16 @@ KNST_FORCE_INLINE bool emplace_back(Args&&... args) noexcept {
         return *this;
     }
 
+    KNST_FORCE_INLINE T& at(uint32_t index) noexcept {
+        assert(index < m_size && "basic_vector::at() index out of range");
+        return m_data[index];
+    }
+
+    KNST_FORCE_INLINE const T& at(uint32_t index) const noexcept {
+        assert(index < m_size && "basic_vector::at() index out of range");
+        return m_data[index];
+    }
+
     KNST_FORCE_INLINE T& operator[](uint32_t index) noexcept { // Accessing an element by index. No bounds checking — fast but dangerous
         return m_data[index];
     }

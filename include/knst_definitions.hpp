@@ -1,9 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// SPDX-License-Identifier: MPL-2.0
-
-
 /*
 ----------------------------
 knst_definitions.hpp
@@ -17,26 +11,20 @@ knst_definitions.hpp
 
 #pragma once
 #include <cstdint> 
-
+#include <cassert>
 
     #if defined(KNST_CLASS_ALIGN_64)
-      
         #define KNST_CLASS_ALIGNMENT alignas(64)
         static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 31;
-        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 30;
-
+        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH   = 30;
     #elif defined(KNST_CLASS_ALIGN_32)
-        
         #define KNST_CLASS_ALIGNMENT alignas(32)
-        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 15; KNST_CLASS_ALIGNMENT
-        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 14;
-
+        static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 15;
+        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH   = 14;
     #else
-       
         #define KNST_CLASS_ALIGNMENT alignas(8)
         static constexpr uint32_t KNST_SSO_BUFFER_CAPACITY = 11;
-        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH = 10;
-
+        static constexpr uint32_t KNST_SSO_BUFFER_LENGTH   = 10;
     #endif
 
 
@@ -95,25 +83,27 @@ knst_definitions.hpp
 
     #else
 
+        // ⚠️ Desktop KNST_LOG_* macros — Android yukarıdaki blokta
+        //    __android_log_print kullanır, desktop ise stderr'a yazar.
+        //    Böylece aynı kaynak kodu her iki platformda da derlenir.
+        #define KNST_LOG_INFO(...)    std::fprintf(stderr, __VA_ARGS__)
+        #define KNST_LOG_ERROR(...)   std::fprintf(stderr, __VA_ARGS__)
+        #define KNST_LOG_WARN(...)    std::fprintf(stderr, __VA_ARGS__)
+        #define KNST_LOG_DEBUG(...)   std::fprintf(stderr, __VA_ARGS__)
+        #define KNST_LOG_VERBOSE(...) std::fprintf(stderr, __VA_ARGS__)
+
 
         #if defined(_WIN32) || defined(_WIN64)
             #define KNST_USING_PLATFORM_WINDOWS 1
             #define KNST_USING_LINUX_PLATFORM_X11 0
             #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
         #elif defined(__linux__)
-            #define KNST_USING_PLATFORM_LINUX 1
-            #define KNST_USING_PLATFORM_WINDOWS 0
-
-            #if defined(KNST_LINUX_PLATFORM_X11)
-                #define KNST_USING_LINUX_PLATFORM_X11 1
-                #define KNST_USING_LINUX_PLATFORM_WAYLAND 0
-
-            #elif defined(KNST_LINUX_PLATFORM_WAYLAND)
-                #define KNST_USING_LINUX_PLATFORM_WAYLAND 1
-                #define KNST_USING_LINUX_PLATFORM_X11 0
-
+            #ifndef KNST_USING_PLATFORM_LINUX
+                #define KNST_USING_PLATFORM_LINUX 1
             #endif
-                
+            #ifndef KNST_USING_PLATFORM_WINDOWS
+                #define KNST_USING_PLATFORM_WINDOWS 0
+            #endif
 
         #endif
 

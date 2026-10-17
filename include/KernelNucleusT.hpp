@@ -1,9 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-// SPDX-License-Identifier: MPL-2.0
-
-
 /*
 ----------------------------
 KernelNucleusT.hpp
@@ -76,7 +70,20 @@ KernelNucleusT.hpp
 
 // _end knst_window
 
+#if defined(KNST_WINDOW_USE_OPENGL)
 
+    #include "platform/knst_window/opengl_content/glad_3_3/include/glad/glad.h" // default 3.3 opengl core
+
+    #include "platform/knst_window/opengl_content/knst_window_opengl_content.hpp" // for opengl content
+    
+#endif
+
+#if defined(KNST_WINDOW_USE_VULKAN)
+
+
+    #include "platform/knst_window/vulkan_content/knst_window_vulkan_content.hpp" // for opengl content
+    
+#endif
 
 
 #if !defined(KNST_KEEP_X11_NONE_MACRO) 
