@@ -534,11 +534,11 @@ Windows PowerShell: `$env:ANDROID_NDK="C:\Users\<kullanici>\AppData\Local\Androi
 Kullanım:
 
 ```bash
-# Linux / macOS — OpenGL
+# Linux — OpenGL
 cd examples/complex_structures/knst_window/android
 ./build-android-opengl.sh
 
-# Linux / macOS — Vulkan
+# Linux — Vulkan
 ./build-android-vulkan.sh
 ```
 
@@ -739,7 +739,7 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
 
 ---
 
-### 🔹 Linux / macOS (Bash)
+### 🔹 Linux (Bash)
 
 ```bash
 # ------------------------------------X11--------------------------------------------
@@ -805,7 +805,7 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
 > **En kolay yol:** hazır script'i çalıştır. SDK/NDK/cihaz tespiti, build, APK, kurulum ve logcat hepsi tek komutta.
 
 ```bash
-# Hazır script — Linux / macOS
+# Hazır script — Linux
   cd examples/complex_structures/knst_window/android
   ./build-android-opengl.sh     # OpenGL ES
   ./build-android-vulkan.sh     # Vulkan
@@ -821,7 +821,7 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
 Manuel CMake (sadece `.so` üretir — APK / install / logcat yok):
 
 ```bash
-# Ortam değişkeni (Linux / macOS)
+# Ortam değişkeni (Linux)
   export ANDROID_NDK=$HOME/Android/Sdk/ndk/<sürüm>
 
 # Ortam değişkeni (Windows PowerShell)
@@ -846,7 +846,7 @@ Manuel CMake (sadece `.so` üretir — APK / install / logcat yok):
 
 | Kabuk | `-D...=.cpp` içeren argüman |
 |-------|-----------------------------|
-| **Bash (Linux/macOS)** | Tırnaksız çalışır |
+| **Bash (Linux)** | Tırnaksız çalışır |
 | **cmd.exe (Windows)** | Tırnaksız çalışır |
 | **PowerShell** | **Tırnak şart** |
 | **MSYS2 UCRT64** | Tırnaklı da tırnaksız da olur, garanti için tırnakla |
