@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20"/>
   <img src="https://img.shields.io/badge/Header--Only-yes-success" alt="Header-Only"/>
   <img src="https://img.shields.io/badge/License-MPL_2.0-orange" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.0.0-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-2.0.0--alpha.1-success" alt="Version 2.0.0-alpha.1"/>
 </p>
 
 <p align="center">
@@ -19,12 +19,12 @@
 <p align="center">
   <!-- Graphics -->
   <img src="https://img.shields.io/badge/OpenGL-3.3_Core-5586A4?logo=opengl&logoColor=white" alt="OpenGL"/>
-  <img src="https://img.shields.io/badge/Vulkan-supported-AC162C?logo=vulkan&logoColor=white" alt="Vulkan"/>
+  <img src="https://img.shields.io/badge/Vulkan-supported-success?logo=vulkan&logoColor=white" alt="Vulkan"/>
 </p>
 
 <p align="center">
   <!-- Networking -->
-  <img src="https://img.shields.io/badge/TLS-1.2_%2F_1.3-blue" alt="TLS"/>
+  <img src="https://img.shields.io/badge/TLS-1.2_%2F_1.3-success" alt="TLS"/>
   <img src="https://img.shields.io/badge/HTTP-1.1_%7C_2_%7C_3-brightgreen" alt="HTTP"/>
   <img src="https://img.shields.io/badge/WebSocket-RFC_6455-green" alt="WebSocket"/>
 </p>
