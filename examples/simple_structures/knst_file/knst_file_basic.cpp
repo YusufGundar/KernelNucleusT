@@ -44,16 +44,22 @@ int main() {
     // =====================================================================
     {
         knst_c16string p = u"/home/user/docs/report.tar.gz";
+        knst_c16string p_native = knst_file::normalize_path(p);
 
-        std::cout << "path       : " << p << "\n";
+        std::cout << "path       : " << p        << "  (input)\n";
+        std::cout << "normalized : " << p_native << "  (native, Windows uses '\\')\n";
         std::cout << "filename   : " << knst_file::get_filename(p)   << "\n";
         std::cout << "directory  : " << knst_file::get_directory(p)  << "\n";
         std::cout << "extension  : " << knst_file::get_extension(p)  << "\n";
         std::cout << "stem       : " << knst_file::get_stem(p)       << "\n";
         std::cout << "parent_dir : " << knst_file::get_parent_dir(p) << "\n";
-
+                // join_path() concatenates AND converts to native format:
+        //   • Windows : result uses '\' even if inputs had '/'
+        //   • POSIX   : result uses '/' (its only separator)
+        // It matches std::filesystem::path::operator/ behaviour and does
+        // NOT resolve '.' or '..' segments — call normalize_path() for that.
         knst_c16string joined = knst_file::join_path(u"/home/user", u"docs/file.txt");
-        std::cout << "join_path  : " << joined << "\n";
+        std::cout << "join_path  : " << joined << "  (native)\n";
 
         knst_c16string messy = u"/home/user/../user/./docs//file.txt";
         std::cout << "normalize  : " << knst_file::normalize_path(messy) << "\n";

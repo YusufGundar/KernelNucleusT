@@ -294,12 +294,21 @@ inline void ResolveShell(knst_shell_type shell,const knst_c16string& custom_path
     }
 #else
     switch (shell) {
+        #if defined(__ANDROID__)
+        case knst_shell_type::Sh:     out_path = u"/system/bin/sh"; out_flag = u"-c"; return;
+        case knst_shell_type::Bash:   out_path = u"/system/bin/sh"; out_flag = u"-c"; return;
+        case knst_shell_type::Zsh:    out_path = u"/system/bin/sh"; out_flag = u"-c"; return;
+        case knst_shell_type::Fish:   out_path = u"/system/bin/sh"; out_flag = u"-c"; return;
+        case knst_shell_type::Custom: out_path = custom_path;      out_flag = u"-c"; return;
+        default:                      out_path = u"/system/bin/sh"; out_flag = u"-c"; return;
+#else
         case knst_shell_type::Sh:     out_path = u"/bin/sh";       out_flag = u"-c"; return;
         case knst_shell_type::Bash:   out_path = u"/bin/bash";     out_flag = u"-c"; return;
         case knst_shell_type::Zsh:    out_path = u"/bin/zsh";      out_flag = u"-c"; return;
         case knst_shell_type::Fish:   out_path = u"/usr/bin/fish"; out_flag = u"-c"; return;
         case knst_shell_type::Custom: out_path = custom_path;      out_flag = u"-c"; return;
         default:                      out_path = u"/bin/sh";       out_flag = u"-c"; return;
+#endif
     }
 #endif
 }
@@ -956,13 +965,7 @@ inline knst_process spawn_posix_detached(const knst_c16string& program,const kns
                 ::_exit(127);
             }
         }
-        if (opts.inherit_env) {
-            for (uint32_t i = 0; i < opts.env.size(); ++i) {
-                knst_byte_string n(opts.env[i].name);
-                knst_byte_string v(opts.env[i].value);
-                ::setenv(reinterpret_cast<const char*>(n.data()),reinterpret_cast<const char*>(v.data()), 1);
-            }
-        }
+        
         knst_byte_string prog_utf8(program);
         knst_vector<knst_byte_string> args_utf8;
         args_utf8.reserve(args.size());
@@ -977,19 +980,36 @@ inline knst_process spawn_posix_detached(const knst_c16string& program,const kns
         char** envp = environ;
         knst_vector<knst_byte_string> env_storage;
         knst_vector<char*> envp_ptrs;
-        if (!opts.inherit_env) {
-            env_storage.reserve(opts.env.size());
-            envp_ptrs.reserve(opts.env.size() + 1);
+
+       
+        if (opts.inherit_env) {
+            
+            if (environ) {
+                for (char** e = environ; *e; ++e) {
+                    env_storage.push_back(knst_byte_string(*e));
+                }
+            }
             for (uint32_t i = 0; i < opts.env.size(); ++i) {
                 knst_c16string pair = opts.env[i].name;
                 pair.append(u"=");
                 pair.append(opts.env[i].value);
                 env_storage.push_back(knst_byte_string(pair));
-                envp_ptrs.push_back(const_cast<char*>(reinterpret_cast<const char*>(env_storage.back().data())));
             }
-            envp_ptrs.push_back(nullptr);
-            envp = envp_ptrs.data();
+        } else {
+            for (uint32_t i = 0; i < opts.env.size(); ++i) {
+                knst_c16string pair = opts.env[i].name;
+                pair.append(u"=");
+                pair.append(opts.env[i].value);
+                env_storage.push_back(knst_byte_string(pair));
+            }
         }
+
+        envp_ptrs.reserve(env_storage.size() + 1);
+        for (auto& s : env_storage) {
+            envp_ptrs.push_back(const_cast<char*>(reinterpret_cast<const char*>(s.data())));
+        }
+        envp_ptrs.push_back(nullptr);
+        envp = envp_ptrs.data();
 
         {
             int nice_delta = (opts.nice_value != 0) ? opts.nice_value : opts.priority;
@@ -1178,17 +1198,23 @@ inline knst_process knst_process::spawn_posix(const knst_c16string& program,cons
                 ::_exit(127);
             }
         }
+      
         char** envp = environ;
         knst_vector<knst_byte_string> env_storage;
         knst_vector<char*> envp_ptrs;
         if (opts.inherit_env) {
+            
+            if (environ) for (char** e = environ; *e; ++e) env_storage.push_back(knst_byte_string(*e));
             for (uint32_t i = 0; i < opts.env.size(); ++i) {
-                knst_byte_string n(opts.env[i].name);
-                knst_byte_string v(opts.env[i].value);
-                ::setenv(reinterpret_cast<const char*>(n.data()),reinterpret_cast<const char*>(v.data()), 1);
-                         
+                knst_c16string pair = opts.env[i].name;
+                pair.append(u"=");
+                pair.append(opts.env[i].value);
+                env_storage.push_back(knst_byte_string(pair));
             }
-            envp = environ;
+            envp_ptrs.reserve(env_storage.size() + 1);
+            for (auto& s : env_storage) envp_ptrs.push_back(const_cast<char*>(reinterpret_cast<const char*>(s.data())));
+            envp_ptrs.push_back(nullptr);
+            envp = envp_ptrs.data();
         } else {
             env_storage.reserve(opts.env.size());
             envp_ptrs.reserve(opts.env.size() + 1);
@@ -1694,8 +1720,6 @@ inline knst_process_result knst_process::communicate(const void* stdin_data,size
     result.exit_code = m_exit_code.load();
     if (!result.timed_out) result.error = error;
 
-    knst_process_detail::trim_trailing_newlines(result.out_data);
-    knst_process_detail::trim_trailing_newlines(result.err_data);
 
     return result;
 }
@@ -1871,9 +1895,23 @@ inline knst_process_info knst_process::get_info(uint32_t pid) noexcept {
         return info;
     }
     (void)knst_process_detail::parse_proc_status(pid, info);
+    #if defined(__ANDROID__)
+
+    if (pid == (uint32_t)::getpid()) {
+        if (knst_process_detail::read_proc_link(pid, "exe", info.exe_path)) info.has_exe = true;
+        if (knst_process_detail::read_proc_cmdline(pid, info.cmdline)) info.has_cmdline = true;
+        if (knst_process_detail::read_proc_link(pid, "cwd", info.cwd)) info.has_cwd = true;
+    } else {
+
+        info.has_exe = false;
+        info.has_cmdline = false;
+        info.has_cwd = false;
+    }
+#else
     if (knst_process_detail::read_proc_link(pid, "exe", info.exe_path)) info.has_exe = true;
     if (knst_process_detail::read_proc_cmdline(pid, info.cmdline)) info.has_cmdline = true;
     if (knst_process_detail::read_proc_link(pid, "cwd", info.cwd)) info.has_cwd = true;
+#endif
     if (info.has_user) {
         knst_process_detail::get_user_name_safe(info.uid, info.user);
     }
@@ -2116,11 +2154,20 @@ inline knst_process::system_info knst_process::get_system_info() noexcept {
         else { p = ::strstr(s, "MemFree:"); if (p && ::sscanf(p, "MemFree: %llu kB", &kb) == 1) si.free_memory = kb * 1024ULL; }
         si.used_memory = si.total_memory > si.free_memory ? si.total_memory - si.free_memory : 0;
     }
-    knst_byte_string up;
+        knst_byte_string up;
     if (knst_process_detail::read_proc_file(u"/proc/uptime", up) && !up.empty()) {
         double sec = 0.0; ::sscanf((const char*)up.data(), "%lf", &sec);
         si.uptime_ms = (uint64_t)(sec * 1000.0);
     }
+#if defined(__ANDROID__)
+  
+    if (si.uptime_ms == 0) {
+        struct timespec ts;
+        if (::clock_gettime(CLOCK_BOOTTIME, &ts) == 0) {
+            si.uptime_ms = (uint64_t)ts.tv_sec * 1000ULL+ (uint64_t)(ts.tv_nsec / 1000000);
+        }
+    }
+#endif
 #endif
     return si;
 }
@@ -2413,6 +2460,299 @@ inline knst_c16string ReadCmdlineFromPEB(HANDLE hProcess, bool target_wow64) noe
     out = knst_c16string(tmp.data(), chars);
     return out;
 #endif
+}
+
+// ─── PEB cwd oku ───────────────────────────────────────────────────
+inline bool ReadCwdFromPEB(HANDLE hProcess, bool target_wow64, knst_c16string& out) noexcept {
+    out.clear();
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    if (!nt) return false;
+    auto NtQIP = (NtQueryInformationProcess_t)GetProcAddress(nt, "NtQueryInformationProcess");
+    if (!NtQIP) return false;
+    ULONG_PTR params = 0;
+    bool wow = false;
+#if defined(_WIN64)
+    if (target_wow64) {
+        ULONG_PTR peb32 = 0;
+        if (NtQIP(hProcess, KNST_PROCESS_WOW64_INFORMATION_CLASS, &peb32, sizeof(peb32), nullptr) != 0 || !peb32) return false;
+        ULONG p32 = 0;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(peb32 + 0x10), &p32, sizeof(p32), nullptr) || !p32) return false;
+        params = (ULONG_PTR)p32;
+        wow = true;
+    } else {
+        KNST_PROCESS_BASIC_INFORMATION pbi = {};
+        if (NtQIP(hProcess, KNST_PROCESS_BASIC_INFORMATION_CLASS, &pbi, sizeof(pbi), nullptr) != 0 || !pbi.PebBaseAddress) return false;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)((ULONG_PTR)pbi.PebBaseAddress + 0x20), &params, sizeof(params), nullptr) || !params) return false;
+    }
+#else
+    (void)target_wow64;
+    KNST_PROCESS_BASIC_INFORMATION pbi = {};
+    if (NtQIP(hProcess, KNST_PROCESS_BASIC_INFORMATION_CLASS, &pbi, sizeof(pbi), nullptr) != 0 || !pbi.PebBaseAddress) return false;
+    ULONG p32 = 0;
+    if (!ReadProcessMemory(hProcess, (LPCVOID)((ULONG_PTR)pbi.PebBaseAddress + 0x10), &p32, sizeof(p32), nullptr) || !p32) return false;
+    params = (ULONG_PTR)p32;
+    wow = true;
+#endif
+    // CurrentDirectory.DosPath: 64→params+0x38, 32→params+0x24
+    if (wow) {
+        KNST_UNICODE_STRING32 us = {};
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(params + 0x24), &us, sizeof(us), nullptr) || !us.Length || !us.Buffer) return false;
+        uint32_t chars = us.Length / 2;
+        if (chars > 32768) return false;
+        knst_vector<char16_t> tmp;
+        if (!tmp.resize(chars)) return false;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(ULONG_PTR)us.Buffer, tmp.data(), chars * sizeof(char16_t), nullptr)) return false;
+        out = knst_c16string(tmp.data(), chars);
+    } else {
+        KNST_UNICODE_STRING us = {};
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(params + 0x38), &us, sizeof(us), nullptr) || !us.Length || !us.Buffer) return false;
+        uint32_t chars = us.Length / 2;
+        if (chars > 32768) return false;
+        knst_vector<char16_t> tmp;
+        if (!tmp.resize(chars)) return false;
+        if (!ReadProcessMemory(hProcess, us.Buffer, tmp.data(), chars * sizeof(char16_t), nullptr)) return false;
+        out = knst_c16string(tmp.data(), chars);
+    }
+    return !out.empty();
+}
+
+// ─── PEB env oku ───────────────────────────────────────────────────
+inline knst_vector<knst_env_var> ReadEnvFromPEB(HANDLE hProcess, bool target_wow64) noexcept {
+    knst_vector<knst_env_var> out;
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    if (!nt) return out;
+    auto NtQIP = (NtQueryInformationProcess_t)GetProcAddress(nt, "NtQueryInformationProcess");
+    if (!NtQIP) return out;
+    ULONG_PTR env_addr = 0;
+    bool wow = false;
+#if defined(_WIN64)
+    if (target_wow64) {
+        ULONG_PTR peb32 = 0;
+        if (NtQIP(hProcess, KNST_PROCESS_WOW64_INFORMATION_CLASS, &peb32, sizeof(peb32), nullptr) != 0 || !peb32) return out;
+        ULONG p32 = 0;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(peb32 + 0x10), &p32, sizeof(p32), nullptr) || !p32) return out;
+        ULONG e32 = 0;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(ULONG_PTR)(p32 + 0x48), &e32, sizeof(e32), nullptr) || !e32) return out;
+        env_addr = (ULONG_PTR)e32; wow = true;
+    } else {
+        KNST_PROCESS_BASIC_INFORMATION pbi = {};
+        if (NtQIP(hProcess, KNST_PROCESS_BASIC_INFORMATION_CLASS, &pbi, sizeof(pbi), nullptr) != 0 || !pbi.PebBaseAddress) return out;
+        ULONG_PTR params = 0;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)((ULONG_PTR)pbi.PebBaseAddress + 0x20), &params, sizeof(params), nullptr) || !params) return out;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)(params + 0x80), &env_addr, sizeof(env_addr), nullptr) || !env_addr) return out;
+    }
+#else
+    (void)target_wow64;
+    KNST_PROCESS_BASIC_INFORMATION pbi = {};
+    if (NtQIP(hProcess, KNST_PROCESS_BASIC_INFORMATION_CLASS, &pbi, sizeof(pbi), nullptr) != 0 || !pbi.PebBaseAddress) return out;
+    ULONG p32 = 0;
+    if (!ReadProcessMemory(hProcess, (LPCVOID)((ULONG_PTR)pbi.PebBaseAddress + 0x10), &p32, sizeof(p32), nullptr) || !p32) return out;
+    ULONG e32 = 0;
+    if (!ReadProcessMemory(hProcess, (LPCVOID)(ULONG_PTR)(p32 + 0x48), &e32, sizeof(e32), nullptr) || !e32) return out;
+    env_addr = (ULONG_PTR)e32; wow = true;
+#endif
+    (void)wow;
+    constexpr size_t kMaxEnv = 256 * 1024;
+    knst_vector<char16_t> buf;
+    size_t chunk = 32 * 1024;
+    while (chunk <= kMaxEnv) {
+        if (!buf.resize((uint32_t)(chunk / sizeof(char16_t)))) break;
+        SIZE_T br = 0;
+        if (!ReadProcessMemory(hProcess, (LPCVOID)env_addr, buf.data(), chunk, &br) || !br) break;
+        size_t chars = br / sizeof(char16_t);
+        size_t end_pos = SIZE_MAX;
+        for (size_t i = 0; i + 1 < chars; ++i) if (buf[i] == u'\0' && buf[i+1] == u'\0') { end_pos = i; break; }
+        if (end_pos != SIZE_MAX) {
+            size_t pos = 0;
+            while (pos < end_pos) {
+                size_t s = pos;
+                while (pos < end_pos && buf[pos] != u'\0') ++pos;
+                if (pos > s) {
+                    knst_c16string line(buf.data() + s, (uint32_t)(pos - s));
+                    uint32_t eq = 0;
+                    for (uint32_t j = 0; j < line.length(); ++j) if (line[j] == u'=') { eq = j; break; }
+                    if (eq > 0) {
+                        knst_env_var ev;
+                        ev.name = line.substr(0, eq);
+                        ev.value = line.substr(eq + 1, line.length() - eq - 1);
+                        out.push_back(ev);
+                    }
+                }
+                if (pos < end_pos) ++pos;
+            }
+            return out;
+        }
+        chunk *= 2;
+    }
+    return out;
+}
+
+// ─── NtQuerySystemInformation → process state ─────────────────────
+typedef LONG (NTAPI *NtQuerySystemInformation_t)(ULONG, PVOID, ULONG, PULONG);
+inline NtQuerySystemInformation_t GetNtQuerySystemInformation() noexcept {
+    static NtQuerySystemInformation_t fn = []() -> NtQuerySystemInformation_t {
+        HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+        return nt ? (NtQuerySystemInformation_t)GetProcAddress(nt, "NtQuerySystemInformation") : nullptr;
+    }();
+    return fn;
+}
+
+inline knst_process_state get_state_via_ntqsi(uint32_t target_pid) noexcept {
+    auto fn = GetNtQuerySystemInformation();
+    if (!fn) return knst_process_state::Unknown;
+    ULONG buf_size = 1024 * 1024;
+    knst_vector<unsigned char> buf;
+    bool ok = false;
+    for (int attempt = 0; attempt < 6; ++attempt) {
+        if (!buf.resize(buf_size)) return knst_process_state::Unknown;
+        ULONG ret = 0;
+        LONG st = fn(5, buf.data(), buf_size, &ret);
+        if (st == 0) { ok = true; break; }
+        if ((ULONG)st == 0xC0000004UL) { buf_size *= 2; continue; }
+        return knst_process_state::Unknown;
+    }
+    if (!ok) return knst_process_state::Unknown;
+    const unsigned char* p = buf.data();
+    const unsigned char* end = p + buf.size();
+    while (p + 0x100 <= end) {
+        ULONG next_off = *reinterpret_cast<const ULONG*>(p + 0x00);
+        ULONG num_threads = *reinterpret_cast<const ULONG*>(p + 0x04);
+        HANDLE pid_h = *reinterpret_cast<const HANDLE*>(p + 0x50);
+        if ((uint32_t)(uintptr_t)pid_h == target_pid) {
+            if (num_threads == 0) return knst_process_state::Dead;
+            bool any_run=false, any_wait=false, any_disk=false, all_susp=true, all_term=true;
+            const unsigned char* tp = p + 0x100;
+            for (ULONG i = 0; i < num_threads; ++i) {
+                const unsigned char* te = tp + i * 0x50;
+                if (te + 0x4C > end) break;
+                ULONG ts = *reinterpret_cast<const ULONG*>(te + 0x44);
+                ULONG wr = *reinterpret_cast<const ULONG*>(te + 0x48);
+                if (ts != 4) all_term = false;
+                switch (ts) {
+                    case 1: case 2: case 3: case 6: case 7: any_run = true; all_susp = false; break;
+                    case 5:
+                        any_wait = true;
+                        if (wr == 2 || wr == 9) any_disk = true;
+                        if (wr != 5 && wr != 12 && wr != 20) all_susp = false;
+                        break;
+                    default: all_susp = false; break;
+                }
+            }
+            if (all_term) return knst_process_state::Dead;
+            if (any_run) return knst_process_state::Running;
+            if (all_susp) return knst_process_state::Stopped;
+            if (any_disk) return knst_process_state::DiskSleep;
+            if (any_wait) return knst_process_state::Sleeping;
+            return knst_process_state::Running;
+        }
+        if (next_off == 0) break;
+        p += next_off;
+    }
+    return knst_process_state::Unknown;
+}
+
+// ─── Handle enumeration → fds ─────────────────────────────────────
+struct KNST_HANDLE_ENTRY_EX {
+    PVOID Object; ULONG_PTR UniqueProcessId; ULONG_PTR HandleValue;
+    ULONG GrantedAccess; USHORT CreatorBackTraceIndex; USHORT ObjectTypeIndex;
+    ULONG HandleAttributes; ULONG Reserved;
+};
+struct KNST_HANDLE_INFO_EX {
+    ULONG_PTR NumberOfHandles; ULONG_PTR Reserved; KNST_HANDLE_ENTRY_EX Handles[1];
+};
+typedef LONG (NTAPI *NtQueryObject_t)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+
+inline knst_vector<knst_fd_info> get_fds_via_handles(uint32_t target_pid) noexcept {
+    knst_vector<knst_fd_info> out;
+    HANDLE hProc = OpenProcess(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, target_pid);
+    if (!hProc) return out;
+    auto ntqsi = GetNtQuerySystemInformation();
+    HMODULE nt = GetModuleHandleW(L"ntdll.dll");
+    auto ntqo = nt ? (NtQueryObject_t)GetProcAddress(nt, "NtQueryObject") : nullptr;
+    if (!ntqsi || !ntqo) { CloseHandle(hProc); return out; }
+    ULONG buf_size = 1024 * 1024;
+    knst_vector<unsigned char> buf;
+    bool ok = false;
+    for (int a = 0; a < 6; ++a) {
+        if (!buf.resize(buf_size)) break;
+        ULONG ret = 0;
+        LONG st = ntqsi(64, buf.data(), buf_size, &ret);
+        if (st == 0) { ok = true; break; }
+        if ((ULONG)st == 0xC0000004UL) { buf_size *= 2; continue; }
+        break;
+    }
+    if (!ok) { CloseHandle(hProc); return out; }
+    auto* info = reinterpret_cast<KNST_HANDLE_INFO_EX*>(buf.data());
+    ULONG_PTR count = info->NumberOfHandles;
+    for (ULONG_PTR i = 0; i < count; ++i) {
+        auto& he = info->Handles[i];
+        if ((uint32_t)he.UniqueProcessId != target_pid) continue;
+        HANDLE dup = nullptr;
+        if (!DuplicateHandle(hProc, (HANDLE)he.HandleValue, GetCurrentProcess(), &dup, 0, FALSE, DUPLICATE_SAME_ACCESS)) continue;
+        char type_storage[512] = {};
+        ULONG ret_len = 0;
+        if (ntqo(dup, 2, type_storage, sizeof(type_storage), &ret_len) != 0) { CloseHandle(dup); continue; }
+        struct { USHORT Length; USHORT MaximumLength; PWSTR Buffer; } us = {};
+        ::memcpy(&us, type_storage, sizeof(us));
+        knst_c16string type_name;
+        if (us.Buffer && us.Length > 0 && us.Length < 128)
+            type_name = knst_c16string(reinterpret_cast<const char16_t*>(us.Buffer), (uint32_t)(us.Length / sizeof(char16_t)));
+        knst_fd_info fi;
+        fi.fd = (int32_t)(uintptr_t)he.HandleValue;
+        if (type_name == u"File") {
+            wchar_t path[1024];
+            DWORD n = GetFinalPathNameByHandleW(dup, path, 1024, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+            if (n > 0 && n < 1024) {
+                fi.target = knst_c16string(reinterpret_cast<const char16_t*>(path), (uint32_t)n);
+                fi.is_file = true;
+            } else {
+                DWORD ft = GetFileType(dup);
+                if (ft == FILE_TYPE_PIPE) fi.is_pipe = true;
+                else if (ft == FILE_TYPE_CHAR) fi.is_file = true;
+                else { CloseHandle(dup); continue; }
+            }
+        } else if (type_name == u"Pipe") {
+            fi.is_pipe = true;
+        } else { CloseHandle(dup); continue; }
+        CloseHandle(dup);
+        out.push_back(fi);
+    }
+    CloseHandle(hProc);
+    return out;
+}
+
+// ─── SID → uid hash ──────────────────────────────────────────────
+inline uint32_t SidToUid(PSID sid) noexcept {
+    if (!sid || !IsValidSid(sid)) return 0;
+    uint32_t hash = 2166136261u;
+    auto mix = [&](const void* d, size_t n) {
+        const unsigned char* p = (const unsigned char*)d;
+        for (size_t i = 0; i < n; ++i) { hash ^= p[i]; hash *= 16777619u; }
+    };
+    DWORD sub_count = *GetSidSubAuthorityCount(sid);
+    PSID_IDENTIFIER_AUTHORITY auth = GetSidIdentifierAuthority(sid);
+    if (auth) mix(auth, sizeof(SID_IDENTIFIER_AUTHORITY));
+    for (DWORD i = 0; i < sub_count && i < 15; ++i) {
+        DWORD sub = *GetSidSubAuthority(sid, i);
+        mix(&sub, sizeof(sub));
+    }
+    return hash ? hash : 1;
+}
+
+inline uint32_t GetProcessUidByHandle(HANDLE hProcess) noexcept {
+    if (!hProcess) return 0;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(hProcess, TOKEN_QUERY, &token)) return 0;
+    DWORD sz = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &sz);
+    if (!sz) { CloseHandle(token); return 0; }
+    knst_vector<unsigned char> tb;
+    if (!tb.resize(sz)) { CloseHandle(token); return 0; }
+    BOOL ok = GetTokenInformation(token, TokenUser, tb.data(), sz, &sz);
+    CloseHandle(token);
+    if (!ok) return 0;
+    TOKEN_USER* tu = reinterpret_cast<TOKEN_USER*>(tb.data());
+    return SidToUid(tu->User.Sid);
 }
 
 }
@@ -2714,7 +3054,14 @@ inline bool knst_process::wait_or_kill(uint32_t timeout_ms) noexcept {
     if (error == knst_process_error::Timeout) { force_kill(); wait(0); }
     return false;
 }
-inline bool knst_process::send_signal(int) noexcept { return kill(9); }
+inline bool knst_process::send_signal(int sig) noexcept {
+    HANDLE h = static_cast<HANDLE>(m_process_handle);
+    if (!h || !m_running.load()) return false;
+    if ((sig == 15 || sig == 2) && m_detached) {
+        if (GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, m_pid)) return true;
+    }
+    return TerminateProcess(h, (UINT)(sig == 9 ? 1 : sig)) != 0;
+}
 
 inline bool knst_process::suspend() noexcept {
     HANDLE h = static_cast<HANDLE>(m_process_handle);
@@ -2900,11 +3247,10 @@ inline knst_process_result knst_process::communicate(const void* stdin_data,size
     knst_process_result result;
 
 
-    std::thread stdin_writer;
+        knst_thread stdin_writer;
     bool writer_started = false;
     if (stdin_data && stdin_size > 0) {
-        writer_started = true;
-        stdin_writer = std::thread([this, stdin_data, stdin_size]() {
+        writer_started = stdin_writer.start([this, stdin_data, stdin_size]() {
             write_stdin(stdin_data, stdin_size);
             close_stdin();
         });
@@ -3228,6 +3574,25 @@ inline knst_process_info knst_process::get_info(uint32_t pid) noexcept {
             info.has_user = true;
         }
     }
+    // cwd via PEB
+    {
+        BOOL wow = FALSE;
+        bool wok = IsWow64Process(h, &wow) != 0;
+#if defined(_WIN64)
+        bool tw = wok && wow;
+#else
+        bool tw = false;
+#endif
+        knst_c16string cwd;
+        if (knst_process_detail::ReadCwdFromPEB(h, tw, cwd)) {
+            info.cwd = std::move(cwd);
+            info.has_cwd = true;
+        }
+    }
+    // uid via SID hash
+    if (!info.has_user || info.uid == 0) {
+        info.uid = knst_process_detail::GetProcessUidByHandle(h);
+    }
 
     CloseHandle(h);
 
@@ -3253,13 +3618,43 @@ inline knst_process_info knst_process::get_info(uint32_t pid) noexcept {
 
 inline knst_c16string knst_process::get_exe_path(uint32_t pid) noexcept { return get_info(pid).exe_path; }
 inline knst_c16string knst_process::get_cmdline(uint32_t pid) noexcept { return get_info(pid).cmdline; }
-inline knst_c16string knst_process::get_cwd(uint32_t) noexcept { return knst_c16string(); }
-inline knst_c16string knst_process::get_user(uint32_t) noexcept { return knst_c16string(); }
-inline uint32_t knst_process::get_uid(uint32_t) noexcept { return 0; }
+inline knst_c16string knst_process::get_cwd(uint32_t pid) noexcept {
+    if (pid == 0) return knst_c16string();
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (!h) h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (!h) return knst_c16string();
+    BOOL wow = FALSE;
+    bool wok = IsWow64Process(h, &wow) != 0;
+#if defined(_WIN64)
+    bool tw = wok && wow;
+#else
+    bool tw = false;
+#endif
+    knst_c16string out;
+    knst_process_detail::ReadCwdFromPEB(h, tw, out);
+    CloseHandle(h);
+    return out;
+}
+inline knst_c16string knst_process::get_user(uint32_t pid) noexcept { return get_info(pid).user; }
+inline uint32_t knst_process::get_uid(uint32_t pid) noexcept {
+    if (pid == 0) return 0;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return 0;
+    uint32_t u = knst_process_detail::GetProcessUidByHandle(h);
+    CloseHandle(h);
+    return u;
+}
 inline uint32_t knst_process::get_ppid(uint32_t pid) noexcept { return get_info(pid).ppid; }
 inline int32_t  knst_process::get_nice(uint32_t pid) noexcept { return get_info(pid).nice; }
 inline knst_process_state knst_process::get_state(uint32_t pid) noexcept {
-    return exists(pid) ? knst_process_state::Running : knst_process_state::Dead;
+    if (pid == 0) return knst_process_state::Unknown;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return knst_process_state::Dead;
+    DWORD w = WaitForSingleObject(h, 0);
+    CloseHandle(h);
+    if (w == WAIT_OBJECT_0) return knst_process_state::Dead;
+    knst_process_state s = knst_process_detail::get_state_via_ntqsi(pid);
+    return s != knst_process_state::Unknown ? s : knst_process_state::Running;
 }
 inline uint64_t knst_process::get_rss_bytes(uint32_t pid) noexcept { return get_info(pid).rss_bytes; }
 inline uint64_t knst_process::get_vsz_bytes(uint32_t pid) noexcept { return get_info(pid).vsz_bytes; }
@@ -3295,8 +3690,25 @@ inline knst_vector<knst_thread_info> knst_process::get_threads(uint32_t pid) noe
     }
     return out;
 }
-inline knst_vector<knst_fd_info> knst_process::get_fds(uint32_t) noexcept { return {}; }
-inline knst_vector<knst_env_var> knst_process::get_env(uint32_t) noexcept { return {}; }
+inline knst_vector<knst_fd_info> knst_process::get_fds(uint32_t pid) noexcept {
+    return knst_process_detail::get_fds_via_handles(pid);
+}
+inline knst_vector<knst_env_var> knst_process::get_env(uint32_t pid) noexcept {
+    if (pid == 0) return {};
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (!h) h = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (!h) return {};
+    BOOL wow = FALSE;
+    bool wok = IsWow64Process(h, &wow) != 0;
+#if defined(_WIN64)
+    bool tw = wok && wow;
+#else
+    bool tw = false;
+#endif
+    auto out = knst_process_detail::ReadEnvFromPEB(h, tw);
+    CloseHandle(h);
+    return out;
+}
 
 inline bool knst_process::kill_by_pid(uint32_t pid, int) noexcept {
     if (pid == 0) return false;
@@ -3998,7 +4410,39 @@ inline bool fill_from_sysfs(uint32_t idx, const char* card_dir, knst_gpu_info& i
     if (info.name.empty() && !info.vendor_name.empty()) info.name = info.vendor_name;
     info.index = idx;
     info.valid = true;
+#if defined(__ANDROID__)
+    // ─── Qualcomm Adreno ───
+    {
+
+        if (sysfs_read_u64("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage", v)) {
+            info.utilization_gpu = (uint32_t)v;
+            info.has_utilization = true;
+        }
+        if (sysfs_read_u64("/sys/class/kgsl/kgsl-3d0/gpuclk", v)) {
+            info.clock_core_mhz = (uint32_t)(v / 1000000);
+            info.has_clocks = true;
+        }
+        if (sysfs_read_u64("/sys/class/kgsl/kgsl-3d0/gpubusy", v)) {
+            
+            info.has_utilization = true;
+        }
+    }
+
+    // ─── ARM Mali ───
+    {
+
+        if (sysfs_read_u64("/sys/class/misc/mali0/device/utilisation", v)) {
+            info.utilization_gpu = (uint32_t)v;
+            info.has_utilization = true;
+        }
+        if (sysfs_read_u64("/sys/class/misc/mali0/device/clock", v)) {
+            info.clock_core_mhz = (uint32_t)(v / 1000000);
+            info.has_clocks = true;
+        }
+    }
+#endif
     return true;
+
 }
 
 inline bool find_sysfs_cards(knst_vector<uint32_t>& out) noexcept {
@@ -4039,9 +4483,24 @@ inline knst_vector<knst_gpu_info> pdh_collect_gpu_utils(knst_vector<knst_luid_ke
     }
 
    
+    // PDH utilization needs two samples ≥200ms apart. Cache the result for
+    // 2s so repeated list_all() calls don't stall the caller.
+    static thread_local auto last_sample = std::chrono::steady_clock::time_point{};
+    static thread_local knst_vector<knst_luid_key> cached_luids;
+    static thread_local knst_vector<knst_gpu_info> cached_utils;
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_sample < std::chrono::seconds(2) && !cached_luids.empty()) {
+        out_luids = cached_luids;
+        return cached_utils;
+    }
     if (PdhCollectQueryData(query) != ERROR_SUCCESS) { PdhCloseQuery(query); return dummy; }
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
     if (PdhCollectQueryData(query) != ERROR_SUCCESS) { PdhCloseQuery(query); return dummy; }
+    // ... mevcut parse kod ...
+    cached_luids = out_luids;
+    cached_utils = dummy;
+    last_sample = now;
+    return dummy;
 
     DWORD buf_size = 0, item_count = 0;
     PdhGetFormattedCounterArrayW(counter, PDH_FMT_DOUBLE, &buf_size, &item_count, nullptr);
@@ -4192,9 +4651,9 @@ inline bool fill_from_wmi_impl(knst_vector<knst_gpu_info>& out) noexcept {
         u"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
         { u"-NoProfile", u"-NonInteractive", u"-Command",
           u"$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-          u"Get-CimInstance Win32_VideoController | "
-          u"Select-Object Name,AdapterCompatibility,DriverVersion | "
-          u"ConvertTo-Csv -NoTypeInformation" },
+            u"Get-CimInstance Win32_VideoController | "
+            u"Select-Object Name,AdapterCompatibility,DriverVersion | "
+            u"ConvertTo-Csv -NoTypeInformation -Delimiter ',' -UseCulture:$false" },
         {}, nullptr, 0, 8000);
     if (r.error != knst_process_error::None || r.exit_code != 0) return false;
 
@@ -4222,13 +4681,44 @@ inline bool fill_from_wmi_impl(knst_vector<knst_gpu_info>& out) noexcept {
             char c = s[start + k];
             if (in_q) {
                 if (c == '"') {
-                                        if (k + 1 < len && s[start + k + 1] == '"') { cur.append(u"\""); ++k; }
+                                if (k + 1 < len && s[start + k + 1] == '"') { cur.append(u"\""); ++k; }
                     else in_q = false;
-                                } else { char16_t _t[2] = { (char16_t)(unsigned char)c, 0 }; cur.append(_t); }
+                                } else {
+                    // UTF-8 multi-byte aware append
+                    unsigned char b = (unsigned char)c;
+                    if (b < 0x80) { char16_t _t[2] = { (char16_t)b, 0 }; cur.append(_t); }
+                    else if ((b & 0xE0) == 0xC0 && k + 1 < len) {
+                        unsigned int cp = ((b & 0x1F) << 6) | ((unsigned char)s[start+k+1] & 0x3F);
+                        char16_t _t[2] = { (char16_t)cp, 0 }; cur.append(_t); ++k;
+                    } else if ((b & 0xF0) == 0xE0 && k + 2 < len) {
+                        unsigned int cp = ((b & 0x0F) << 12) | (((unsigned char)s[start+k+1] & 0x3F) << 6) | ((unsigned char)s[start+k+2] & 0x3F);
+                        char16_t _t[2] = { (char16_t)cp, 0 }; cur.append(_t); k += 2;
+                    } else if ((b & 0xF8) == 0xF0 && k + 3 < len) {
+                        unsigned int cp = ((b & 0x07) << 18) | (((unsigned char)s[start+k+1] & 0x3F) << 12) | (((unsigned char)s[start+k+2] & 0x3F) << 6) | ((unsigned char)s[start+k+3] & 0x3F);
+                        char16_t hi = (char16_t)(0xD800 + ((cp - 0x10000) >> 10));
+                        char16_t lo = (char16_t)(0xDC00 + ((cp - 0x10000) & 0x3FF));
+                        char16_t _t[3] = { hi, lo, 0 }; cur.append(_t); k += 3;
+                    } else { char16_t _t[2] = { u'?', 0 }; cur.append(_t); }
+                }
             } else {
                 if (c == '"') in_q = true;
                 else if (c == ',') { cols.push_back(cur); cur.clear(); }
-                                else { char16_t _t[2] = { (char16_t)(unsigned char)c, 0 }; cur.append(_t); }
+                                else {
+                    unsigned char b = (unsigned char)c;
+                    if (b < 0x80) { char16_t _t[2] = { (char16_t)b, 0 }; cur.append(_t); }
+                    else if ((b & 0xE0) == 0xC0 && k + 1 < len) {
+                        unsigned int cp = ((b & 0x1F) << 6) | ((unsigned char)s[start+k+1] & 0x3F);
+                        char16_t _t[2] = { (char16_t)cp, 0 }; cur.append(_t); ++k;
+                    } else if ((b & 0xF0) == 0xE0 && k + 2 < len) {
+                        unsigned int cp = ((b & 0x0F) << 12) | (((unsigned char)s[start+k+1] & 0x3F) << 6) | ((unsigned char)s[start+k+2] & 0x3F);
+                        char16_t _t[2] = { (char16_t)cp, 0 }; cur.append(_t); k += 2;
+                    } else if ((b & 0xF8) == 0xF0 && k + 3 < len) {
+                        unsigned int cp = ((b & 0x07) << 18) | (((unsigned char)s[start+k+1] & 0x3F) << 12) | (((unsigned char)s[start+k+2] & 0x3F) << 6) | ((unsigned char)s[start+k+3] & 0x3F);
+                        char16_t hi = (char16_t)(0xD800 + ((cp - 0x10000) >> 10));
+                        char16_t lo = (char16_t)(0xDC00 + ((cp - 0x10000) & 0x3FF));
+                        char16_t _t[3] = { hi, lo, 0 }; cur.append(_t); k += 3;
+                    } else { char16_t _t[2] = { u'?', 0 }; cur.append(_t); }
+                }
             }
         }
         cols.push_back(cur);
@@ -4292,6 +4782,32 @@ public:
                 }
             }
         }
+
+#if defined(__ANDROID__)
+        // Android GPU detection (kgsl / mali) — /sys/class/drm olmayabilir.
+        {
+            uint64_t v = 0;
+            knst_gpu_info ag;
+            ag.index = (uint32_t)out.size();
+            ag.vendor = knst_gpu_vendor::Other;
+            bool any = false;
+            if (knst_gpu_detail::sysfs_read_u64("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage", v)) {
+                ag.utilization_gpu = (uint32_t)v; ag.has_utilization = true; any = true;
+            }
+            if (knst_gpu_detail::sysfs_read_u64("/sys/class/kgsl/kgsl-3d0/gpuclk", v)) {
+                ag.clock_core_mhz = (uint32_t)(v / 1000000); ag.has_clocks = true; any = true;
+            }
+            if (!any) {
+                if (knst_gpu_detail::sysfs_read_u64("/sys/class/misc/mali0/device/utilisation", v)) {
+                    ag.utilization_gpu = (uint32_t)v; ag.has_utilization = true; any = true;
+                }
+                if (knst_gpu_detail::sysfs_read_u64("/sys/class/misc/mali0/device/clock", v)) {
+                    ag.clock_core_mhz = (uint32_t)(v / 1000000); ag.has_clocks = true; any = true;
+                }
+            }
+            if (any) { ag.valid = true; ag.name = u"Android GPU"; out.push_back(ag); }
+        }
+#endif
 
 #if defined(__linux__) && !KNST_USING_PLATFORM_WINDOWS
 

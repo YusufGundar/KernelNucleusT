@@ -1,8 +1,8 @@
 # knst_process — Cross-Platform Process Management
 
-Hello! 👋 This document explains what the `knst_process` class is, how to use it, and why it exists in KernelNucleusT.
+Hey! 👋 This document explains what the `knst_process` class is, how to use it, and why it's in KernelNucleusT.
 
-In short: **a cross-platform process management + GPU monitoring library.** Using the same API on Linux and Windows, it launches programs, captures their output, writes to stdin, applies timeouts, lists PIDs, reads thread/FD/env information, and **monitors NVIDIA/AMD GPUs**.
+**In short:** A **cross-platform process management + GPU monitoring library.** Using the same API on Linux and Windows, you can launch programs, capture output, write to stdin, apply timeouts, list PIDs, read thread/FD/env info, and monitor **NVIDIA/AMD/Intel GPUs**. On Android, sensor/device mode is limited but detection works.
 
 ---
 
@@ -10,21 +10,22 @@ In short: **a cross-platform process management + GPU monitoring library.** Usin
 
 | Feature | What it gives you |
 |---|---|
-| **Cross-platform** | Same API on Linux and Windows |
-| **Program launching** | `run`, `run_shell`, `run_capture`, `run_detached` |
-| **Output capture** | stdout + stderr simultaneously, binary-safe |
-| **stdin piping** | Send data to the child process |
-| **Timeout** | Auto-kill if it does not finish in time |
-| **Detached process** | Fire-and-forget, parent does not wait |
+| **Cross-platform** | Same API on Linux + Windows + Android |
+| **Program launch** | `run`, `run_shell`, `run_capture`, `run_detached` |
+| **Output capture** | stdout + stderr in parallel, binary-safe |
+| **stdin piping** | Write data to child process (threaded, non-blocking) |
+| **Timeout** | Auto-kill if not done in given time |
+| **Detached process** | POSIX: double-fork, Windows: `DETACHED_PROCESS` |
 | **Process listing** | PID list, name search, children, descendants |
 | **Process inspection** | RSS/VSZ, CPU time, thread count, FD count |
-| **Thread / FD / Env** | `/proc/[pid]/task`, `/proc/[pid]/fd`, `/proc/[pid]/environ` |
-| **Suspend / Resume** | Pause and resume a process |
-| **Priority / Affinity** | nice value and CPU core assignment |
-| **GPU monitoring** | NVIDIA (NVML), AMD (Linux: sysfs / Windows: DXGI+PDH), Intel (DXGI) |
+| **Thread / FD / Env** | Works on both platforms (FD: handle enumeration, Env: PEB) |
+| **Suspend / Resume** | Pause and resume processes |
+| **Priority / Affinity** | nice value and CPU core pinning |
+| **GPU monitoring** | NVIDIA (NVML), AMD/Intel (Linux: sysfs / Windows: DXGI+PDH) |
 | **GPU process list** | Which process uses which GPU, VRAM |
-| **Shell selection** | sh, bash, zsh, fish, cmd, powershell |
-| **UTF-16 friendly** | Unicode paths with `knst_c16string` |
+| **Shell selection** | sh, bash, zsh, fish, cmd, powershell, pwsh |
+| **UTF-16 friendly** | `knst_c16string` for Unicode paths |
+| **Suspend after spawn** | Launch + immediately pause (for debuggers) |
 
 ---
 
@@ -35,7 +36,7 @@ In short: **a cross-platform process management + GPU monitoring library.** Usin
 #include <iostream>
 
 int main() {
-    // Run a shell command and get its output
+    // Run a shell command and capture output
     knst_process p = knst_process::run_shell(u"echo hello");
 
     knst_process_result r = p.communicate(nullptr, 0, 5000);
@@ -48,19 +49,19 @@ int main() {
 
 ---
 
-## 📋 Overview API
+## 📋 General API
 
 | Category | Methods |
 |---|---|
-| **Program launching** | `run`, `run_shell`, `run_with_shell`, `run_detached`, `run_capture` |
+| **Program launch** | `run`, `run_shell`, `run_with_shell`, `run_detached`, `run_capture` |
 | **Communication** | `communicate`, `read_stdout`, `read_stderr`, `write_stdin`, `close_stdin` |
 | **Line reading** | `read_line`, `try_read_stdout`, `try_read_stderr` |
 | **Waiting** | `wait`, `wait_or_kill`, `is_running`, `exit_code` |
 | **Kill / Signal** | `kill`, `force_kill`, `kill_tree`, `send_signal` |
 | **Suspend / Resume** | `suspend`, `resume` |
 | **Priority / Affinity** | `set_priority`, `set_affinity` |
-| **PID listing** | `list_pids`, `list_all`, `find_by_name`, `children_of`, `descendants_of` |
-| **Control** | `exists`, `is_alive`, `is_zombie` |
+| **PID list** | `list_pids`, `list_all`, `find_by_name`, `children_of`, `descendants_of` |
+| **Check** | `exists`, `is_alive`, `is_zombie` |
 | **Info** | `get_info`, `get_exe_path`, `get_cmdline`, `get_cwd`, `get_user` |
 | **Memory / CPU** | `get_rss_bytes`, `get_vsz_bytes`, `get_cpu_times` |
 | **Thread / FD / Env** | `get_threads`, `get_fds`, `get_env` |
@@ -70,11 +71,11 @@ int main() {
 
 ---
 
-## 🎯 1) Program Launching
+## 🎯 1) Program Launch
 
 ### `run` — Direct Execution (No Shell)
 
-Invokes the program directly; no shell intervenes:
+Invokes the program directly, no shell in between:
 
 ```cpp
 knst_vector<knst_c16string> args;
@@ -88,7 +89,9 @@ if (p.error == knst_process_error::None) {
 }
 ```
 
-**Advantage:** No shell injection risk. Arguments go directly to `execve`.
+**Advantage:** No shell injection risk. Args go directly to `execve`/`CreateProcessW`.
+
+**POSIX exec path:** If program has no `/`, it's searched via `PATH` (`ExecvpeCompat`). Otherwise direct `execve`.
 
 ### `run_shell` — Shell Command
 
@@ -101,7 +104,7 @@ knst_process p = knst_process::run_shell(u"ls -la | grep .txt");
 auto r = p.communicate(nullptr, 0, 5000);
 ```
 
-### `run_with_shell` — Choose a Shell Type
+### `run_with_shell` — Choose Shell Type
 
 ```cpp
 knst_process p = knst_process::run_with_shell(
@@ -121,9 +124,13 @@ Supported shells:
 | `PowerShellCore` | — | `pwsh.exe` |
 | `Custom` | `opts.shell_path` | `opts.shell_path` |
 
+**Android special:** `Sh`, `Bash`, `Zsh`, `Fish` all map to `/system/bin/sh`.
+
+**Windows default (`Auto`):** `cmd.exe /c`.
+
 ### `run_capture` — Run + Capture in One Call
 
-The most practical API — launches, waits, returns output:
+Most practical API — launches, waits, returns output:
 
 ```cpp
 auto r = knst_process::run_capture(
@@ -138,9 +145,11 @@ std::cout << r.out_data << "\n";
 std::cout << "Exit: " << r.exit_code << "\n";
 ```
 
+**Inside:** `run()` + `communicate()`.
+
 ### `run_detached` — Fire-and-Forget
 
-Runs in the background; parent does not wait:
+Runs in background, parent doesn't wait:
 
 ```cpp
 knst_process p = knst_process::run_detached(
@@ -148,16 +157,17 @@ knst_process p = knst_process::run_detached(
     { u"Title", u"Message" });
 
 std::cout << "PID: " << p.pid() << "\n";
-// The program continues running in the background
 ```
 
-**On Windows:** Uses `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB`.
+**POSIX:** Double-fork + `setsid()` + `/dev/null` stdio. Real PID returned via pipe to parent.
+
+**Windows:** `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB`. If job access denied, retries without `CREATE_BREAKAWAY_FROM_JOB`.
 
 ---
 
 ## 💬 2) Communication — `communicate()`
 
-The most powerful API — writes to stdin, reads stdout+stderr, applies timeout:
+Most powerful API — writes to stdin, reads stdout+stderr, applies timeout:
 
 ```cpp
 knst_process p = knst_process::run(u"/bin/cat");
@@ -181,24 +191,33 @@ struct knst_process_result {
 };
 ```
 
+### POSIX vs Windows Behavior
+
+**POSIX:** stdin/stdout/stderr multiplexed in one `poll()` loop. Efficient, single thread.
+
+**Windows:** stdin writer runs in a separate `knst_thread` (parallel write), main thread runs `PeekNamedPipe` + `ReadFile` loop for output. Writer thread joined at end of `communicate()`.
+
 ### Timeout Behavior
 
-If the timeout is **exceeded**, the process is automatically killed:
+If timeout **exceeded**, process is auto-killed and a **500 ms drain** is performed:
 
 ```cpp
 knst_process p = knst_process::run(u"/bin/sleep", { u"5" });
 auto r = p.communicate(nullptr, 0, 300);   // 300 ms timeout
 
+// After timeout:
+//   - force_kill() called
+//   - wait(0) blocked on
+//   - extra 500 ms drain to empty pipes
 std::cout << "timed_out: " << (r.timed_out ? "yes" : "no") << "\n";
-// "yes" — sleep 5 was killed
 ```
 
-### Alternative Reading Methods
+### Alternative Read Methods
 
 ```cpp
 // Read stdout
 knst_byte_string data = p.read_stdout();
-knst_c16string text = p.read_stdout_text();   // converts to UTF-16
+knst_c16string text = p.read_stdout_text();   // converts to UTF-16, trims trailing newline
 
 // Read stderr
 knst_byte_string err = p.read_stderr();
@@ -209,17 +228,19 @@ while (p.read_line(line)) {
     std::cout << "> " << line << "\n";
 }
 
-// Read with timeout
+// Read with timeout (non-blocking)
 knst_byte_string chunk;
 if (p.try_read_stdout(100, chunk)) {
-    std::cout << "Incoming data: " << chunk.length() << " bytes\n";
+    std::cout << "Received: " << chunk.length() << " bytes\n";
 }
 
 // Write to stdin
-p.write_stdin("data\n", 5);
-p.write_stdin(knst_c16string(u"UTF-16 text\n"));
+p.write_stdin("data\n", 6);
+p.write_stdin(knst_c16string(u"UTF-16 text\n"));   // auto-converted to UTF-8
 p.close_stdin();   // EOF signal
 ```
+
+> ⚠️ **`read_line` is not non-blocking.** Blocks if no line arrives. Use `try_read_stdout` to avoid blocking.
 
 ---
 
@@ -233,7 +254,7 @@ p.wait();
 
 // Wait 500 ms
 if (p.wait(500)) {
-    std::cout << "Finished in 1 second\n";
+    std::cout << "Finished within 1 second\n";
 } else {
     std::cout << "Still running\n";
 }
@@ -248,6 +269,8 @@ if (p.is_running()) { /* ... */ }
 int code = p.exit_code();
 ```
 
+**Detached process:** `is_running()` and `wait()` check via `kill(pid, 0)` (child can't be reaped).
+
 ---
 
 ## 🔪 4) Kill and Signal
@@ -260,13 +283,13 @@ knst_process p = knst_process::run(u"/bin/sleep", { u"100" });
 // SIGTERM (gentle)
 p.kill();
 
-// SIGKILL (forceful)
+// SIGKILL (forced)
 p.force_kill();
 
-// Kill with its children
+// Kill with children
 p.kill_tree();
 
-// Send a specific signal
+// Send specific signal
 p.send_signal(2);   // SIGINT
 ```
 
@@ -282,7 +305,7 @@ knst_process::kill_by_name(u"firefox", 15);
 // Recursive — process + all descendants
 knst_process::kill_tree(12345, 9);
 
-// Terminate gracefully — SIGTERM first, SIGKILL on timeout
+// Graceful — SIGTERM first, SIGKILL on timeout
 knst_process::terminate_graceful(12345, 3000);
 ```
 
@@ -291,12 +314,16 @@ knst_process::terminate_graceful(12345, 3000);
 | Signal | Value | Meaning |
 |---|---|---|
 | `SIGTERM` | 15 | Graceful termination (default) |
-| `SIGKILL` | 9 | Force kill (uncatchable) |
+| `SIGKILL` | 9 | Forced kill (uncatchable) |
 | `SIGINT` | 2 | Like Ctrl+C |
 | `SIGSTOP` | 19 | Pause (uncatchable) |
 | `SIGCONT` | 18 | Resume |
 
-**On Windows:** Signals are not supported; all of them call `TerminateProcess`.
+**Windows behavior:**
+- **`kill(sig)`:** `TerminateProcess(h, sig)` — no signal concept
+- **`send_signal(15)`** on detached process → `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT)`
+- **`kill_tree()`:** `CreateJobObject` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` + `TerminateJobObject` — catches children
+- If job can't be assigned → fallback to `TerminateProcess`
 
 ---
 
@@ -317,7 +344,8 @@ knst_process::resume_pid(12345);
 ```
 
 **Linux:** `SIGSTOP` / `SIGCONT`
-**Windows:** `NtSuspendProcess` / `NtResumeProcess` (from ntdll)
+
+**Windows:** `NtSuspendProcess` / `NtResumeProcess` (loaded at runtime from `ntdll.dll`). `resume()` tries both `ResumeThread` (main thread) and `NtResumeProcess`.
 
 ---
 
@@ -347,7 +375,9 @@ knst_process::set_priority(12345, 10);
 | 15 .. 20 | `BELOW_NORMAL_PRIORITY_CLASS` |
 | 20+ | `IDLE_PRIORITY_CLASS` |
 
-### Affinity (CPU Core Assignment)
+**Note:** `knst_process_options` has both `nice_value` and `priority`. `nice_value` takes precedence — used if non-zero, else falls back to `priority`.
+
+### Affinity (CPU Core Pinning)
 
 ```cpp
 // Run only on cores 0 and 2
@@ -357,8 +387,9 @@ p.set_affinity(0b0101);   // bit 0 and bit 2
 knst_process::set_affinity(12345, 0xFF);   // first 8 cores
 ```
 
-**Linux:** `sched_setaffinity()`
-**Windows:** `SetProcessAffinityMask()`
+**Linux:** `sched_setaffinity()` — 64-bit mask supported.
+
+**Windows:** `SetProcessAffinityMask()`.
 
 ---
 
@@ -370,6 +401,10 @@ knst_process::set_affinity(12345, 0xFF);   // first 8 cores
 knst_vector<uint32_t> pids = knst_process::list_pids();
 std::cout << "Total " << pids.size() << " processes\n";
 ```
+
+**POSIX:** `/proc/*` scan (numeric directories).
+
+**Windows:** `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)`.
 
 ### Detailed List
 
@@ -401,6 +436,8 @@ auto found = knst_process::find_by_name(u"chrome", false);
 auto exact = knst_process::find_by_name(u"chrome", true);
 ```
 
+Both `name` (process name) and `exe_path` basename are checked.
+
 ### Children and Descendants
 
 ```cpp
@@ -411,6 +448,10 @@ knst_vector<uint32_t> kids = knst_process::children_of(12345);
 knst_vector<knst_process_info> descendants = 
     knst_process::descendants_of(12345);
 ```
+
+**POSIX:** `/proc/[pid]/stat` read per PID (to extract ppid).
+
+**Windows:** `CreateToolhelp32Snapshot` + `pe.th32ParentProcessID`.
 
 ---
 
@@ -426,7 +467,7 @@ struct knst_process_info {
     uint32_t pgid = 0;
     uint32_t sid  = 0;
 
-    // Text information
+    // Text info
     knst_c16string name;
     knst_c16string exe_path;
     knst_c16string cmdline;
@@ -436,8 +477,8 @@ struct knst_process_info {
     uint32_t gid = 0;
 
     // Memory
-    uint64_t rss_bytes    = 0;   // Resident set size
-    uint64_t vsz_bytes    = 0;   // Virtual size
+    uint64_t rss_bytes    = 0;
+    uint64_t vsz_bytes    = 0;
     uint64_t shared_bytes = 0;
     uint64_t text_bytes   = 0;
 
@@ -495,13 +536,22 @@ std::cout << "FDs       : " << info.fd_count << "\n";
 |---|---|
 | `Running` | Running |
 | `Sleeping` | Sleeping (interruptible) |
-| `DiskSleep` | Waiting for disk I/O |
+| `DiskSleep` | Waiting on disk I/O |
 | `Zombie` | Dead but not reaped by parent |
 | `Stopped` | Paused |
 | `Tracing` | Traced by debugger |
 | `Dead` | Dead |
-| `Idle` | Idle |
-| `Waiting` | Waiting |
+| `Idle` | Idle (kernel thread) |
+| `Waiting` | Waiting (Windows WrWaiting) |
+
+**POSIX:** Read from `/proc/[pid]/stat` — `R`, `S`, `D`, `Z`, `T`, `t`, `X`, `I`, `W`.
+
+**Windows:** Synthesized from thread states via `NtQuerySystemInformation(SystemProcessInformation)`:
+- All threads terminated → `Dead`
+- Any thread running → `Running`
+- All suspended → `Stopped`
+- Any disk wait → `DiskSleep`
+- Any wait → `Sleeping`
 
 ### Static Accessors
 
@@ -517,9 +567,38 @@ uint64_t vsz = knst_process::get_vsz_bytes(pid);
 knst_process_state s = knst_process::get_state(pid);
 ```
 
+### Platform Behaviors
+
+**POSIX `get_info`:** `/proc/[pid]/stat` + `/proc/[pid]/status` + `readlink("/proc/[pid]/exe")` + `readlink("/proc/[pid]/cwd")` + `/proc/[pid]/cmdline` + `/proc/[pid]/fd` count.
+
+**Android `get_info`:** `exe`, `cmdline`, `cwd` **only read for self (own PID)**. For other processes, these fields stay empty (SELinux blocks).
+
+**Windows `get_info`:**
+- `exe_path` → `QueryFullProcessImageNameW`
+- `cmdline` → PEB read (WOW64 support — PEB32 read for 32-bit processes)
+- `cwd` → PEB read (CurrentDirectory.DosPath)
+- `user` → `OpenProcessToken` + `LookupAccountSid`
+- `uid` → FNV-1a hash of the SID (no POSIX uid equivalent)
+- `nice` → `GetPriorityClass` converted to nice
+- `thread_count` → `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)`
+- `state` → see above
+- `is_zombie` → **always `false`** (no zombie concept on Windows)
+
+### `exists`, `is_alive`, `is_zombie`
+
+```cpp
+bool e = knst_process::exists(12345);    // exists in any state?
+bool a = knst_process::is_alive(12345);  // not zombie/dead?
+bool z = knst_process::is_zombie(12345); // zombie only?
+```
+
+- **POSIX `exists`:** Does `/proc/[pid]` exist?
+- **Windows `exists`:** Tries `OpenProcess`, falls back to snapshot scan
+- **`is_zombie`:** POSIX state check, Windows always `false`
+
 ---
 
-## 🧵 9) Thread Information
+## 🧵 9) Thread Info
 
 ```cpp
 knst_vector<knst_thread_info> threads = knst_process::get_threads(pid);
@@ -528,16 +607,29 @@ for (const auto& t : threads) {
     std::cout << "TID: " << t.tid << "  Name: " << t.name << "\n";
 }
 
-// Just TID list
+// TID list only
 knst_vector<uint32_t> tids = knst_process::get_thread_ids(pid);
 ```
 
-**Linux:** `/proc/[pid]/task/`
-**Windows:** `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD)`
+**`knst_thread_info`:**
+
+```cpp
+struct knst_thread_info {
+    uint32_t tid = 0;
+    knst_c16string name;                    // populated only on POSIX
+    knst_process_state state = knst_process_state::Unknown;   // (currently not filled)
+    uint64_t cpu_user_ms = 0;
+    uint64_t cpu_system_ms = 0;
+};
+```
+
+**POSIX:** `/proc/[pid]/task/*` + `/proc/[pid]/task/[tid]/comm` → name populated.
+
+**Windows:** `TH32CS_SNAPTHREAD` → TID list only. **Thread name stays empty** (needs extra API on Windows).
 
 ---
 
-## 🔗 10) File Descriptor Information (POSIX)
+## 🔗 10) File Descriptor Info
 
 ```cpp
 knst_vector<knst_fd_info> fds = knst_process::get_fds(pid);
@@ -551,21 +643,27 @@ for (const auto& fd : fds) {
 }
 ```
 
-**Example output:**
+**`knst_fd_info`:**
 
-```
-FD 0 -> /dev/pts/2 (file)
-FD 1 -> /dev/pts/2 (file)
-FD 2 -> /dev/pts/2 (file)
-FD 3 -> socket:[12345] (socket)
-FD 5 -> /home/user/data.txt (file)
+```cpp
+struct knst_fd_info {
+    int32_t fd = -1;
+    knst_c16string target;
+    bool is_socket = false;
+    bool is_pipe = false;
+    bool is_file = false;
+};
 ```
 
-**Note:** Only supported on Linux.
+**POSIX:** `/proc/[pid]/fd/*` — target read via `readlink`. Distinguished by `socket:`, `pipe:`, `/` prefixes.
+
+**Windows:** `NtQuerySystemInformation(SystemExtendedHandleInformation)` + `NtQueryObject` + `DuplicateHandle` + `GetFinalPathNameByHandleW`. Only **`File`** and **`Pipe`** types returned — other handles (event, mutex, section) skipped.
+
+> ⚠️ **"fd" on Windows is different.** Handle number reported as `fd`, not a POSIX FD number.
 
 ---
 
-## 🌍 11) Environment Variables (POSIX)
+## 🌍 11) Environment Variables
 
 ```cpp
 knst_vector<knst_env_var> env = knst_process::get_env(pid);
@@ -575,13 +673,24 @@ for (const auto& e : env) {
 }
 ```
 
-**Source:** `/proc/[pid]/environ`
+**`knst_env_var`:**
+
+```cpp
+struct knst_env_var {
+    knst_c16string name;
+    knst_c16string value;
+};
+```
+
+**POSIX:** `/proc/[pid]/environ` — read with `\0` separator.
+
+**Windows:** PEB read (`ProcessParameters.Environment`). WOW64 supported. Has `kMaxEnv = 256 KB` limit; for larger, chunk increments from 32 KB to 256 KB are tried.
 
 ---
 
 ## 🛠️ 12) `knst_process_options`
 
-Spawn options — every field has a sensible default.
+Spawn options — each field has a reasonable default.
 
 ### Working Directory and Environment
 
@@ -598,6 +707,8 @@ o.env.push_back(env);
 o.inherit_env = true;   // use parent env
 ```
 
+**`inherit_env` + `env` combined:** If `inherit_env=true`, entries in `env` are **added** to parent env (overriding same-name vars). If `false`, only `env` is used.
+
 ### Stdio Control
 
 ```cpp
@@ -609,11 +720,16 @@ o.stderr_mode = knst_stdio_mode::Pipe;
 o.stdout_file = u"/tmp/out.log";
 o.stderr_file = u"/tmp/err.log";
 
-// Convenience flags
+// Convenience flags (override modes)
 o.capture_stdout = true;
 o.capture_stderr = true;
 o.inherit_stdin  = true;
 ```
+
+**`EffectiveMode` logic:**
+- `File` or `Null` explicit mode → use it
+- `capture_*=true` → `Pipe`
+- `capture_*=false` → `Inherit`
 
 ### Window and Session
 
@@ -621,32 +737,34 @@ o.inherit_stdin  = true;
 o.window_mode = knst_window_mode::Hidden;   // Hidden, Minimized, Maximized, Normal
 o.new_session        = true;   // POSIX: setsid()
 o.new_console        = true;   // Windows: CREATE_NEW_CONSOLE
-o.new_process_group  = true;
-o.detached           = true;
+o.new_process_group  = true;   // POSIX: setpgid(0,0) / Windows: CREATE_NEW_PROCESS_GROUP
+o.detached           = true;   // POSIX: double-fork / Windows: DETACHED_PROCESS
 ```
 
 ### Shell Selection
 
 ```cpp
 o.shell = knst_shell_type::Bash;
-o.shell_path = u"/usr/bin/bash";   // For Custom
+o.shell_path = u"/usr/bin/bash";   // for Custom
 ```
 
 ### Priority and Affinity
 
 ```cpp
-o.nice_value    = 10;    // POSIX nice
-o.priority      = 10;    // Windows priority class
+o.nice_value    = 10;    // POSIX nice (takes precedence)
+o.priority      = 10;    // used if nice_value=0
 o.affinity_mask = 0b0011;  // first 2 cores
 ```
 
 ### Other
 
 ```cpp
-o.suspend_after_spawn = true;   // Start with SIGSTOP/CREATE_SUSPENDED
+o.suspend_after_spawn = true;   // start with SIGSTOP/CREATE_SUSPENDED
 o.close_extra_fds     = true;
 o.win_unicode         = true;
 ```
+
+**What is `suspend_after_spawn`?** Process launched with `SIGSTOP`/`CREATE_SUSPENDED` → immediately suspended. Useful for attaching debuggers or doing early operations like `set_affinity`. Resumed via `resume()`.
 
 ---
 
@@ -655,16 +773,16 @@ o.win_unicode         = true;
 ### `knst_gpu` API
 
 ```cpp
-knst_gpu::has_gpu();                    // Is a GPU present?
-knst_gpu::count();                      // How many GPUs?
-knst_gpu::nvml_available();             // Is NVML loaded?
+knst_gpu::has_gpu();                    // any GPU present?
+knst_gpu::count();                      // how many GPUs?
+knst_gpu::nvml_available();             // NVML loaded?
 
 knst_c16string drv  = knst_gpu::nvidia_driver_version();
 knst_c16string cuda = knst_gpu::cuda_version();
 
 auto gpus = knst_gpu::list_all();
 auto procs = knst_gpu::get_processes();
-auto procs0 = knst_gpu::get_processes(0);   // Only GPU 0
+auto procs0 = knst_gpu::get_processes(0);   // GPU 0 only
 ```
 
 ### `knst_gpu_info` Structure
@@ -679,30 +797,23 @@ struct knst_gpu_info {
     knst_c16string vbios_version;
     knst_gpu_vendor vendor;         // NVIDIA, AMD, Intel, Apple, Other
 
-    // Memory
     uint64_t memory_total;
     uint64_t memory_used;
     uint64_t memory_free;
 
-    // Utilization
     uint32_t utilization_gpu;       // %
     uint32_t utilization_mem;       // %
 
-    // Temperature
     int32_t  temperature_core;      // °C
 
-    // Power
     uint32_t power_usage_mw;        // mW
     uint32_t power_limit_mw;
 
-    // Clocks
     uint32_t clock_core_mhz;
     uint32_t clock_mem_mhz;
 
-    // Fan
     uint32_t fan_percent;           // %
 
-    // PCIe
     uint32_t pcie_gen;
     uint32_t pcie_width;
 
@@ -756,25 +867,47 @@ for (const auto& p : procs) {
 }
 ```
 
-**Output:**
-
-```
-PID 12345  GPU0  VRAM=2048 MB  blender
-PID 23456  GPU0  VRAM=512 MB   firefox
-```
+**Sources:**
+- **NVIDIA:** NVML `nvmlDeviceGetComputeRunningProcesses_v2` + `nvmlDeviceGetGraphicsRunningProcesses_v2` (MIG support). Falls back to v1 if v2 unavailable.
+- **AMD:** `/proc/[pid]/fdinfo/*` accumulates `drm-memory-vram:` lines. Multiple fds from same PID summed.
 
 ### GPU Vendor Detection
 
 **Linux:**
 - **NVIDIA:** NVML (libnvidia-ml.so)
-- **AMD:** `/sys/class/drm/card*/device/mem_info_vram_*`
-- **Intel:** `/sys/class/drm/card*/device/vendor` (0x8086)
+- **AMD:** `/sys/class/drm/card*/device/mem_info_vram_*`, `gpu_busy_percent`, `pp_dpm_sclk`, `hwmon/temp1_input`, `power1_average`
+- **Intel:** `/sys/class/drm/card*/device/vendor` (0x8086), `gt_act_freq_mhz`, `gt_cur_freq_mhz`, `gt_busy_percent`
 
 **Windows:**
 - **NVIDIA:** NVML (nvml.dll) — full data
-- **All vendors:** DXGI (`IDXGIFactory1` + `IDXGIAdapter3`) — name, VRAM total/used
-- **GPU utilization %:** PDH (`\GPU Engine(*)\Utilization Percentage`) — LUID-based
-- **Fallback:** WMI `Win32_VideoController` — last resort for old drivers
+- **All brands:** DXGI (`IDXGIFactory1` + `IDXGIAdapter3`) — name, VRAM total/used (QueryVideoMemoryInfo)
+- **GPU utilization %:** PDH (`\GPU Engine(*)\Utilization Percentage`) — summed by LUID
+- **Fallback:** WMI `Win32_VideoController` — last resort for old drivers (cached)
+
+**Android:**
+- **Qualcomm Adreno:** `/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage`, `gpuclk`
+- **ARM Mali:** `/sys/class/misc/mali0/device/utilisation`, `clock`
+
+### GPU Cache Details
+
+- **PDH cache:** 2 seconds (thread_local). So `list_all()` doesn't PDH-query every call.
+- **WMI cache:** `std::once_flag` — one query per program.
+- **NVML cache:** `std::once_flag` — `nvmlInit` once.
+
+### NVML Sentinel Values
+
+Some drivers return **`0xFFFFFFFFFFFF` and above as sentinel** when VRAM info unavailable. Code auto-clamps these to **0** (marked as unknown):
+
+```cpp
+constexpr uint64_t NVML_SENTINEL_MIN = 0xFFFFFFFFFFFFULL;
+auto safe_vram = [](uint64_t raw) -> uint64_t {
+    return (raw >= NVML_SENTINEL_MIN) ? 0ULL : raw;
+};
+```
+
+### Duplicate Filtering
+
+If **NVIDIA GPUs** already came from NVML, same-named GPUs in sysfs/DXGI/WMI lists are **not added again** (`has_nvidia_from_nvml` flag).
 
 ### Process + GPU Info
 
@@ -793,19 +926,23 @@ for (const auto& p : procs) {
 
 ---
 
-## 🌐 14) System Information
+## 🌐 14) System Info
 
 ```cpp
 knst_process::system_info si = knst_process::get_system_info();
 
-std::cout << "CPU count  : " << si.cpu_count << "\n";
-std::cout << "Page size  : " << si.page_size << " bytes\n";
-std::cout << "Total RAM  : " << si.total_memory / (1024*1024*1024) << " GB\n";
-std::cout << "Free RAM   : " << si.free_memory / (1024*1024*1024) << " GB\n";
-std::cout << "Uptime     : " << si.uptime_ms / 1000 / 3600 << " hours\n";
+std::cout << "CPU count   : " << si.cpu_count << "\n";
+std::cout << "Page size   : " << si.page_size << " bytes\n";
+std::cout << "RAM total   : " << si.total_memory / (1024*1024*1024) << " GB\n";
+std::cout << "RAM free    : " << si.free_memory / (1024*1024*1024) << " GB\n";
+std::cout << "Uptime      : " << si.uptime_ms / 1000 / 3600 << " hours\n";
 ```
 
-### Active Process Info
+**POSIX:** `/proc/meminfo` + `/proc/uptime` (falls back to `CLOCK_BOOTTIME` if uptime unavailable on Android).
+
+**Windows:** `GlobalMemoryStatusEx` + `GetSystemInfo` + `GetTickCount64`.
+
+### Current Process Info
 
 ```cpp
 uint32_t pid   = knst_process::current_pid();
@@ -815,11 +952,13 @@ knst_c16string user = knst_process::current_user();
 knst_c16string exe  = knst_process::current_exe_path();
 ```
 
+**Windows note:** `current_uid()` **always returns 0** — no POSIX uid concept. `current_user()` uses `GetUserNameW`.
+
 ---
 
 ## 🛡️ 15) Error Handling
 
-### `knst_process_error` Enum
+### `knst_process_error` Enum (23 values)
 
 ```cpp
 enum class knst_process_error : uint8_t {
@@ -867,28 +1006,53 @@ int32_t native = p.native_error_code();
 // Windows: GetLastError()
 ```
 
+### POSIX errno → process_error mapping
+
+| errno | process_error |
+|---|---|
+| `ENOENT`, `ENOTDIR` | `NotFound` |
+| `EACCES`, `EPERM` | `PermissionDenied` |
+| `ENOMEM` | `OutOfMemory` |
+| `EINVAL` | `InvalidArgument` |
+| `ESRCH` | `NoSuchProcess` |
+| Others | `ExecFailed` |
+
+### Windows GetLastError → process_error mapping
+
+| GetLastError | process_error |
+|---|---|
+| `ERROR_FILE_NOT_FOUND`, `ERROR_PATH_NOT_FOUND` | `NotFound` |
+| `ERROR_ACCESS_DENIED` | `PermissionDenied` |
+| Others | `ExecFailed` |
+
 ---
 
 ## 🌍 16) Platform Differences
 
-| Topic | Linux (POSIX) | Windows |
-|---|---|---|
-| **Spawn** | `fork()` + `execve()` | `CreateProcessW()` |
-| **Shell** | `/bin/sh` | `cmd.exe` |
-| **Signal** | Full support (SIGTERM, SIGKILL, ...) | Kill only |
-| **Suspend** | `SIGSTOP` | `NtSuspendProcess` |
-| **Resume** | `SIGCONT` | `NtResumeProcess` |
-| **Priority** | nice (-20..19) | Priority class |
-| **Affinity** | `sched_setaffinity` | `SetProcessAffinityMask` |
-| **Process list** | `/proc` scan | `CreateToolhelp32Snapshot` |
-| **Cmdline** | `/proc/[pid]/cmdline` | PEB read |
-| **Threads** | `/proc/[pid]/task` | `TH32CS_SNAPTHREAD` |
-| **FDs** | `/proc/[pid]/fd` | None |
-| **Environment** | `/proc/[pid]/environ` | None |
-| **GPU (NVIDIA)** | NVML | NVML |
-| **GPU (AMD)** | sysfs (full) | DXGI (VRAM+name) + PDH (usage %) |
-| **GPU (Intel)** | sysfs i915 | DXGI + PDH |
-| **Uptime** | `/proc/uptime` | `GetTickCount64` |
+| Concern | Linux (POSIX) | Windows | Android |
+|---|---|---|---|
+| **Spawn** | `fork()` + `execve()` | `CreateProcessW()` | `fork()` + `execve()` |
+| **Shell** | `/bin/sh` | `cmd.exe` | `/system/bin/sh` |
+| **Signal** | Full (SIGTERM, SIGKILL, ...) | `TerminateProcess` only | Full |
+| **Suspend** | `SIGSTOP` | `NtSuspendProcess` | `SIGSTOP` |
+| **Resume** | `SIGCONT` | `NtResumeProcess` | `SIGCONT` |
+| **Priority** | nice (-20..19) | Priority class | nice |
+| **Affinity** | `sched_setaffinity` (64-bit) | `SetProcessAffinityMask` | `sched_setaffinity` |
+| **Process list** | `/proc` scan | `CreateToolhelp32Snapshot` | `/proc` scan |
+| **Cmdline** | `/proc/[pid]/cmdline` | PEB read (WOW64) | **Self only** |
+| **CWD** | `/proc/[pid]/cwd` | PEB read (WOW64) | **Self only** |
+| **Exe path** | `/proc/[pid]/exe` | `QueryFullProcessImageNameW` | **Self only** |
+| **Threads** | `/proc/[pid]/task` + name | `TH32CS_SNAPTHREAD` (no name) | `/proc/[pid]/task` |
+| **FDs** | `/proc/[pid]/fd` | Handle enumeration (File+Pipe) | `/proc/[pid]/fd` |
+| **Environment** | `/proc/[pid]/environ` | PEB read | `/proc/[pid]/environ` |
+| **`is_zombie`** | state check | **always false** | state check |
+| **`current_uid`** | `getuid()` | **always 0** | `getuid()` |
+| **GPU (NVIDIA)** | NVML | NVML | — |
+| **GPU (AMD)** | sysfs (full) | DXGI (VRAM+name) + PDH (%) | — |
+| **GPU (Intel)** | sysfs i915 | DXGI + PDH | — |
+| **GPU (Adreno)** | — | — | kgsl sysfs |
+| **GPU (Mali)** | — | — | mali0 sysfs |
+| **Uptime** | `/proc/uptime` | `GetTickCount64` | `/proc/uptime` or `CLOCK_BOOTTIME` |
 
 ---
 
@@ -919,7 +1083,7 @@ bool run_build_with_timeout(const knst_c16string& cmd, uint32_t secs) {
     auto r = p.communicate(nullptr, 0, secs * 1000);
 
     if (r.timed_out) {
-        std::cerr << "Build did not finish in " << secs << " seconds, killed\n";
+        std::cerr << "Build didn't finish in " << secs << "s, killed\n";
         return false;
     }
     if (r.exit_code != 0) {
@@ -930,7 +1094,7 @@ bool run_build_with_timeout(const knst_c16string& cmd, uint32_t secs) {
 }
 ```
 
-### Example 3: Process Monitor Tool
+### Example 3: Process Monitor
 
 ```cpp
 void monitor_process(const knst_c16string& name) {
@@ -988,7 +1152,7 @@ void print_gpu_dashboard() {
 }
 ```
 
-### Example 5: Kill Child Processes
+### Example 5: Kill Child Process
 
 ```cpp
 void cleanup_children(uint32_t parent_pid) {
@@ -1002,17 +1166,17 @@ void cleanup_children(uint32_t parent_pid) {
 }
 ```
 
-### Example 6: Data Streaming with Pipes
+### Example 6: Pipe Data Flow
 
 ```cpp
 void process_text_lines() {
     knst_process p = knst_process::run(u"/bin/grep", { u"error" });
 
-    // Write data to stdin (in a parallel thread)
+    // Write to stdin (in parallel thread)
     std::thread writer([&p]() {
-        p.write_stdin("line 1: info\n", 13);
-        p.write_stdin("line 2: error\n", 14);
-        p.write_stdin("line 3: info\n", 13);
+        p.write_stdin("line 1: info\n", 14);
+        p.write_stdin("line 2: error\n", 15);
+        p.write_stdin("line 3: info\n", 14);
         p.close_stdin();
     });
 
@@ -1027,17 +1191,36 @@ void process_text_lines() {
 }
 ```
 
-### Example 7: Suspend/Resume in Batch
+### Example 7: Suspend/Resume for Batch
 
 ```cpp
 void pause_and_resume(uint32_t pid) {
-    std::cout << "Pausing: " << pid << "\n";
+    std::cout << "Pause: " << pid << "\n";
     knst_process::suspend_pid(pid);
 
     std::this_thread::sleep_for(std::chrono::seconds(3));
 
-    std::cout << "Resuming: " << pid << "\n";
+    std::cout << "Resume: " << pid << "\n";
     knst_process::resume_pid(pid);
+}
+```
+
+### Example 8: Suspend-After-Spawn (for Debugger)
+
+```cpp
+void attach_debugger(const knst_c16string& program) {
+    knst_process_options o;
+    o.suspend_after_spawn = true;
+
+    knst_process p = knst_process::run(program, {}, o);
+    if (p.error != knst_process_error::None) return;
+
+    std::cout << "PID " << p.pid() << " suspended, debugger can attach\n";
+
+    // Attach debugger...
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    p.resume();
 }
 ```
 
@@ -1047,47 +1230,126 @@ void pause_and_resume(uint32_t pid) {
 
 | Operation | Complexity | Note |
 |---|---|---|
-| `run` | O(1) | fork + exec |
-| `communicate` | O(n) | Full output in memory |
+| `run` | O(1) | fork + exec (~1-5 ms) |
+| `run_shell` | O(1) | Extra shell spawn cost |
+| `communicate` | O(n) | All output in memory |
 | `wait` | O(1) | waitpid |
-| `list_pids` | O(num pids) | `/proc` scan |
-| `list_all` | O(num pids × files) | ~5 files per PID |
-| `find_by_name` | O(num pids) | via `list_all` |
-| `get_info` | O(files) | Reads `/proc/[pid]/*` |
-| `children_of` | O(num pids) | Reads every `/proc/*/stat` |
-| `knst_gpu::list_all` | O(num gpus) | NVML/sysfs |
+| `list_pids` | O(pid count) | `/proc` scan |
+| `list_all` | O(pid count × file) | ~5 files per PID |
+| `find_by_name` | O(pid count) | Via `list_all` |
+| `get_info` | O(files) | `/proc/[pid]/*` reads |
+| `children_of` | O(pid count) | Each `/proc/*/stat` read |
+| `get_fds` (POSIX) | O(fd count) | readlink per fd |
+| `get_fds` (Win) | O(handle count) | NtQueryObject + DuplicateHandle |
+| `get_env` (Win) | O(env size) | PEB read, chunk increment |
+| `knst_gpu::list_all` | O(gpu count) | NVML/sysfs |
+| `knst_gpu::get_processes` | O(fd × process) | fdinfo scan on POSIX |
 
-### When Is It Slow?
+### When is it slow?
 
-- **`list_all`** — can take 1-2 seconds with 300+ processes
-- **`descendants_of`** — recursive; slow with a big process tree
-- **`get_env`** — slow if `/proc/[pid]/environ` is large
-- **GPU cache** — the first call loads NVML + does WMI queries (slow); subsequent calls use cache
+- **`list_all`** — 300+ processes takes 1-2 seconds (~5 file reads per PID)
+- **`descendants_of`** — Recursive, slow with big trees
+- **`get_env`** — Slow if `/proc/[pid]/environ` is large
+- **`get_fds`** (Windows) — With hundreds of handles, `DuplicateHandle` + `NtQueryObject` per handle → ~100ms-1s
+- **GPU cache** — First call does NVML load + WMI query + PDH 250ms sample (slow), then cached:
+  - PDH: 2 seconds
+  - WMI: once per program
+  - NVML: once per program
 
 ### Optimization Tips
 
 ```cpp
-// ❌ Slow: scans all processes every time
+// ❌ Slow: Rescan all processes every time
 for (int i = 0; i < 100; ++i) {
     auto all = knst_process::list_all();
 }
 
-// ✅ Fast: scan once, keep in memory
+// ✅ Fast: Scan once, hold in memory
 auto all = knst_process::list_all();
 for (int i = 0; i < 100; ++i) {
     // work with `all`
 }
 ```
 
+```cpp
+// ❌ Slow: List GPUs every frame (PDH cache 2s but first call slow)
+for (int i = 0; i < 60; ++i) {
+    auto gpus = knst_gpu::list_all();
+}
+
+// ✅ Fast: Get once, refresh occasionally
+auto gpus = knst_gpu::list_all();
+```
+
 ---
 
-## 🎯 What It Buys You
+## ✅ 19) Do / ❌ Don't
 
-`knst_process` provides serious advantage in these situations:
+### ✅ Do
+
+```cpp
+// 1. Use communicate to capture output
+auto r = p.communicate(stdin_data, size, 5000);
+
+// 2. Always give timeout
+p.communicate(nullptr, 0, 5000);   // 5 seconds
+
+// 3. Use run() to avoid shell injection
+knst_process::run(u"/bin/ls", { u"-la" });
+
+// 4. Don't wait() on detached processes
+auto p = knst_process::run_detached(u"notify-send", { u"hi" });
+// DON'T call p.wait() — let it run
+
+// 5. Cache list_all result
+auto procs = knst_process::list_all();
+// ... use across multiple operations
+
+// 6. Don't expect non-File+Pipe handles on Windows (fds)
+// (event, mutex, section handles not returned)
+```
+
+### ❌ Don't
+
+```cpp
+// 1. Don't call read_stdout() + read_stderr() separately (interleave issue)
+p.read_stdout();
+p.read_stderr();   // ❌ stderr may be left
+
+// ✅ Use communicate()
+
+// 2. Don't expect is_zombie() to be true on Windows
+knst_process::is_zombie(12345);   // ❌ always false
+
+// 3. Don't expect another process's exe_path on Android
+knst_process::get_exe_path(1);   // ❌ returns empty (not self)
+
+// 4. Don't use run_shell to avoid shell injection
+knst_process::run_shell(u"rm -rf " + user_input);   // ❌ dangerous
+
+// ✅ knst_process::run(u"rm", { u"-rf", user_input });
+
+// 5. Don't wait with timeout on suspended process
+p.suspend();
+p.communicate(nullptr, 0, 1000);   // ❌ timeout (process suspended)
+
+// 6. Don't expect every field in get_info to be filled
+knst_process::get_info(pid);   // Windows: is_zombie=false, uid=SID hash
+```
+
+---
+
+## 🎯 What It Brings You
+
+`knst_process` gives you serious advantages in these situations:
 
 - ✅ **Build / CI systems** — run commands, capture output, apply timeouts
-- ✅ **System monitoring tools** — process list, threads, memory
-- ✅ **GPU telemetry** — mining, gaming, render monitoring
-- ✅ **Automation scripts** — write in C++ instead of Python/Node.js
-- ✅ **Cross-platform tooling** — same code on Windows and Linux
+- ✅ **System monitoring tools** — process list, thread, memory, FDs, env
+- ✅ **GPU telemetry** — mining, gaming, render monitoring, NVIDIA/AMD/Intel
+- ✅ **Automation scripts** — C++ instead of Python/Node.js
+- ✅ **Cross-platform tooling** — Windows + Linux + Android same code
 - ✅ **Safe command execution** — pass arguments without shell injection
+- ✅ **Process tree analysis** — children, descendants, kill_tree
+- ✅ **Suspend/Resume** — pause batch operations, resume them
+- ✅ **Priority/Affinity** — CPU core pinning, nice adjustment
+- ✅ **Debugger-friendly** — catch early with `suspend_after_spawn`

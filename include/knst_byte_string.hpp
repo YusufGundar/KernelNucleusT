@@ -103,15 +103,26 @@ public:
         }
     }
 
-    KNST_FORCE_INLINE basic_byte_string() noexcept { // Default constructor — an empty byte string. In SSO mode, the first byte is null. No heap allocation
+        KNST_FORCE_INLINE basic_byte_string() noexcept {
+        // Explicitly zero the heap fields too. They are not read while we're
+        // in SSO mode (is_heap() guards access), but GCC's -O3 union analysis
+        // cannot always prove that, and warns about heap_data.m_real_data
+        // being potentially uninitialized in the destructor.
+        this->heap_data.m_capacity  = 0;
+        this->heap_data.m_real_data = nullptr;
+        this->heap_data.m_length    = 0;
         set_stack_mode(0);
         this->stack_data.m_real_data[0] = '\0';
     }
 
-    KNST_FORCE_INLINE basic_byte_string(const Allocator& allocator) noexcept // Constructor with allocator. Stores an empty byte string and the provided allocator. Includes a null terminator in SSO mode. Example: `basic_byte_string_sm<knst_pool_allocator> s(pool_alloc);`
+    KNST_FORCE_INLINE basic_byte_string(const Allocator& allocator) noexcept
             : m_allocator(allocator) {
-            set_stack_mode(0);
-            this->stack_data.m_real_data[0] = u'\0';
+        // Same as default constructor — zero heap fields for GCC -O3.
+        this->heap_data.m_capacity  = 0;
+        this->heap_data.m_real_data = nullptr;
+        this->heap_data.m_length    = 0;
+        set_stack_mode(0);
+        this->stack_data.m_real_data[0] = '\0';
     }
 
     KNST_FORCE_INLINE basic_byte_string(std::initializer_list<unsigned char> list) noexcept { // Creates a byte string from a brace-enclosed list like `{0x01, 0x02, 0x03}`. If it fits within SSO limits, it copies it to the stack; otherwise, it moves it to the heap. Each byte is copied individually, plus a null terminator
@@ -208,7 +219,10 @@ public:
     }
     
     
-    KNST_FORCE_INLINE basic_byte_string(const unsigned char* data, uint32_t size) noexcept { // Creates it using `unsigned char*` plus the size. The logic is the same as the `char*` version; the only difference is the type. `unsigned char` is the natural type for binary data—no casting required
+        KNST_FORCE_INLINE basic_byte_string(const std::string& s) noexcept
+        : basic_byte_string(s.data(), static_cast<uint32_t>(s.size())) {}
+
+    KNST_FORCE_INLINE basic_byte_string(const unsigned char* data, uint32_t size) noexcept {
         if (size <= KNST_SSO_BUFFER_LENGTH) {
             set_stack_mode(size);
             memcpy(this->stack_data.m_real_data, data, size);

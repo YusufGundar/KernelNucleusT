@@ -181,9 +181,13 @@ cs.front();
 ```cpp
 knst_c16string s = u"Merhaba Dünya";
 
-knst_c16string sub  = s.substr(0, 7);    // "Merhaba"
-knst_c16string tail = s.substr(8, 100);  // "Dünya" (kırpılır)
-knst_c16string empty = s.substr(100);    // boş string
+knst_c16string sub   = s.substr(0, 7);      // "Merhaba"
+knst_c16string tail  = s.substr(8, 100);    // "Dünya" (kırpılır)
+knst_c16string empty = s.substr(100, 0);    // boş string
+
+// ⚠️ DİKKAT: `count` parametresi ZORUNLUDUR — default değeri YOK.
+// std::string::substr(pos) alışkanlığıyla `s.substr(100)` yazarsan DERLENMEZ.
+
 ```
 
 ---
@@ -379,8 +383,10 @@ Küçük stringler heap'e gitmez — sınıfın içindeki **union** içinde sakl
 | Ayar | SSO Kapasitesi | Hizalama |
 |---|---|---|
 | Varsayılan | **10 karakter** | `alignas(8)` |
-| `KNST_C16STRING_ALIGN_32` | **14 karakter** | `alignas(32)` |
-| `KNST_C16STRING_ALIGN_64` | **30 karakter** | `alignas(64)` |
+| `KNST_CLASS_ALIGN_32` | **14 karakter** | `alignas(32)` |
+| `KNST_CLASS_ALIGN_64` | **30 karakter** | `alignas(64)` |
+
+> ⚠️ **Not:** Bu macro'lar `knst_settings.hpp`'de tanımlanır ve **hem `knst_c16string` hem `knst_byte_string` hem de diğer simple sınıfları** etkiler. Sadece `knst_c16string`'i değil.
 
 **Örnek:** Varsayılan ayarda `knst_c16string(u"Merhaba")` (7 karakter) heap'e hiç gitmez.
 
@@ -463,8 +469,16 @@ knst_c16string s = u"ünïcödé";
 char* u8 = s.to_char();
 if (u8) {
     std::cout << u8 << "\n";
-    knst_default_allocator().deallocate(u8, std::strlen(u8) + 1);
+    // Doğru boyut: UTF-16 → UTF-8 dönüşümünün TAM byte sayısı + 1
+    uint32_t exact_bytes = knst_get_utf16_to_utf8_exact_byte_size(s.data(), s.length());
+    knst_default_allocator().deallocate(u8, exact_bytes + 1);
 }
+
+⚠️ `to_char()` içinde gömülü `\0` olsa bile TAM UTF-8 boyutunu döndürür.
+`deallocate` için `strlen(u8) + 1` KULLANMAYIN — gömülü null içeren metinlerde
+memory leak olur. Bunun yerine:
+    knst_get_utf16_to_utf8_exact_byte_size(s.data(), s.length()) + 1
+kullanın.
 
 // UTF-16 → wchar_t* (caller free etmeli)
 wchar_t* w = s.to_wchar_alloc();

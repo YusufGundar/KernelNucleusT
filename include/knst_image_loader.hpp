@@ -799,8 +799,8 @@ private:
             struct stat st;
             if (fstat(fd, &st) != 0 || st.st_size <= 0 || !S_ISREG(st.st_mode)) { close(fd); return false; }
             size_t fileSize = (size_t)st.st_size;
-            void* p = MAP_FAILED;
-            #if defined(KNST_USING_LINUX_PLATFORM_ANDROID)
+                        void* p = MAP_FAILED;
+            #if defined(KNST_USING_PLATFORM_ANDROID)
                 p = mmap(NULL, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
                 if (p != MAP_FAILED) {
                     #ifdef MADV_SEQUENTIAL
@@ -1965,9 +1965,7 @@ static bool decode_png(const uint8_t* data, size_t size, uint32_t& W, uint32_t& 
         return true;
     }
 
-    // ====================================================================================================================
-    //  PNM (PBM/PGM/PPM, ASCII + binary) ve PAM (P7)
-    // ====================================================================================================================
+
     static bool pnm_skip(const uint8_t*& p, const uint8_t* e) {
         for (;;) {
             while (p < e && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\v' || *p == '\f')) p++;
@@ -2003,7 +2001,7 @@ static bool decode_png(const uint8_t* data, size_t size, uint32_t& W, uint32_t& 
         const uint8_t* p = d + 2;
         const uint8_t* e = d + n;
         uint32_t w = 0, h = 0, maxv = 1, depth = 1;
-        bool pamBW = false;
+                [[maybe_unused]] bool pamBW = false;
 
         if (kind == 7) {
             bool end = false;
@@ -2085,7 +2083,11 @@ static bool decode_png(const uint8_t* data, size_t size, uint32_t& W, uint32_t& 
             for (uint32_t c = 0; c < depth; c++) if (!rd.Next(v[c])) return false;
             uint8_t* o = ob + i * 4;
             uint8_t a = 255;
-            if (depth == 1)      { uint8_t g = scale(v[0]); if (pamBW) g = scale(v[0]); o[0] = o[1] = o[2] = g; }
+                        if (depth == 1) {
+
+                uint8_t g = scale(v[0]);
+                o[0] = o[1] = o[2] = g;
+            }
             else if (depth == 2) { uint8_t g = scale(v[0]); o[0] = o[1] = o[2] = g; a = scale(v[1]); }
             else if (depth == 3) { o[0] = scale(v[0]); o[1] = scale(v[1]); o[2] = scale(v[2]); }
             else                 { o[0] = scale(v[0]); o[1] = scale(v[1]); o[2] = scale(v[2]); a = scale(v[3]); }
@@ -2094,9 +2096,7 @@ static bool decode_png(const uint8_t* data, size_t size, uint32_t& W, uint32_t& 
         return true;
     }
 
-    // ====================================================================================================================
-    //  GIF (ilk kare)
-    // ====================================================================================================================
+
         template<typename ByteStr>
     static bool decode_gif(const uint8_t* d, size_t n, uint32_t& W, uint32_t& H, ByteStr& out, int = 0) {
         if (n < 13 || std::memcmp(d, "GIF8", 4) != 0) return false;
@@ -2823,12 +2823,16 @@ static bool decode_png(const uint8_t* data, size_t size, uint32_t& W, uint32_t& 
                             o[3] = 255;
                         } else {
                             uint8_t r, g, b, k = ch[3][x];
-                            if (adb == 2) { // YCCK
+                                                       if (adb == 2) { // YCCK
                                 uint8_t t[3]; YccToRgb(ch[0][x], ch[1][x], ch[2][x], t);
-                                r = Blinn(255 - t[0], k); g = Blinn(255 - t[1], k); b = Blinn(255 - t[2], k);
+
+                                int kk = 255 - k;
+                                r = Blinn(255 - t[0], kk); g = Blinn(255 - t[1], kk); b = Blinn(255 - t[2], kk);
                             } else if (adb >= 0) { 
+                                
                                 r = Blinn(ch[0][x], k); g = Blinn(ch[1][x], k); b = Blinn(ch[2][x], k);
                             } else {
+                               
                                 r = Blinn(255 - ch[0][x], 255 - k); g = Blinn(255 - ch[1][x], 255 - k); b = Blinn(255 - ch[2][x], 255 - k);
                             }
                             o[0] = r; o[1] = g; o[2] = b; o[3] = 255;

@@ -12,7 +12,6 @@ knst_memory.hpp
    knst_pool_allocator is an alternative to malloc that provides fast memory allocation from pre-allocated block pools. It is significantly faster than malloc for small allocations (64–2048 bytes) and falls back to malloc for larger ones. It uses reference counting, so copying does not result in heap duplication. Thread safety is optional (via KNST_MEMORY_POOL_USE_MUTEX). Aliases ending in `_sm`—such as `knst_vector_sm` and `knst_byte_string_sm`—utilize this allocator
     For most basic structures, the special memory feature will be activated via the '_sm' suffix.
 
-
 */
 
 
@@ -20,12 +19,14 @@ knst_memory.hpp
 #pragma once
 
 #include "knst_settings.hpp"
-#include <cstring>
+#include <cstdlib>       // ::malloc, ::free, ::realloc
+#include <cstddef>       // std::size_t, std::ptrdiff_t, std::max_align_t
+#include <cstdint>       // SIZE_MAX, uint8_t
+#include <cstring>       // std::memset, std::memcpy
 #include <algorithm>
 #include <vector>
 #include <atomic>
 #include <type_traits>
-
 
 
 
@@ -68,7 +69,10 @@ struct knst_default_allocator { // A basic (standard) allocator. Uses HeapAlloc/
         if (!ptr) return allocate(new_size);
         if (new_size == 0) { deallocate(ptr, 0); return nullptr; }
         #if defined(_WIN32) || defined(_WIN64)
-            return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ptr, new_size);
+            // NOTE: HEAP_ZERO_MEMORY intentionally NOT used here so that
+            //       behaviour matches POSIX ::realloc (new tail uninitialized).
+            //       Use allocate() if you need zero-initialized memory.
+            return HeapReAlloc(GetProcessHeap(), 0, ptr, new_size);
         #else
             return ::realloc(ptr, new_size);
         #endif
@@ -85,15 +89,31 @@ struct knst_default_allocator { // A basic (standard) allocator. Uses HeapAlloc/
 struct knst_pool_config { // Pool configuration. `block_size` ==> byte size of each block; `block_count` ==> number of blocks in the pool. The user defines a custom pool by calling `knst_pool_allocator(knst_pool_config(128, 512), ...)`
     size_t block_size;
     size_t block_count;
-    
+
     constexpr knst_pool_config(size_t bs, size_t bc) noexcept : block_size(bs), block_count(bc) {}
-        
+
 };
 
 
 class knst_pool_allocator {
 
-    static constexpr size_t MIN_BLOCK = sizeof(void*) * 2; // Minimum block size — two pointers (16 bytes on a 64-bit system). Why? The "next" pointer is written into the free block within the free list, so a block must be large enough to hold at least that pointer. A 2x safety margin
+    // Minimum block size — two pointers (16 bytes on a 64-bit system).
+    // Why? The "next" pointer is written into the free block within the
+    // free list, so a block must be large enough to hold at least that
+    // pointer. A 2x safety margin.
+    static constexpr size_t MIN_BLOCK = sizeof(void*) * 2;
+
+    // Required alignment for every block start. Using max_align_t guarantees
+    // that a block returned by the pool can host any standard type (double,
+    // long long, std::max_align_t-sized SIMD types, atomics, ...).
+    static constexpr size_t BLOCK_ALIGN = alignof(std::max_align_t);
+
+    static_assert(MIN_BLOCK >= sizeof(void*),
+        "MIN_BLOCK must be able to store a free-list pointer.");
+
+    static constexpr size_t align_up(size_t v, size_t a) noexcept {
+        return a == 0 ? v : ((v + a - 1) / a) * a;
+    }
 
     struct block_pool { // A single fixed-block pool. `init` acquires a large `malloc` block and links the internal blocks together into a free list (linked list). `allocate` is O(1): provide the head block and advance the free list. `deallocate` is O(1): add the block back to the head. `owns` checks if a pointer belongs to this pool; `fits` checks if a size fits within this pool. The `malloc` call occurs only once during `init`; subsequent operations involve only list manipulation
         void*  memory = nullptr;
@@ -124,10 +144,25 @@ class knst_pool_allocator {
         }
 
         bool init(size_t bs, size_t cap) {
+            if (bs == 0 || cap == 0) return false;
+
+            // Align the block size up so that consecutive blocks are all
+            // correctly aligned for any standard type. Without this, calls
+            // like knst_pool_allocator(100) would produce misaligned blocks.
+            bs = align_up(bs, BLOCK_ALIGN);
+            if (bs < MIN_BLOCK) bs = MIN_BLOCK;
+
+            // Overflow guard: bs * cap must fit in size_t.
+            if (cap > SIZE_MAX / bs) return false;
+
+            // If this pool was already initialised, drop the old buffer
+            // first so we don't leak on double-init.
+            destroy();
+
             block_size = bs;
             capacity = cap;
             memory = ::malloc(bs * cap);
-            if (!memory) return false;
+            if (!memory) { block_size = 0; capacity = 0; return false; }
 
             auto* ptr = static_cast<uint8_t*>(memory);
             for (size_t i = 0; i < cap; ++i) {
@@ -142,6 +177,8 @@ class knst_pool_allocator {
 
         void destroy() {
             if (memory) { ::free(memory); memory = nullptr; free_list = nullptr; }
+            block_size = 0;
+            capacity = 0;
         }
 
         void* allocate() noexcept {
@@ -195,8 +232,11 @@ class knst_pool_allocator {
 
                 block_pool bp;
                 if (bp.init(bs, cap)) {
+                    // IMPORTANT: use bp.block_size (post-alignment) not bs,
+                    // otherwise max_block_size may under-report the real
+                    // largest block and correct allocations end up in malloc.
+                    if (bp.block_size > max_block_size) max_block_size = bp.block_size;
                     pools.push_back(std::move(bp));
-                    max_block_size = bs;
                 }
             }
         }
@@ -220,8 +260,8 @@ class knst_pool_allocator {
 
                 block_pool bp;
                 if (bp.init(bs, cap)) {
+                    if (bp.block_size > max_block_size) max_block_size = bp.block_size;
                     pools.push_back(std::move(bp));
-                    if (bs > max_block_size) max_block_size = bs;
                 }
             }
         }
@@ -244,6 +284,11 @@ class knst_pool_allocator {
     }
 
 public:
+    // NOTE: value_type = void is legal for custom containers (knst_vector,
+    // knst_c16string, knst_byte_string, ...) that derive their own value_type
+    // from template T. This allocator is NOT STL-compatible with std::vector /
+    // std::list / ... because C++20 removed std::allocator<void>. If STL
+    // compatibility is required, wrap this via a template adapter.
     using value_type = void; // The allocator's `value_type` — an STL allocator trait. It is `void` because this allocator is type-agnostic and allocates raw bytes. This is required for STL compatibility
     using size_type = size_t; // STL allocator trait. Size type is size_t. Required for standard compliance
     using difference_type = ptrdiff_t; // STL allocator trait. Pointer difference type ptrdiff_t. For standard compliance
@@ -253,7 +298,7 @@ public:
 
     template<typename U>
     struct rebind { using other = knst_pool_allocator; }; // STL allocator trait. `rebind<U>::other` ==> "the `U`-type version of this allocator." Since `knst_pool_allocator` is type-agnostic, `other` is simply the allocator itself. STL containers (list, map, etc.) use this for their internal nodes
-   
+
     knst_pool_allocator() { // Default constructor. Sets up a pool with 4 standard sizes (64, 256, 1024, 2048 bytes). These sizes are available by default unless the user specifies otherwise
         constexpr size_t def[] = {64, 256, 1024, 2048};
         m_impl = new pool_impl();
@@ -279,14 +324,14 @@ public:
 
 
     knst_pool_allocator(const knst_pool_allocator& other) noexcept : m_impl(other.m_impl) { // Copy constructor. Shares the m_impl pointer (does not copy it) and increments the ref_count. In other words, both allocators use the same pool—the heap is not duplicated
-        
+
         if (m_impl)
             m_impl->ref_count.fetch_add(1, std::memory_order_relaxed);
     }
 
 
     knst_pool_allocator(knst_pool_allocator&& other) noexcept: m_impl(other.m_impl) { // Move constructor. Steals the pointer and nulls out the source. The reference count does not increase—ownership changes hands. Zero cost
-        
+
         other.m_impl = nullptr;
     }
 
@@ -365,44 +410,49 @@ public:
         knst_default_allocator::deallocate(ptr, size_hint);
     }
 
-    KNST_FORCE_INLINE void* reallocate(void* ptr, size_t new_size) const { // Reallocation. If shrinking, return the same pointer (no new location). If growing, allocate a new block, copy the old data, and free the old block. If the pointer does not belong to the pool, it falls back to `realloc`. The copy size is the minimum of the old and new sizes
-        if (!ptr) return allocate(new_size);
-        if (new_size == 0) { deallocate(ptr); return nullptr; }
-        if (!m_impl) return knst_default_allocator::reallocate(ptr, new_size);
+KNST_FORCE_INLINE void* reallocate(void* ptr, size_t new_size) const {
+    if (!ptr) return allocate(new_size);
+    if (new_size == 0) { deallocate(ptr); return nullptr; }
+    if (!m_impl) return knst_default_allocator::reallocate(ptr, new_size);
 
-        #ifdef KNST_MEMORY_POOL_USE_MUTEX
-            std::lock_guard<std::mutex> lk(m_impl->mtx);
-        #endif
+    #ifdef KNST_MEMORY_POOL_USE_MUTEX
+        std::lock_guard<std::mutex> lk(m_impl->mtx);
+    #endif
 
-        size_t old_bs = 0;
-        for (auto& bp : m_impl->pools) {
-            if (bp.owns(ptr)) { old_bs = bp.block_size; break; }
-        }
-
-        if (old_bs == 0)
-            return knst_default_allocator::reallocate(ptr, new_size);
-
-        if (new_size <= old_bs) return ptr;
-
-        void* new_ptr = nullptr;
-        if (new_size <= m_impl->max_block_size) {
-            for (auto& bp : m_impl->pools) {
-                if (bp.fits(new_size)) {
-                    new_ptr = bp.allocate();
-                    if (new_ptr) break;
-                }
-            }
-        }
-        if (!new_ptr) new_ptr = knst_default_allocator::allocate(new_size);
-        if (!new_ptr) return nullptr;
-
-        size_t copy_sz = old_bs < new_size ? old_bs : new_size;
-        std::memcpy(new_ptr, ptr, copy_sz);
-        deallocate(ptr, old_bs);
-        return new_ptr;
+    size_t old_bs = 0;
+    for (auto& bp : m_impl->pools) {
+        if (bp.owns(ptr)) { old_bs = bp.block_size; break; }
     }
 
-    
+    if (old_bs == 0)
+        return knst_default_allocator::reallocate(ptr, new_size);
+
+    if (new_size <= old_bs) return ptr;
+
+    void* new_ptr = nullptr;
+    if (new_size <= m_impl->max_block_size) {
+        for (auto& bp : m_impl->pools) {
+            if (bp.fits(new_size)) {
+                new_ptr = bp.allocate();
+                if (new_ptr) break;
+            }
+        }
+    }
+    if (!new_ptr) new_ptr = knst_default_allocator::allocate(new_size);
+    if (!new_ptr) return nullptr;
+
+    size_t copy_sz = old_bs < new_size ? old_bs : new_size;
+    std::memcpy(new_ptr, ptr, copy_sz);
+
+    // Return the old block directly — we already hold the mutex, so calling
+    // deallocate() would self-lock and deadlock.
+    for (auto& bp : m_impl->pools) {
+        if (bp.owns(ptr)) { bp.deallocate(ptr); break; }
+    }
+    return new_ptr;
+}
+
+
 
     void reset() { // Resets the pool—clears all blocks and reinitializes. If shared (ref_count > 1), it creates a new implementation and abandons the old one (so other copies remain unaffected). If not shared, it reinitializes the same implementation from scratch
         constexpr size_t def[] = {64, 256, 1024, 2048};
@@ -418,13 +468,16 @@ public:
             if (m_impl->ref_count.fetch_sub(1, std::memory_order_acq_rel) == 1)
                 delete m_impl;
             m_impl = new_impl;
-        } else {
-            m_impl->destroy_all();
-            m_impl->init(def, 4);
-        }
+        }     else {
+        #ifdef KNST_MEMORY_POOL_USE_MUTEX
+            std::lock_guard<std::mutex> lk(m_impl->mtx);
+        #endif
+        m_impl->destroy_all();
+        m_impl->init(def, 4);
+    }
     }
 
-   
+
     template<typename... Args, typename = std::enable_if_t<(std::is_integral_v<Args> && ...) &&!(std::is_same_v<Args, knst_pool_config> || ...)>>
     void reset(Args... sizes) { // The version of `reset` that accepts dimensions. The user provides new dimensions (e.g., `reset(128, 512)`), and the pool is re-initialized with those dimensions. The sharing logic remains the same: if `ref_count > 1`, a new implementation is created
         constexpr size_t N = sizeof...(Args);
@@ -443,12 +496,15 @@ public:
                 delete m_impl;
             m_impl = new_impl;
         } else {
+            #ifdef KNST_MEMORY_POOL_USE_MUTEX
+                std::lock_guard<std::mutex> lk(m_impl->mtx);
+            #endif
             m_impl->destroy_all();
             m_impl->init(arr, N);
         }
     }
 
-    
+
     template<typename... Args>
     void reset(knst_pool_config first, Args... rest) { // The `knst_pool_config` version of `reset`. The user specifies the size and number of blocks for each pool. The sharing logic remains the same: if `ref_count > 1`, a new implementation is created; otherwise, the existing implementation is reset from scratch.
         constexpr size_t N = 1 + sizeof...(Args);
@@ -467,11 +523,13 @@ public:
                 delete m_impl;
             m_impl = new_impl;
         } else {
+            #ifdef KNST_MEMORY_POOL_USE_MUTEX
+                std::lock_guard<std::mutex> lk(m_impl->mtx);
+            #endif
             m_impl->destroy_all();
             m_impl->init_with_configs(arr, N);
         }
     }
-
 
     size_t pool_count() const noexcept { // Returns the number of pools. Returns 0 if m_impl is null. Reads under the mutex lock if it is enabled
         if (!m_impl) return 0;
@@ -485,7 +543,7 @@ public:
         return m_impl ? m_impl->max_block_size : 0;
     }
 
-  
+
 
     friend bool operator==(const knst_pool_allocator& a, const knst_pool_allocator& b) noexcept { // Are the two allocators equal? ​​They are equal if they share the same `pool_impl`—meaning they allocate from the same pool. STL containers rely on this; if allocators are equal, elements can be swapped
         return a.m_impl == b.m_impl;
@@ -497,4 +555,3 @@ public:
 
 static_assert(sizeof(knst_pool_allocator) == sizeof(void*), // Compile-time check. The allocator must be the size of a single pointer (8 bytes on 64-bit systems) so that it can be embedded into classes at zero cost using `[[no_unique_address]]`. If someone accidentally adds a member, the `static_assert` triggers and compilation halts.
     "knst_pool_allocator must be exactly one pointer in size.");
-

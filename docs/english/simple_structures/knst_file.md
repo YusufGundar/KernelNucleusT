@@ -11,11 +11,11 @@ In short: **a cross-platform file system library that brings all file and direct
 | Feature | What it gives you |
 |---|---|
 | **Cross-platform** | Same API on Linux, Windows, Android |
-| **UTF-8 everywhere** | UTF-8 on POSIX, automatically converted to UTF-16 on Windows |
-| **Atomic write** | Crash-safe file saving (temp + rename) |
-| **200+ extension recognition** | 25+ categories like `is_image()`, `is_video()`, `is_ai_model()` |
+| **UTF-16 API + automatic encoding** | User always uses `knst_c16string` (UTF-16). Converted automatically to UTF-8 for POSIX system calls, and passed as UTF-16 to Windows `W`-functions |
+| **Atomic write** | Crash-safe file saving (temp + rename + fsync) |
+| **200+ extension recognition** | 24 categories like `is_image()`, `is_video()`, `is_ai_model()` |
 | **Binary-safe** | Embedded `\0` bytes preserved |
-| **Pool allocator** | Fast reads/writes with `knst_pool_allocator` |
+| **Pool allocator** | Fast **reads** with `knst_pool_allocator` (`read_file_data<Pool>` / `read_file_text<Pool>`; no write path) |
 | **Path utilities** | `join_path`, `normalize_path`, `get_parent_dir` |
 | **Time formatting** | Absolute + relative ("2h ago") |
 | **Windows reserved names** | Automatic check for `CON`, `PRN`, `AUX` |
@@ -64,7 +64,7 @@ int main() {
 | **Copying** | `copy_file`, `copy_directory`, `rename`, `move_path` |
 | **Deleting** | `remove_file`, `remove_directory`, `remove_all` |
 | **Metadata** | `get_file_size`, `get_disk_space`, `set_file_times` |
-| **Extension classification** | `is_image`, `is_video`, `is_audio`, `is_code`, `is_ai_model`, ... (25+ categories) |
+| **Extension classification** | `is_image`, `is_video`, `is_audio`, `is_code`, `is_ai_model`, ... (24 categories) |
 | **Validity** | `is_valid_filename`, `sanitize_filename` |
 | **Symlink** | `create_symlink`, `read_symlink_target` |
 
@@ -80,9 +80,18 @@ knst_c16string p = u"/home/user/docs/report.tar.gz";
 knst_file::get_filename(p);        // "report.tar.gz"
 knst_file::get_directory(p);       // "/home/user/docs/"
 knst_file::get_extension(p);       // ".gz"
-knst_file::get_full_extension(p);  // ".tar.gz"
 knst_file::get_stem(p);            // "report.tar"
-knst_file::get_parent_dir(p);      // "/home/user"
+knst_file::get_parent_dir(p);      // "/home/user/docs"
+
+// ⚠️ `get_full_extension()` is NOT a static method — it exists ONLY as an instance field.
+// To read it, open the file first:
+knst_file f = knst_file::open(p);
+// f.full_extension → ".tar.gz"
+
+> 💡 **`get_directory` vs `get_parent_dir`:**
+> - `get_directory(p)` → strips filename, returns the directory **with** trailing `/`: `"/home/user/docs/"`
+> - `get_parent_dir(p)` → goes one level up, **no** trailing slash: `"/home/user/docs"`
+> - For a *file* path they point to the same location (only `/` difference). For a *directory* path they differ: `get_parent_dir("/home/user/docs")` → `"/home/user"`.
 ```
 
 ### `join_path` — Safe Joining
@@ -110,6 +119,7 @@ std::cout << knst_file::normalize_path(messy);
 knst_file::is_absolute_path(u"/etc/hosts");            // Linux: true
 knst_file::is_absolute_path(u"C:\\Windows\\System32"); // Windows: true
 knst_file::is_absolute_path(u"docs/file.txt");         // false
+knst_file::is_absolute_path(u"\\\\server\\share");     // Windows UNC: true
 ```
 
 ---
@@ -121,6 +131,9 @@ knst_file::get_current_dir();     // "/home/knst/Desktop"
 knst_file::get_home_dir();        // "/home/knst" (Win: "C:\Users\knst")
 knst_file::get_temp_dir();        // "/tmp" (Win: "C:\Users\...\Temp")
 knst_file::get_executable_dir();  // Directory of the running executable
+
+// Change the current working directory
+bool ok = knst_file::set_current_dir(u"/home/knst/projects");
 ```
 
 **Note:** On Windows, `get_executable_dir()` uses `GetModuleFileNameW`. On Linux, it reads the `/proc/self/exe` symlink.
@@ -151,15 +164,26 @@ std::cout << content << "\n";
 - Automatic UTF-8 → UTF-16 conversion
 - BOM (byte-order mark) is skipped automatically
 - Returns an empty string on error
+- Template param: `read_file_text<Alloc>` selects the allocator for the **internal UTF-8 byte buffer**
+
+> ⚠️ **Important:** `read_file_text<Alloc>` **always returns `knst_c16string`** (i.e. `basic_c16string<knst_default_allocator>`). The `<Alloc>` only affects the temporary UTF-8 buffer used while reading. To get a pool-allocated string (`knst_c16string_sm<>`), call `bridge_memory()` on the returned value.
+>
+> **Asymmetry:** `read_file_data<Alloc>` DOES return `basic_byte_string<Alloc>` — the two APIs are not symmetric.
 
 ### `read_file_data` — Raw Bytes
 
 ```cpp
 knst_byte_string data = knst_file::read_file_data<>(u"image.png");
 std::cout << "Size: " << data.length() << " bytes\n";
+
+// With pool allocator — NOTE: return type is basic_byte_string<knst_pool_allocator>
+knst_byte_string_sm<> fast = knst_file::read_file_data<knst_pool_allocator>(u"image.png");
+// (`read_file_text<Alloc>` is different — it always returns knst_c16string)
 ```
 
 **Binary-safe:** Embedded `\0` bytes are preserved.
+
+**Limit:** Files larger than **4 GB (`UINT32_MAX`)** return `knst_file_error::TooLarge`.
 
 ### `read_file_lines` — Line by Line
 
@@ -208,14 +232,18 @@ knst_file::append_file_text(u"log.txt", u"synced write\n", /*sync=*/true);
 
 **`sync=true`** → calls `fsync()` / `FlushFileBuffers()` (slow but safe).
 
-### 🌟 `write_file_atomic` — Crash-Safe Writing
+### `touch_file` — Create Empty File / Touch
+
+```cpp
+knst_file::touch_file(u"marker.txt");                       // creates parent dirs too
+knst_file::touch_file(u"marker.txt", /*create_parents=*/false);
 
 ```cpp
 knst_file::write_file_atomic_text(u"config.json", u"{ \"version\": 2 }");
 ```
 
 **How it works:**
-1. A temporary file is created, e.g. `config.json.knsttmp_12345_678`
+1. A temporary file is created, e.g. `config.json.knsttmp12345_678_0` (format: `.knsttmp<unix>_<pid>_<counter>` — **no separator** between `.knsttmp` and `<unix>`)
 2. Data is written + `fsync`
 3. `rename()` moves it to the real file (atomic)
 4. On POSIX, the directory is also fsync'ed
@@ -382,7 +410,7 @@ knst_file::set_file_times(u"data.txt", now /*modified*/, now /*accessed*/);
 
 ## 🗂️ 12) Extension Classification (200+ Recognitions)
 
-This is the **strongest point** of the library. It recognizes 200+ extensions and splits them into 25+ categories.
+This is the **strongest point** of the library. It recognizes 200+ extensions and splits them into 24 categories.
 
 ### Usage
 
@@ -436,6 +464,17 @@ f.has_any_extension({u".txt", u".md"}); // multiple
 ```
 
 **Performance:** Extension comparison is done in **O(1) via bit-pack** up to 8 bytes. So you can filter a thousand files per second.
+
+### Double Extension Note
+
+`full_extension` is populated **only for these patterns**:
+- `.tar.*` → `.tar.gz`, `.tar.bz2`, `.tar.xz`, etc.
+- `.min.*` → `.min.js`, `.min.css`
+- `.user.*` → `.user.js`
+- `.test.*` → `.test.js`
+- `.d.ts`
+
+In all other cases, `full_extension` is empty. `extension` always contains everything after the last dot.
 
 ---
 
@@ -783,7 +822,7 @@ knst_file::write_file_text(full_path, u"content");
 | Operation | Complexity | Note |
 |---|---|---|
 | `read_file_text` | O(n) | UTF-8 → UTF-16 conversion |
-| `read_file_data` | O(n) | 64 KB chunks (large-file friendly) |
+| `read_file_data` | O(n) | Single `resize()` + read loop (files > 4 GB return `TooLarge`) |
 | `write_file_atomic` | O(n) + fsync | Safe but slow |
 | `list_directory` | O(entries) | One level only |
 | `list_directory_recursive` | O(total_entries) | Recursive |

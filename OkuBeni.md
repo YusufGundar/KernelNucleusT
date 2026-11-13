@@ -1,5 +1,41 @@
 # KernelNucleusT
 
+<p align="center">
+  <!-- Core -->
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20"/>
+  <img src="https://img.shields.io/badge/Header--Only-yes-success" alt="Header-Only"/>
+  <img src="https://img.shields.io/badge/License-MPL_2.0-orange" alt="License"/>
+  <img src="https://img.shields.io/badge/Version-1.0.0-blue" alt="Version"/>
+</p>
+
+<p align="center">
+  <!-- Platforms -->
+  <img src="https://img.shields.io/badge/Windows-tested-0078D6?logo=windows&logoColor=white" alt="Windows"/>
+  <img src="https://img.shields.io/badge/Linux_X11-tested-FCC624?logo=linux&logoColor=black" alt="Linux X11"/>
+  <img src="https://img.shields.io/badge/Linux_Wayland-tested-FCC624?logo=linux&logoColor=black" alt="Linux Wayland"/>
+  <img src="https://img.shields.io/badge/Android-tested-3DDC84?logo=android&logoColor=white" alt="Android"/>
+</p>
+
+<p align="center">
+  <!-- Graphics -->
+  <img src="https://img.shields.io/badge/OpenGL-3.3_Core-5586A4?logo=opengl&logoColor=white" alt="OpenGL"/>
+  <img src="https://img.shields.io/badge/Vulkan-supported-AC162C?logo=vulkan&logoColor=white" alt="Vulkan"/>
+</p>
+
+<p align="center">
+  <!-- Networking -->
+  <img src="https://img.shields.io/badge/TLS-1.2_%2F_1.3-blue" alt="TLS"/>
+  <img src="https://img.shields.io/badge/HTTP-1.1_%7C_2_%7C_3-brightgreen" alt="HTTP"/>
+  <img src="https://img.shields.io/badge/WebSocket-RFC_6455-green" alt="WebSocket"/>
+</p>
+
+<p align="center">
+  <!-- Quality -->
+  <img src="https://img.shields.io/badge/ASan-clean-success" alt="ASan clean"/>
+  <img src="https://img.shields.io/badge/UBSan-clean-success" alt="UBSan clean"/>
+  <img src="https://img.shields.io/badge/Valgrind-clean-success" alt="Valgrind clean"/>
+</p>
+
 #### C++ 20 ile yazılmış, yüksek performanslı, özelleştirilebilir, çapraz platform destekli bir kütüphane paketidir.
 
 **Kararlı sürüm hazır.** Aylardır üzerinde çalıştım. Sızıntı testleri (ASan, UBSan, Valgrind), çoklu platform testleri , özel kontroller , gerçek donanım testleri... Hepsinden başarıyla geçti
@@ -64,6 +100,14 @@ Ek olarak `docs/` içerisinde `vscode_setting` altında platformlara özel hazı
 - **OpenGL + Vulkan** — İki backend bağımsız veya birlikte kullanılabilir. GLAD 3.3 Core kütüphaneyle birlikte gelir.
 - **UTF-16 doğru** — Emoji, CJK, Arapça, Türkçe karakterler bozulmuyor.
 
+- **Ağ (networking)** — HTTP/1.1, HTTP/2, HTTP/3 (QUIC), WebSocket (`ws://` + `wss://`), TLS 1.2/1.3, DoH (DNS over HTTPS), thread-safe DNS cache, HTTP CONNECT + SOCKS5/SOCKS5h proxy, cookie jar, gzip/deflate decoding, SSRF guard, `bind_local_ip`.
+
+- **Otomatik algılama** — `knst_network` katmanları (TLS / H2 / H3) **CMake configure sırasında** otomatik algılanır. Kullanıcı elle `-D..._ENABLE_*` geçmez. CMake çıktısının sonundaki `Network: TLS=TRUE H2=TRUE H3=FALSE` satırı ile doğrulanır.
+
+- **Kendi kendine yeten TLS** — Linux/macOS'ta sistem CA bundle'ı otomatik yüklenir, Windows'ta WinCertStore (ROOT depo) import edilir, Android'de `/apex/com.android.conscrypt/cacerts` + `/system/etc/security/cacerts` okunur. mTLS (`knst_tls_set_client_cert`) ve özel CA desteği (`knst_tls_set_ca_file` / `knst_tls_set_ca_path`) hazır.
+
+- **Otomatik ses kodek algılama** — `libfaad2` varsa AAC decode, `libvorbis` + `libvorbisenc` + `libogg` varsa native OGG Vorbis encode aktif olur. CMake otomatik bulur.
+
 ---
 
 ## İçerisinde
@@ -78,16 +122,32 @@ Ek olarak `docs/` içerisinde `vscode_setting` altında platformlara özel hazı
 
 ### Basit Yapılardan
 
-- knst_byte_string
-- knst_c16string
-- knst_devices
-- knst_file
-- knst_function
-- knst_image_loader
-- knst_process
-- knst_thread
-- knst_thread_pool
-- knst_vector
+- knst_byte_string.hpp
+- knst_c16string.hpp
+- knst_devices.hpp
+- knst_file.hpp
+- knst_function.hpp
+- knst_image_loader.hpp
+- knst_process.hpp
+- knst_thread.hpp
+- knst_thread_pool.hpp
+- knst_vector.hpp
+- knst_json.hpp
+- knst_video.hpp
+- knst_camera.hpp
+- knst_audio.hpp
+- knst_microphone.hpp
+- knst_converter.hpp
+- knst_bluetooth.hpp
+- knst_usb.hpp
+- knst_storage.hpp
+- knst_sensors.hpp
+- knst_printer.hpp
+- knst_network.hpp       — HTTP/1.1 client, DNS cache, DoH, proxy (HTTP CONNECT + SOCKS5), TLS
+- knst_websocket.hpp     — WebSocket (ws:// + wss://), full RFC 6455, fragmented messages
+- knst_network_h2.hpp    — HTTP/2 (nghttp2 tabanlı, h2 ALPN, otomatik session pool)
+- knst_network_h3.hpp    — HTTP/3 (QUIC, ngtcp2 + nghttp3, TLS 1.3 zorunlu)
+
 
 Karmaşık yapılar, temel yapılar kullanılarak oluşturulmaktadır. Basit yapıların çoğu birbirlerine bağımlıdır; karmaşık yapılar ise basit yapılara bağımlıdır.
 
@@ -233,7 +293,6 @@ Bu kısım KernelNucleusT kütüphanesini **Linux (X11 / Wayland / Dual)**, **Wi
 |---|---|---|
 | `KNST_LINUX_PLATFORM` | `X11` | Sadece Linux: `X11` veya `Wayland` |
 | `KNST_WINDOW_EMBEDDED_X11_AND_WAYLAND` | `OFF` | Linux: her iki backend aynı binary'ye (runtime-selected) |
-| `KNST_BUILD_EXAMPLES` | `OFF` | `examples/` klasöründeki örnekleri de derle |
 | `KNST_APP_SOURCE` | Boş | Kendi `.cpp` dosyanı `knst_app` olarak derle |
 | `KNST_ENABLE_SANITIZERS` | `OFF` | AddressSanitizer + UBSan (hata ayıklama için) |
 | `KNST_WARNINGS_AS_ERRORS` | `OFF` | Uyarıları hata say |
@@ -241,6 +300,38 @@ Bu kısım KernelNucleusT kütüphanesini **Linux (X11 / Wayland / Dual)**, **Wi
 | `KNST_WINDOW_USE_OPENGL` | `OFF` | OpenGL 3.3 Core backend (GLAD + GL libs) |
 | `KNST_WINDOW_USE_VULKAN` | `OFF` | Vulkan backend |
 | `CMAKE_BUILD_TYPE` | `Release` | `Debug`, `Release`, `RelWithDebInfo`, `MinSizeRel` |
+
+### 2.1 Network Seçenekleri (opsiyonel — auto-detected)
+
+> **Önemli:** `KNST_NETWORK_ENABLE_TLS/H2/H3` **kullanıcıya açık CMake flag'i DEĞİL**. Bunlar header tarafında **internal** makrolar. CMakeLists, ilgili kütüphaneleri bulunca bu makroları **otomatik** `target_compile_definitions`'a ekler.
+
+| Seçenek | Varsayılan | Açıklama |
+|---|---|---|
+| `KNST_NETWORK_DISABLE_TLS` | `OFF` | OpenSSL kurulu olsa bile TLS'i tamamen kapat (H2 + H3 de kapanır) |
+| `KNST_NETWORK_DISABLE_H2` | `OFF` | nghttp2 kurulu olsa bile HTTP/2'yi kapat |
+| `KNST_NETWORK_DISABLE_H3` | `OFF` | quictls+ngtcp2+nghttp3 kurulu olsa bile HTTP/3'ü kapat |
+| `KNST_QUICTLS_ROOT` | (auto) | quictls prefix override (H3 için) |
+| `KNST_NGTCP2_ROOT` | (auto) | ngtcp2 prefix override |
+| `KNST_NGHTTP3_ROOT` | (auto) | nghttp3 prefix override |
+| `KNST_NGHTTP2_ROOT` | (auto) | nghttp2 prefix override |
+
+**Auto-detection sırası** (her bir kütüphane için):
+1. `find_package(<name> CONFIG)` — vcpkg / Conan / cmake-installed
+2. `pkg_check_modules(<pc-name>)` — Linux / pkg-config
+3. `find_library` + `find_path` — son çare
+
+**Katman merdiveni** (en yüksekten alta):
+- **H3** → quictls + nghttp2 + ngtcp2 + nghttp3 (TLS + H2 + H3)
+- **H2** → sistem OpenSSL + nghttp2 (TLS + H2)
+- **H1** → sistem OpenSSL (TLS + H1)
+- **off** → hiçbiri (ağ TLS yok)
+
+Configure sonrası CMake çıktısının sonunda görünür:
+```
+Network:        TLS=TRUE H2=TRUE H3=FALSE
+```
+
+> **⚠️ H3 + OpenSSL ABI uyarısı:** H3 aktifse CMakeLists **sadece quictls'ı linkler**, sistem OpenSSL'ini **devre dışı bırakır**. Aynı binary'de iki OpenSSL olmaz, ABI clash önlenir. Runtime'da RPATH quictls dizinini öne alır.
 
 ---
 
@@ -257,8 +348,15 @@ Bu makrolar kütüphaneyi kullanan her projeye **otomatik** geçer. Elle tanıml
 | Android | `KNST_USING_PLATFORM_ANDROID`, `KNST_USING_PLATFORM_LINUX` |
 | OpenGL açık | `KNST_WINDOW_USE_OPENGL` |
 | Vulkan açık | `KNST_WINDOW_USE_VULKAN` |
+| OpenSSL bulundu | `KNST_NETWORK_ENABLE_TLS` |
+| nghttp2 bulundu | `KNST_NETWORK_ENABLE_H2` |
+| quictls + ngtcp2 + nghttp3 bulundu | `KNST_NETWORK_ENABLE_H3` |
+| FAAD2 bulundu | `KNST_NETWORK_HAVE_FAAD2` (AAC decode) |
+| Vorbis bulundu | `KNST_NETWORK_HAVE_VORBIS` (OGG encode) |
 
-Backend makroları **bağımsız** — hepsi birlikte tanımlı olabilir. Derleme sırasında CMake sonunda bir özet yazdırılır; hangi makroların tanımlandığını oradan görebilirsin.
+Backend ve network makroları **bağımsız** — hepsi birlikte tanımlı olabilir. Derleme sırasında CMake sonunda bir özet yazdırılır; hangi makroların tanımlandığını oradan görebilirsin.
+
+> **Not:** Network makrolarının tamamı **auto-detected**. Kullanıcı `-D` ile geçmez. CMake configure çıktısındaki `Network: TLS=TRUE H2=TRUE H3=FALSE` satırı ile doğrulanır.
 
 ---
 
@@ -278,17 +376,6 @@ cmake --build build -j
 # Çalıştır
 ./build/bin/knst_app
 ```
-
-Kütüphane örneklerini de derlemek isterseniz:
-
-```bash
-cmake -S . -B build -DKNST_BUILD_EXAMPLES=ON
-cmake --build build -j
-./build/bin/knst_window_basic
-```
-
-💡 Her iki durumda da çıktılar `build/bin/` klasörüne düşer. Örnek modunda her örnek kendi adıyla ayrı bir program olur (`knst_window_basic`, `knst_vector_basic` gibi).
-
 ---
 
 ## 5. Linux
@@ -434,6 +521,161 @@ include/platform/knst_window/opengl_content/glad_3_3/
    `include/platform/knst_window/opengl_content/glad_3_3/` altındaki aynı isimli klasörlerle **değiştirebilirsin**, ek olarak `KernelNucleusT.hpp` bu dosyadan eskinin yerine indirdiğinizi ekleyebilirsiniz
 3. `rm -rf build && cmake -S . -B build ...` ile yeniden yapılandır.
 
+### 5.8 İnternet Kütüphaneleri (Linux)
+
+> **Not:** Bu bölümdeki kütüphaneler **opsiyonel**. Sadece ihtiyaç duyduğunuz katmanı kurun. CMake **auto-detect** eder — `-DKNST_NETWORK_ENABLE_TLS=ON` gibi bir flag **yoktur**.
+
+#### 5.8.1 TLS (HTTPS / WSS)
+
+**Ubuntu / Debian / Pop!_OS**
+```bash
+sudo apt install libssl-dev
+```
+
+**Fedora**
+```bash
+sudo dnf install openssl-devel
+```
+
+**Arch**
+```bash
+sudo pacman -S openssl
+```
+
+Kurduğunuzda CMake otomatik algılar:
+```
+Network:        TLS=TRUE H2=FALSE H3=FALSE
+```
+
+TLS'i **istemiyorsanız** (nadir):
+```bash
+cmake -S . -B build -DKNST_NETWORK_DISABLE_TLS=ON ...
+```
+
+#### 5.8.2 HTTP/2 (`knst_network_h2.hpp`)
+
+**Ubuntu / Debian / Pop!_OS**
+```bash
+sudo apt install libnghttp2-dev
+```
+
+**Fedora**
+```bash
+sudo dnf install nghttp2-devel
+```
+
+**Arch**
+```bash
+sudo pacman -S nghttp2
+```
+
+Kurduğunuzda TLS + H2 otomatik aktifleşir:
+```
+Network:        TLS=TRUE H2=TRUE H3=FALSE
+```
+
+Header'ı projenize ekleyin: `#include "knst_network_h2.hpp"` (veya `KernelNucleusT.hpp`).
+
+#### 5.8.3 HTTP/3 (`knst_network_h3.hpp`) — En zor kısım
+
+HTTP/3 için **4 kütüphane** gerekir: `quictls` + `ngtcp2` + `ngtcp2_crypto_quictls` + `nghttp3`. **Stok OpenSSL 3.0 yetersiz** — QUIC desteği yok, `quictls` fork'u gerekir.
+
+**Ubuntu 24.04+ / Fedora 39+ / Arch:**
+```bash
+# Ubuntu 24.04+
+sudo apt install libngtcp2-dev libngtcp2-crypto-quictls-dev libnghttp3-dev
+
+# Fedora 39+
+sudo dnf install ngtcp2-devel nghttp3-devel
+
+# Arch
+sudo pacman -S ngtcp2 nghttp3
+```
+
+**Ubuntu 22.04 / 20.04 / Pop!_OS (stok repo'da yok):**
+
+İki seçenek var:
+
+**Seçenek 1 — vcpkg (önerilen):**
+```bash
+git clone https://github.com/microsoft/vcpkg
+./vcpkg/bootstrap-vcpkg.sh
+./vcpkg/vcpkg install quictls nghttp2 ngtcp2 nghttp3
+```
+
+Sonra CMake configure:
+```bash
+cmake -S . -B build -G Ninja \
+    -DKNST_QUICTLS_ROOT=$PWD/vcpkg/installed/x64-linux \
+    ...
+```
+
+**Seçenek 2 — kaynaktan derle:**
+```bash
+# 1) quictls (OpenSSL fork, QUIC destekli)
+git clone https://github.com/quictls/openssl.git /tmp/quictls
+cd /tmp/quictls
+git checkout openssl-3.1.5+quic
+./config --prefix=/usr/local/quictls --openssldir=/usr/local/quictls/ssl shared
+make -j$(nproc)
+sudo make install_sw
+
+# 2) nghttp3
+git clone --recursive https://github.com/ngtcp2/nghttp3.git /tmp/nghttp3
+cd /tmp/nghttp3
+autoreconf -i
+./configure --prefix=/usr/local PKG_CONFIG_PATH=/usr/local/quictls/lib/pkgconfig
+make -j$(nproc)
+sudo make install
+
+# 3) ngtcp2
+git clone --recursive https://github.com/ngtcp2/ngtcp2.git /tmp/ngtcp2
+cd /tmp/ngtcp2
+autoreconf -i
+./configure --prefix=/usr/local --with-openssl=/usr/local/quictls \
+    PKG_CONFIG_PATH=/usr/local/quictls/lib/pkgconfig:/usr/local/lib/pkgconfig
+make -j$(nproc)
+sudo make install
+
+# 4) Kütüphane yolu
+echo '/usr/local/lib' | sudo tee /etc/ld.so.conf.d/knst-quic.conf
+sudo ldconfig
+```
+
+Configure:
+```bash
+cmake -S . -B build -G Ninja -DKNST_QUICTLS_ROOT=/usr/local/quictls ...
+```
+
+**Seçenek 3 — HTTP/3'ü atla:** Sadece TLS + H2 yeterli olabilir. `knst_http_auto_client` otomatik olarak h3 → h2 → h1 fallback yapar; h3 olmadan da çalışır.
+
+CMake, quictls bulursa **sadece quictls'ı linkler** (system OpenSSL **linklenmez** — ABI clash önleme):
+```
+Network:        TLS=TRUE H2=TRUE H3=TRUE
+```
+
+> **⚠️ ABI Uyarısı:** H3 aktifleştiğinde CMakeLists **bilinçli olarak sistem OpenSSL'ini devre dışı bırakır** ve sadece quictls'ı linkler. Aynı binary'de iki OpenSSL olmaz.
+
+#### 5.8.4 Ses Kodekleri (opsiyonel — auto-detected)
+
+**AAC decode — FAAD2:**
+```bash
+sudo apt install libfaad-dev          # Ubuntu / Debian
+sudo dnf install faad2-devel          # Fedora
+sudo pacman -S faad2                  # Arch
+```
+
+Bulunursa CMake otomatik `KNST_NETWORK_HAVE_FAAD2` makrosunu tanımlar → AAC dosyaları decode edilebilir.
+
+**OGG Vorbis encode:**
+```bash
+sudo apt install libvorbis-dev libogg-dev    # Ubuntu / Debian
+sudo dnf install libvorbis-devel libogg-devel # Fedora
+sudo pacman -S libvorbis libogg               # Arch
+```
+
+Bulunursa CMake otomatik `KNST_NETWORK_HAVE_VORBIS` makrosunu tanımlar → `knst_aud::encode_file("...ogg")` native Vorbis ile çalışır.
+
 ---
 
 ## 6. Windows
@@ -492,6 +734,77 @@ MSYS2'de Vulkan:
 ```bash
 pacman -S mingw-w64-ucrt-x86_64-vulkan-headers mingw-w64-ucrt-x86_64-vulkan-loader
 ```
+
+### 6.5 İnternet Kütüphaneleri (Windows)
+
+> **Not:** Windows'ta `KNST_NETWORK_DISABLE_TLS=ON` gibi flag'ler **auto-detect'i kapatmak** içindir. `-DKNST_NETWORK_ENABLE_TLS=ON` **yoktur**.
+
+#### 6.5.1 vcpkg ile (Önerilen)
+
+```powershell
+# Bir kereye mahsus
+git clone https://github.com/microsoft/vcpkg C:\vcpkg
+C:\vcpkg\bootstrap-vcpkg.bat
+
+# TLS + HTTP/2
+C:\vcpkg\vcpkg install openssl nghttp2 --triplet x64-windows
+
+# HTTP/3 için (quictls + ngtcp2 + nghttp3)
+C:\vcpkg\vcpkg install quictls nghttp2 ngtcp2 nghttp3 --triplet x64-windows
+```
+
+CMake configure:
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+  "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+cmake --build build --config Release
+```
+
+CMake auto-detect sonucu:
+```
+Network:        TLS=TRUE H2=TRUE H3=TRUE
+```
+
+vcpkg, **runtime DLL'lerini** (`libssl-3-x64.dll`, `libcrypto-3-x64.dll`, `nghttp2.dll` vb.) `build\bin\Release\` altına **otomatik kopyalar**. Elle DLL kopyalama gerekmez.
+
+#### 6.5.2 MSYS2 UCRT64
+
+```bash
+pacman -S mingw-w64-ucrt-x86_64-openssl \
+          mingw-w64-ucrt-x86_64-nghttp2
+```
+
+HTTP/3 için MSYS2'de **hazır paket yok** — vcpkg kullan.
+
+#### 6.5.3 Manuel quictls (vcpkg istemiyorsanız)
+
+[quictls/openssl releases](https://github.com/quictls/openssl/releases) → Win64 binary indir → bir klasöre çıkar (`C:\quictls` gibi). Sonra:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+  "-DKNST_QUICTLS_ROOT=C:/quictls"
+```
+
+#### 6.5.4 Windows WinCertStore Notu
+
+`KNST_NETWORK_NO_WIN_CERTSTORE` **tanımlamazsan**, TLS ilk açıldığında **Windows ROOT sertifika deposu** otomatik import edilir. Kurumsal CA'lar (şirket proxy'leri vs.) sorunsuz çalışır. `crypt32.lib` link otomatiktir.
+
+Kapatmak için (nadir):
+```powershell
+cmake -S . -B build "-DCMAKE_CXX_FLAGS=-DKNST_NETWORK_NO_WIN_CERTSTORE"
+```
+
+#### 6.5.5 Ses Kodekleri (opsiyonel)
+
+```powershell
+# FAAD2 (AAC decode)
+C:\vcpkg\vcpkg install faad2 --triplet x64-windows
+
+# Vorbis (OGG encode)
+C:\vcpkg\vcpkg install libvorbis libogg --triplet x64-windows
+```
+
+Bulunursa CMake otomatik `KNST_NETWORK_HAVE_FAAD2` / `KNST_NETWORK_HAVE_VORBIS` makrolarını tanımlar.
 
 ---
 
@@ -571,15 +884,6 @@ Cihaz bağlı değilse script sana nasıl bağlanacağını adım adım gösteri
 
 Script kullanmak istemiyorsan klasik yolla da derleyebilirsin:
 
-```bash
-cmake -S . -B build-android -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=arm64-v8a \
-  -DANDROID_PLATFORM=android-24 \
-  -DKNST_BUILD_EXAMPLES=ON
-cmake --build build-android
-```
-
 Çıktı: `build-android/libknst_app.so`
 
 Önemli noktalar:
@@ -618,6 +922,59 @@ cmake --build build-android
 
 > `ANDROID_PLATFORM=android-24` altındaysa CMake hata verir.
 
+### 7.5 İnternet Kütüphaneleri (Android)
+
+> **Uyarı:** Android NDK'sında `openssl`, `nghttp2`, `ngtcp2`, `nghttp3` **hazır gelmez**. CMakeLists bunları **FetchContent** ile **otomatik derler** (ilk configure'da 10-15 dakika sürer).
+
+#### 7.5.1 Otomatik Build (CMakeLists halleder)
+
+`KNST_NETWORK_DISABLE_TLS=OFF` (varsayılan) verildiğinde CMakeLists:
+
+1. **quictls** — GitHub'dan klonlar, NDK toolchain ile cross-compile eder
+2. **nghttp2** — FetchContent ile derler
+3. **nghttp3 + ngtcp2** — FetchContent ile derler
+4. Hepsi `libknst_app.so` içine **statik linklenir**
+
+Sonuç APK içinde **ek .so yok** — hepsi ana library'de.
+
+**Cache:** İlk build sonrası `$HOME/.knst-cache/quictls-android-<ABI>/` altında saklanır. Sonraki build'ler hızlı (re-build yok).
+
+**Süre tahmini:**
+- İlk configure + build: 10-15 dk (quictls + nghttp2 + ngtcp2 + nghttp3)
+- Sonraki build'ler: 1-2 dk
+
+**Kapatmak için:**
+```bash
+cmake ... -DKNST_NETWORK_DISABLE_TLS=ON   # hepsini kapat
+cmake ... -DKNST_NETWORK_DISABLE_H3=ON    # sadece H3'ü kapat (H2 kalır)
+```
+
+#### 7.5.2 Katman Sırası
+
+| Flag kombinasyonu | Sonuç |
+|---|---|
+| (varsayılan) | TLS + H2 + H3 (auto-build) |
+| `-DKNST_NETWORK_DISABLE_H3=ON` | TLS + H2 |
+| `-DKNST_NETWORK_DISABLE_H3=ON -DKNST_NETWORK_DISABLE_H2=ON` | Sadece TLS |
+| `-DKNST_NETWORK_DISABLE_TLS=ON` | Hiçbiri (plain TCP/UDP) |
+
+Configure sonrası CMake çıktısında:
+```
+Network:        TLS=TRUE H2=TRUE H3=TRUE
+```
+
+#### 7.5.3 Android Sistem CA Store
+
+TLS açıkken `knst_network.hpp` otomatik olarak şu yolları dener:
+- `/apex/com.android.conscrypt/cacerts` (Android 14+)
+- `/system/etc/security/cacerts` (eski Android)
+
+Ek CA bundle gerekmez — Android sistem sertifikalarını kullanır.
+
+#### 7.5.4 Sadece Local İşlem Yapacaksanız
+
+Sadece cihaz içi işlemler (dosya, kamera, ses) yapacaksanız **internet header'larını include etmeyin**. `KernelNucleusT.hpp` zaten hepsini içermez — sadece ihtiyaç duyduğunuz header'lar seçilir. Build süresi ve binary boyutu küçülür.
+
 ---
 
 ## 8. Kendi Projende Kullanmak
@@ -643,6 +1000,24 @@ target_link_libraries(benim_uygulamama PRIVATE KernelNucleusT::KernelNucleusT)
 
 Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland kütüphaneleri ve backend bağımlılıkları otomatik bağlanır.
 
+**Network katmanları** (TLS / H2 / H3) `add_subdirectory` sonrasında **otomatik algılanır** — sistemde gerekli kütüphaneler varsa. Doğrulamak için CMake çıktısına bakın:
+
+```
+Network:        TLS=TRUE H2=TRUE H3=FALSE
+```
+
+Belirli bir katmanı **zorla kapatmak** için:
+```cmake
+set(KNST_NETWORK_DISABLE_H3 ON CACHE BOOL "" FORCE)   # H3 kapat, H2 kalsın
+add_subdirectory(KernelNucleusT)
+```
+
+**JSON entegrasyonu** (opsiyonel):
+```cmake
+# knst_json.hpp'yi KernelNucleusT.hpp'den önce include ettiğinizden emin olun
+target_compile_definitions(benim_uygulamama PRIVATE KNST_NETWORK_ENABLE_JSON)
+```
+
 ---
 
 ## 9. Sık Karşılaşılan Sorunlar
@@ -661,6 +1036,19 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
 | PowerShell `-D` argümanını `.cpp`'den bölüyor | Argümanı tırnak içine al: `"-DKNST_APP_SOURCE=yol/dosya.cpp"` |
 | `cl.exe not found` (MSVC) | "x64 Native Tools Command Prompt for VS" aç, normal PowerShell değil |
 | Visual Studio 2026 kullanıyorum | Generator adı: `-G "Visual Studio 18 2026"` |
+| CMake çıktısında `Network: TLS=FALSE` görüyorum | OpenSSL kurulu değil. `libssl-dev` (Linux) / vcpkg `openssl` (Windows) kurun |
+| `Network: H2=FALSE` görüyorum | `libnghttp2-dev` kurulu değil veya `-DKNST_NETWORK_DISABLE_H2=ON` geçmişsiniz |
+| `Network: H3=FALSE` görüyorum | quictls + ngtcp2 + nghttp3 eksik. `-DKNST_QUICTLS_ROOT=...` geçin veya `apt install libngtcp2-dev libnghttp3-dev` (Ubuntu 24.04+) |
+| `fatal error: openssl/ssl.h: No such file` | `libssl-dev` eksik. CMake, OpenSSL bulamadığı için TLS kapalı kalıyor |
+| `#error "knst_network_h3.hpp requires KNST_NETWORK_ENABLE_TLS"` | H3 için TLS şart. `KNST_NETWORK_DISABLE_TLS=ON` vermeyin |
+| `#error "knst_network_h3.hpp: ngtcp2 >= 1.0 required"` | Eski ngtcp2. `vcpkg upgrade ngtcp2` veya manuel güncelle |
+| HTTP/3 istekleri hep Timeout | Ağ UDP/443'ü bloke ediyor. `knst_http_auto_client` otomatik H2/H1'e düşer, manuel `knst_http3_client` fallback yapmaz |
+| `libssl.so.3: cannot open shared object` (runtime) | Statik link yapmadığınız için sistemde OpenSSL 3 gerekli. Ya `apt install libssl3` ya statik build |
+| Windows'ta TLS handshake başarısız, sertifika hatası | `KNST_NETWORK_NO_WIN_CERTSTORE` tanımlıysa WinCertStore atlanıyor. Tanımlamayı kaldırın |
+| Proxy CONNECT başarısız (`ProxyFailed`) | `options::proxy_url` formatı `http://user:pass@proxy:8080` olmalı. `no_proxy` bypass etmiyor mu kontrol edin |
+| `libngtcp2.so.16: cannot open` (Linux runtime) | Statik link yoksa sistemde ngtcp2 runtime gerekli. `ldd ./app` ile doğrulayın |
+| Android build ilk seferde 15 dk sürüyor | Normal — CMakeLists quictls + nghttp2 + ngtcp2 + nghttp3'ü kaynaktan derliyor. Sonraki build'ler cache'den hızlı |
+| `Network: TLS=TRUE H2=TRUE H3=TRUE` ama binary çalışmıyor | Static linking sorunu. Linux'ta `ldd ./build/bin/knst_app` ile quictls kütüphane yolu doğru mu kontrol edin |
 
 ---
 
@@ -674,7 +1062,6 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
 ### 🔹 MSYS2 UCRT64 / PowerShell (Windows)
 
 ```powershell
-#-DKNST_BUILD_EXAMPLES=ON bütün örnekleri derlemek için
 
 # ------------------------------Temel Pencere----------------------------------------
   cmake -S . -B build -G Ninja "-DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp"
@@ -692,11 +1079,6 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
   cmake -S . -B build -G Ninja "-DKNST_WINDOW_USE_VULKAN=ON" "-DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_vulkan_basic.cpp"
   cmake --build build
   ./build/bin/knst_app.exe
-# -----------------------------------------------------------------------------------
-
-# ------------------------------Tüm Örnekleri Derle----------------------------------
-  cmake -S . -B build -G Ninja "-DKNST_BUILD_EXAMPLES=ON"
-  cmake --build build
 # -----------------------------------------------------------------------------------
 
 # ------------------------------Kendi .cpp Dosyanı Derle-----------------------------
@@ -747,11 +1129,6 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
   cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=X11 -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_basic.cpp
   cmake --build build -j
   ./build/bin/knst_app
-
-  # Örnekleri de derle
-  cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=X11 -DKNST_BUILD_EXAMPLES=ON
-  cmake --build build -j
-  ./build/bin/knst_window_basic
 # -----------------------------------------------------------------------------------
 
 # ------------------------------------Wayland-----------------------------------------
@@ -790,11 +1167,6 @@ Bu satır yeterlidir: include klasörleri, platform makroları, X11/Wayland küt
   cmake -S . -B build -G Ninja -DKNST_LINUX_PLATFORM=Wayland -DKNST_WINDOW_USE_VULKAN=ON -DKNST_APP_SOURCE=examples/complex_structures/knst_window/pc/knst_window_vulkan_basic.cpp
   cmake --build build -j
   ./build/bin/knst_app
-# -----------------------------------------------------------------------------------
-
-# Tüm Örnekleri Derle
-  cmake -S . -B build -G Ninja -DKNST_BUILD_EXAMPLES=ON
-  cmake --build build
 # -----------------------------------------------------------------------------------
 ```
 
@@ -842,6 +1214,55 @@ Manuel CMake (sadece `.so` üretir — APK / install / logcat yok):
 
 ---
 
+### 🔹 İnternet (TLS / H2 / H3) Örnek Komutlar
+
+> **Önemli:** `-DKNST_NETWORK_ENABLE_TLS=ON` gibi flag **yoktur**. CMake otomatik algılar. Kapatmak için `KNST_NETWORK_DISABLE_*` kullanın.
+
+**Linux (Bash):**
+```bash
+# TLS + H2 + H3 (varsa) — otomatik
+# Sadece "OpenSSL + nghttp2 + quictls + ngtcp2 + nghttp3" kurulu olması yeterli
+cmake -S . -B build -G Ninja \
+  -DKNST_LINUX_PLATFORM=X11 \
+  -DKNST_APP_SOURCE=yol/network_demo.cpp
+cmake --build build -j
+./build/bin/knst_app
+
+# Çıktının sonunda: Network: TLS=TRUE H2=TRUE H3=TRUE
+```
+
+**Windows (vcpkg ile):**
+```powershell
+# vcpkg kurulu olmalı: C:\vcpkg
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+  "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+  "-DKNST_APP_SOURCE=yol/network_demo.cpp"
+cmake --build build --config Release
+build\bin\Release\knst_app.exe
+```
+
+**Android (FetchContent auto-build):**
+```bash
+cmake -S . -B build-android -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 \
+  -DKNST_APP_SOURCE=yol/network_demo.cpp
+cmake --build build-android
+# İlk seferde 10-15 dk (quictls kaynaktan derlenir), sonra hızlı
+```
+
+**Sadece TLS (H2/H3 kapat):**
+```bash
+cmake -S . -B build -DKNST_NETWORK_DISABLE_H2=ON -DKNST_NETWORK_DISABLE_H3=ON ...
+```
+
+**Network tamamen kapalı:**
+```bash
+cmake -S . -B build -DKNST_NETWORK_DISABLE_TLS=ON ...
+```
+
+---
+
 ### 📌 Kural Özeti
 
 | Kabuk | `-D...=.cpp` içeren argüman |
@@ -852,17 +1273,6 @@ Manuel CMake (sadece `.so` üretir — APK / install / logcat yok):
 | **MSYS2 UCRT64** | Tırnaklı da tırnaksız da olur, garanti için tırnakla |
 
 > **Neden?** PowerShell, `=` sonrası path içindeki `.` karakterini bazen ayrı argüman sanır. Çözüm: tüm `-D...=...` argümanını `"..."` içine al.
-
----
-
-# Changelog
-
-## v1.0.0 — Kararlı Sürüm
-
-Beta süreci bitti. Bu sürüm, kütüphanenin **ilk kararlı** hali. Tüm platformlarda (Windows, Linux X11, Linux Wayland, Linux Dual, Android) sızıntı testlerinden ve diğer testlerden geçildi, gerçek donanımda denendi. Beta sürümüne göre çok fazla teknik değişiklik yapıldı. Elimden gelenin en iyisini yapmaya çalıştım , aynı zamanda yorum satırları ve düzenin çok önemli şeyler olduğunun farkına vardım , ve her platformda bütün özellik testlerini ve sızıntı testlerini yapmanında ne kadar önemli olduğunu anladım 
-
-Anlık olarak bilgisiyarımda 2 farklı işletim sistemi , android geliştirme ortamı , linux (x11/wayland için birsürü masaüstü ortamı, özel olarak gnome 'title bar testi vs için') yani çok kapsamlı her platformda her koşulda testler yapıldı ve istediğim sonuç alınana kadar düzeltildi ve şimdi sizlerin karşısında hazır durumda `knst_window`
-
 
 ---
 

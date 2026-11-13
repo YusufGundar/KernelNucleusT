@@ -44,8 +44,7 @@ int main() {
 
     std::cout << "Boyut   : " << img.width << " x " << img.height << "\n";
     std::cout << "Kanallar: " << img.channels << "\n";
-    std::cout << "Format  : "
-              << knst_image_loader::format_name(img.source_format) << "\n";
+    std::cout << "Format  : " << knst_image_loader::format_name(img.source_format) << "\n";
 
     return 0;
 }

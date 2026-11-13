@@ -184,6 +184,10 @@ knst_c16string s = u"Hello World";
 knst_c16string sub   = s.substr(0, 5);    // "Hello"
 knst_c16string tail  = s.substr(6, 100);  // "World" (clamped)
 knst_c16string empty = s.substr(100);     // empty string
+
+// ⚠️ ATTENTION: The `count` parameter is REQUIRED — there is NO default value. 
+// If you write `s.substr(100)` using the `std::string::substr(pos)` habit, it WILL NOT COMPILE.
+
 ```
 
 ---
@@ -382,6 +386,9 @@ Small strings never hit the heap — they live inside a **union** in the class.
 | `KNST_C16STRING_ALIGN_32` | **14 characters** | `alignas(32)` |
 | `KNST_C16STRING_ALIGN_64` | **30 characters** | `alignas(64)` |
 
+> ⚠️ **Note:** These macros are defined in `knst_settings.hpp` and affect **`knst_c16string`, `knst_byte_string`, and other simple classes**—not just `knst_c16string`.
+
+
 **Example:** With the default setting, `knst_c16string(u"Hello")` (5 characters) never touches the heap.
 
 ### Which Setting Should You Choose?
@@ -463,8 +470,15 @@ knst_c16string s = u"ünïcödé";
 char* u8 = s.to_char();
 if (u8) {
     std::cout << u8 << "\n";
-    knst_default_allocator().deallocate(u8, std::strlen(u8) + 1);
+    // Correct size: UTF-16 → EXACT number of bytes of UTF-8 conversion + 1
+    uint32_t exact_bytes = knst_get_utf16_to_utf8_exact_byte_size(s.data(), s.length());
+    knst_default_allocator().deallocate(u8, exact_bytes + 1);
 }
+
+⚠️ `to_char()` returns the FULL UTF-8 size, even if it contains an embedded `\0`.
+DO NOT use `strlen(u8) + 1` for `deallocate` — this will cause a memory leak
+if the text contains an embedded null character. Instead, use:
+    knst_get_utf16_to_utf8_exact_byte_size(s.data(), s.length()) + 1
 
 // UTF-16 → wchar_t* (caller must free)
 wchar_t* w = s.to_wchar_alloc();

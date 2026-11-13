@@ -79,7 +79,7 @@ knst_definitions.hpp
             #include <android/log.h>
             #include <android_native_app_glue.h>
             #include <android/native_window.h>
-
+            
 
     #else
 
@@ -113,6 +113,23 @@ knst_definitions.hpp
 
            
        
-
+#if !defined(__ANDROID__)
+#  if defined(KNST_LOG_INFO)
+#    undef KNST_LOG_INFO
+#    define KNST_LOG_INFO(...)  do { std::fprintf(stderr, __VA_ARGS__); std::fputc('\n', stderr); } while(0)
+#  endif
+#  if defined(KNST_LOG_WARN)
+#    undef KNST_LOG_WARN
+#    define KNST_LOG_WARN(...)  do { std::fprintf(stderr, __VA_ARGS__); std::fputc('\n', stderr); } while(0)
+#  endif
+#  if defined(KNST_LOG_ERROR)
+#    undef KNST_LOG_ERROR
+#    define KNST_LOG_ERROR(...) do { std::fprintf(stderr, __VA_ARGS__); std::fputc('\n', stderr); } while(0)
+#  endif
+#  if defined(KNST_LOG_DEBUG)
+#    undef KNST_LOG_DEBUG
+#    define KNST_LOG_DEBUG(...) do { std::fprintf(stderr, __VA_ARGS__); std::fputc('\n', stderr); } while(0)
+#  endif
+#endif
 
 

@@ -15,7 +15,7 @@ knst_devices.hpp
 */
 
 #pragma once
-
+#include <cstdarg>
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -43,9 +43,12 @@ knst_devices.hpp
     #include <arpa/inet.h>
     #include <netinet/in.h>
     #include <sys/socket.h>
-    #if defined(__linux__)
+                #if defined(__linux__)
         #include <linux/ethtool.h>
         #include <linux/sockios.h>
+        #include <linux/netlink.h>
+        #include <linux/videodev2.h>
+        #include <sys/ioctl.h>
     #endif
 #else
     #ifndef WIN32_LEAN_AND_MEAN
@@ -61,11 +64,11 @@ knst_devices.hpp
     #include <mmdeviceapi.h>
     #include <functiondiscoverykeys_devpkey.h>
     #include <bluetoothapis.h>
-    #include <setupapi.h>
+        #include <setupapi.h>
     #include <devguid.h>
-    #include <initguid.h>
     #include <dshow.h>
     #include <wbemidl.h>
+    #include <wlanapi.h>
 
     #pragma comment(lib, "setupapi.lib")
     #pragma comment(lib, "bthprops.lib")
@@ -77,36 +80,20 @@ knst_devices.hpp
     #pragma comment(lib, "oleaut32.lib")
 
     #pragma comment(lib, "wbemuuid.lib")
+    #pragma comment(lib, "wlanapi.lib")
 #endif
 
 
 
-enum class knst_device_error : uint8_t {
-    None = 0,
-    NotFound,
-    PermissionDenied,
-    NotSupported,
-    ReadFailed,
-    ParseFailed,
-    ToolMissing,
-    Timeout,
-    Unknown
-};
 
-inline const char* knst_device_error_string(knst_device_error e) noexcept {
-    switch (e) {
-        case knst_device_error::None:             return "No error";
-        case knst_device_error::NotFound:         return "Not found";
-        case knst_device_error::PermissionDenied: return "Permission denied";
-        case knst_device_error::NotSupported:     return "Not supported";
-        case knst_device_error::ReadFailed:       return "Read failed";
-        case knst_device_error::ParseFailed:      return "Parse failed";
-        case knst_device_error::ToolMissing:      return "Required tool missing";
-        case knst_device_error::Timeout:          return "Timeout";
-        case knst_device_error::Unknown:          return "Unknown error";
-    }
-    return "Unknown error";
-}
+
+
+
+
+
+
+
+
 
 
 
@@ -131,7 +118,12 @@ enum class knst_battery_state : uint8_t {
 };
 
 enum class knst_sensor_type : uint8_t {
-    Unknown = 0, Temperature, Fan, Voltage, Current, Power, Humidity, Proximity, Light
+    Unknown = 0, Temperature, Fan, Voltage, Current, Power, Humidity, Proximity, Light,
+    // Android / mobile sensor types
+    Accelerometer, Gyroscope, Magnetometer, MagneticField,
+    Pressure, Gravity, LinearAcceleration, RotationVector,
+    StepCounter, StepDetector, HeartRate,
+    AmbientTemperature, RelativeHumidity
 };
 
 enum class knst_usb_class : uint8_t {
@@ -593,7 +585,7 @@ knst_system_info               system()      noexcept;
 knst_os_info                   os()          noexcept;
 knst_vector<knst_driver_info>  drivers()     noexcept;
 
-inline knst_device_error last_error() noexcept;
+
 
 knst_vector<knst_gpu_info>    gpus()                     noexcept;
 knst_vector<knst_gpu_process> gpu_processes()            noexcept;
@@ -613,16 +605,27 @@ namespace knst_devices {
 namespace detail {
 
 inline bool read_file(const char* path, char* buf, size_t sz) noexcept {
-    int fd = ::open(path, O_RDONLY);
+    if (!buf || sz < 2) return false;
+    int fd = ::open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return false;
-    ssize_t n = ::read(fd, buf, sz - 1);
+    size_t total = 0;
+    while (total < sz - 1) {
+        ssize_t n = ::read(fd, buf + total, sz - 1 - total);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            ::close(fd);
+            return false;
+        }
+        if (n == 0) break;
+        total += static_cast<size_t>(n);
+    }
     ::close(fd);
-    if (n <= 0) return false;
-    buf[n] = '\0';
-    while (n > 0 && (buf[n-1] == '\n' || buf[n-1] == '\r')) buf[--n] = '\0';
+    if (total == 0) return false;
+    buf[total] = '\0';
+    while (total > 0 && (buf[total-1] == '\n' || buf[total-1] == '\r'))
+        buf[--total] = '\0';
     return true;
 }
-
 inline bool read_file_u64(const char* path, uint64_t& out) noexcept {
     char buf[64];
     if (!read_file(path, buf, sizeof(buf))) return false;
@@ -734,7 +737,7 @@ inline knst_byte_string resolve_dm_slave_impl(const char* name, int depth) noexc
         if (se->d_name[0] == '.') continue;
         const char* slave = se->d_name;
 
-        // Another dm device? Recurse — this is the LUKS/LVM layering case.
+        // Another dm device? Recurse — LUKS/LVM layering.
         if (::strncmp(slave, "dm-", 3) == 0) {
             char subnamepath[256];
             char subname[128] = {0};
@@ -863,15 +866,14 @@ inline const dmi_cache_t& dmi_cache() noexcept {
         std::call_once(once, []() {
         auto r = tool("dmidecode", { "-q" }, 3000);
 
-        // dmidecode requires root on most systems. If it's unavailable or
-        // permission-denied, fall back to /sys/class/dmi/id/* — those files
-        // are world-readable on Linux and cover the common cases.
+        // dmidecode needs root on most systems. If unavailable, fall back
+        // to /sys/class/dmi/id/* — world-readable and covers common cases.
         if (!r) {
             auto load = [](const char* path, char* dst, size_t dst_sz) {
                 if (dst_sz == 0) return;
                 char tmp[256] = {0};
                 if (!read_file(path, tmp, sizeof(tmp))) return;
-                // Skip sentinel values that mean "not set" in DMI.
+                // Skip "not set" DMI sentinels.
                 if (::strcmp(tmp, "Not Specified") == 0) return;
                 if (::strcmp(tmp, "Not Present") == 0) return;
                 if (::strcmp(tmp, "To be filled by O.E.M.") == 0) return;
@@ -964,10 +966,8 @@ inline const dmi_cache_t& dmi_cache() noexcept {
             p = e + 1;
         }
 
-        // Even when dmidecode succeeds, some fields may still be empty
-        // (older dmidecode versions, VMs, restricted kernels). Fill any
-        // gaps from /sys/class/dmi/id/* — that file set is authoritative
-        // and world-readable.
+        // Some fields may still be empty after dmidecode (VMs, old versions).
+        // Fill gaps from /sys/class/dmi/id/* — that set is authoritative.
         auto fill_if_empty = [](char* dst, size_t dst_sz, const char* path) {
             if (dst_sz == 0 || dst[0] != '\0') return;
             char tmp[256] = {0};
@@ -1003,15 +1003,74 @@ inline const dmi_cache_t& dmi_cache() noexcept {
     return cache;
 }
 
-} // namespace detail
+// Maps a DMI chassis type code to a human-readable string (DMTF SMBIOS spec).
+inline knst_c16string chassis_type_name(int code) noexcept {
+    switch (code) {
+        case 1:  return u"Other";
+        case 2:  return u"Unknown";
+        case 3:  return u"Desktop";
+        case 4:  return u"Low Profile Desktop";
+        case 5:  return u"Pizza Box";
+        case 6:  return u"Mini Tower";
+        case 7:  return u"Tower";
+        case 8:  return u"Portable";
+        case 9:  return u"Laptop";
+        case 10: return u"Notebook";
+        case 11: return u"Hand Held";
+        case 12: return u"Docking Station";
+        case 13: return u"All In One";
+        case 14: return u"Sub Notebook";
+        case 15: return u"Space-saving";
+        case 16: return u"Lunch Box";
+        case 17: return u"Main Server Chassis";
+        case 18: return u"Expansion Chassis";
+        case 19: return u"Sub Chassis";
+        case 20: return u"Bus Expansion Chassis";
+        case 21: return u"Peripheral Chassis";
+        case 22: return u"RAID Chassis";
+        case 23: return u"Rack Mount Chassis";
+        case 24: return u"Sealed-case PC";
+        case 25: return u"Multi-system Chassis";
+        case 26: return u"CompactPCI";
+        case 27: return u"AdvancedTCA";
+        case 28: return u"Blade";
+        case 29: return u"Blade Enclosing";
+        case 30: return u"Tablet";
+        case 31: return u"Convertible";
+        case 32: return u"Detachable";
+        case 33: return u"IoT Gateway";
+        case 34: return u"Embedded PC";
+        case 35: return u"Mini PC";
+        case 36: return u"Stick PC";
+        default: return knst_c16string();
+    }
+}
 
+// If s is a bare DMI numeric code ("3", "9", "10"), replace with readable name.
+// Idempotent — text inputs are left untouched.
+inline void normalize_chassis_type(knst_c16string& s) noexcept {
+    if (s.empty() || s[0] < u'0' || s[0] > u'9') return;
+    int code = 0;
+    for (uint32_t i = 0; i < s.length(); ++i) {
+        char16_t c = s[i];
+        if (c < u'0' || c > u'9') break;
+        code = code * 10 + (c - u'0');
+    }
+    knst_c16string name = chassis_type_name(code);
+    if (!name.empty()) s = std::move(name);
+}
+
+} // namespace detail
 
 
 inline knst_cpu_info cpu() noexcept {
     knst_cpu_info c;
 
-    char buf[16384];
-    if (!detail::read_file("/proc/cpuinfo", buf, sizeof(buf))) return c;
+    // Large systems can produce long model names and flag lists.
+    // 256 KB heap buffer avoids stack overflow.
+    static thread_local std::vector<char> cpuinfo_buf(256 * 1024);
+    char* buf = cpuinfo_buf.data();
+    if (!detail::read_file("/proc/cpuinfo", buf, cpuinfo_buf.size())) return c;
 
 
     bool got_flags = false, got_stepping = false, got_microcode = false, got_vendor = false;
@@ -1034,11 +1093,32 @@ inline knst_cpu_info cpu() noexcept {
         else if (detail::split_kv(line, "model name", v)) {
             if (c.model_name.empty()) c.model_name = knst_c16string(v);
         }
+        else if (detail::split_kv(line, "Hardware", v)) {
+            if (c.model_name.empty()) c.model_name = knst_c16string(v);
+        }
+        else if (detail::split_kv(line, "Processor", v)) {
+            if (c.model_name.empty()) c.model_name = knst_c16string(v);
+        }
+        else if (detail::split_kv(line, "CPU implementer", v)) {
+            if (c.vendor.empty()) {
+                uint32_t impl = (uint32_t)::strtoul(v, nullptr, 0);
+                switch (impl) {
+                    case 0x41: c.vendor = u"ARM";          break;
+                    case 0x51: c.vendor = u"Qualcomm";     break;
+                    case 0x4D: c.vendor = u"Apple";        break;
+                    case 0x69: c.vendor = u"Intel";        break;
+                    case 0x53: c.vendor = u"Samsung";      break;
+                    case 0x61: c.vendor = u"Apple";        break;
+                    default:   c.vendor = u"Unknown";      break;
+                }
+            }
+        }
         else if (detail::split_kv(line, "cpu MHz", v)) {
             if (c.current_mhz == 0) c.current_mhz = (uint32_t)::atof(v);
         }
-        else if (detail::split_kv(line, "cache size", v)) {
-            if (c.cache_l3_kb == 0) { c.cache_l3_kb = (uint32_t)::atoi(v); c.has_cache = true; }
+                else if (detail::split_kv(line, "cache size", v)) {
+            // /proc/cpuinfo "cache size" is L2 (per core), not L3.
+            if (c.cache_l2_kb == 0) { c.cache_l2_kb = (uint32_t)::atoi(v); }
         }
         else if (detail::split_kv(line, "cpu cores", v)) {
             if (c.physical_cores == 0) c.physical_cores = (uint32_t)::atoi(v);
@@ -1077,11 +1157,13 @@ inline knst_cpu_info cpu() noexcept {
 
     long nproc = ::sysconf(_SC_NPROCESSORS_ONLN);
     c.logical_cores = nproc > 0 ? (uint32_t)nproc: (processor_markers_seen > 0 ? (uint32_t)processor_markers_seen : 1);
-                     
+
+    #if defined(KNST_USING_PLATFORM_ANDROID)
+        if (c.physical_cores == 0) c.physical_cores = c.logical_cores;
+    #endif
 
     if (c.logical_cores > 0 && c.physical_cores > 0 && c.logical_cores > c.physical_cores)
         c.has_hyperthreading = true;
-
     c.has_cores = (c.logical_cores > 0);
     c.has_frequency = true;
 
@@ -1097,6 +1179,33 @@ inline knst_cpu_info cpu() noexcept {
         uint64_t cur = 0;
         if (detail::read_file_u64("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", cur))
             c.current_mhz = (uint32_t)(cur / 1000);
+    }
+
+    {
+        // L1/L2/L3 sizes from sysfs (authoritative source).
+        for (int idx = 0; idx <= 3; ++idx) {
+            char p[128], lvlbuf[8] = {0};
+            ::snprintf(p, sizeof(p),
+                "/sys/devices/system/cpu/cpu0/cache/index%d/level", idx);
+            if (!detail::read_file(p, lvlbuf, sizeof(lvlbuf))) continue;
+            int lvl = ::atoi(lvlbuf);
+            if (lvl < 1 || lvl > 3) continue;
+
+            char szbuf[32] = {0};
+            ::snprintf(p, sizeof(p),
+                "/sys/devices/system/cpu/cpu0/cache/index%d/size", idx);
+            if (!detail::read_file(p, szbuf, sizeof(szbuf))) continue;
+
+            char* end = nullptr;
+            unsigned long kb = ::strtoul(szbuf, &end, 10);
+            if (end && (*end == 'M' || *end == 'm')) kb *= 1024;
+            else if (end && (*end == 'G' || *end == 'g')) kb *= 1024 * 1024;
+
+            if      (lvl == 1 && c.cache_l1_kb == 0) c.cache_l1_kb = (uint32_t)kb;
+            else if (lvl == 2 && c.cache_l2_kb == 0) c.cache_l2_kb = (uint32_t)kb;
+            else if (lvl == 3 && c.cache_l3_kb == 0) c.cache_l3_kb = (uint32_t)kb;
+        }
+        if (c.cache_l1_kb || c.cache_l2_kb || c.cache_l3_kb) c.has_cache = true;
     }
 
 
@@ -1139,23 +1248,35 @@ inline knst_cpu_info cpu() noexcept {
             s.irq=ir; s.softirq=si; s.steal=st;
             return true;
         };
-                stat_t s1, s2;
-        if (snap(s1)) {
 
-            struct timespec ts { 0, 20 * 1000 * 1000 };
-            ::nanosleep(&ts, nullptr);
-            if (snap(s2)) {
-                uint64_t idle1 = s1.idle + s1.iowait;
-                uint64_t idle2 = s2.idle + s2.iowait;
-                uint64_t tot1 = s1.user+s1.nice+s1.sys+s1.idle+s1.iowait+s1.irq+s1.softirq+s1.steal;
-                uint64_t tot2 = s2.user+s2.nice+s2.sys+s2.idle+s2.iowait+s2.irq+s2.softirq+s2.steal;
-                uint64_t dt = tot2 - tot1, di = idle2 - idle1;
-                if (dt > 0) {
-                    c.usage_percent = (uint32_t)(100ULL * (dt - di) / dt);
-                    c.has_usage = true;
+        // 20 ms sample window blocks per call — cache with 200 ms TTL.
+        static std::mutex s_mu;
+        static uint64_t   s_last_ns = 0;
+        static uint32_t   s_cached  = 0;
+
+        std::lock_guard<std::mutex> lk(s_mu);
+        struct timespec now_ts;
+        ::clock_gettime(CLOCK_MONOTONIC, &now_ts);
+        uint64_t now_ns = (uint64_t)now_ts.tv_sec * 1000000000ULL + (uint64_t)now_ts.tv_nsec;
+
+        if (s_last_ns == 0 || now_ns - s_last_ns >= 200ULL * 1000000ULL) {
+            stat_t s1, s2;
+            if (snap(s1)) {
+                struct timespec ts { 0, 20 * 1000 * 1000 };
+                ::nanosleep(&ts, nullptr);
+                if (snap(s2)) {
+                    uint64_t idle1 = s1.idle + s1.iowait;
+                    uint64_t idle2 = s2.idle + s2.iowait;
+                    uint64_t tot1 = s1.user+s1.nice+s1.sys+s1.idle+s1.iowait+s1.irq+s1.softirq+s1.steal;
+                    uint64_t tot2 = s2.user+s2.nice+s2.sys+s2.idle+s2.iowait+s2.irq+s2.softirq+s2.steal;
+                    uint64_t dt = tot2 - tot1, di = idle2 - idle1;
+                    if (dt > 0) s_cached = (uint32_t)(100ULL * (dt - di) / dt);
                 }
             }
+            s_last_ns = now_ns;
         }
+        c.usage_percent = s_cached;
+        c.has_usage     = true;
     }
 
     {
@@ -1214,7 +1335,7 @@ inline knst_cpu_info cpu() noexcept {
 }
 
 
-
+#if !defined(KNST_USING_PLATFORM_ANDROID)
 inline knst_motherboard_info motherboard() noexcept {
     knst_motherboard_info m;
     const auto& d = detail::dmi_cache();
@@ -1234,6 +1355,7 @@ inline knst_motherboard_info motherboard() noexcept {
     put(m.bios_version,   d.bios_version);
     put(m.bios_date,      d.bios_date);
     put(m.chassis_type,   d.chassis_type);
+    detail::normalize_chassis_type(m.chassis_type);
     put(m.chassis_serial, d.chassis_serial);
     put(m.uuid,           d.uuid);
 
@@ -1264,6 +1386,7 @@ inline knst_motherboard_info motherboard() noexcept {
     return m;
 }
 
+#endif // !KNST_USING_PLATFORM_ANDROID
 
 
 inline knst_memory_info memory() noexcept {
@@ -1273,8 +1396,7 @@ inline knst_memory_info memory() noexcept {
     if (!detail::read_file("/proc/meminfo", buf, sizeof(buf))) return m;
 
     // Parses one key from /proc/meminfo. Copies each line into a local
-    // buffer so that `buf` is never mutated — otherwise a second call
-    // would skip lines whose '\n' was replaced by '\0' in the first call.
+    // buffer so `buf` isn't mutated between calls.
     auto parse_kb = [&](const char* key) -> uint64_t {
         char* line = buf;
         while (*line) {
@@ -1310,7 +1432,13 @@ inline knst_memory_info memory() noexcept {
         m.swap_used = m.swap_total - m.swap_free;
         m.has_swap = true;
     }
-    m.used_bytes = m.total_bytes > m.available_bytes? m.total_bytes - m.available_bytes: m.total_bytes - m.free_bytes;
+        // MemAvailable exists on kernel 3.14+. Fall back to cache+buffers otherwise.
+    if (m.available_bytes > 0 && m.total_bytes > m.available_bytes) {
+        m.used_bytes = m.total_bytes - m.available_bytes;
+    } else {
+        uint64_t reclaimable = m.free_bytes + m.cached_bytes + m.buffers_bytes;
+        m.used_bytes = (m.total_bytes > reclaimable) ? (m.total_bytes - reclaimable) : 0;
+    }
                    
                    
 
@@ -1394,7 +1522,7 @@ inline knst_memory_info memory() noexcept {
 }
 
 
-
+#if !defined(KNST_USING_PLATFORM_ANDROID)
 inline knst_vector<knst_storage_info> storage() noexcept {
     knst_vector<knst_storage_info> out;
 
@@ -1406,8 +1534,8 @@ inline knst_vector<knst_storage_info> storage() noexcept {
             if (detail::starts_with(e->d_name, "loop")
                 || detail::starts_with(e->d_name, "ram")
                 || detail::starts_with(e->d_name, "zram")
-                || detail::starts_with(e->d_name, "dm-")
-                || detail::starts_with(e->d_name, "sr")) continue;
+                || detail::starts_with(e->d_name, "dm-")) continue;
+            // sr* (optical) is no longer skipped — reported as Optical.
 
             knst_storage_info s;
             s.device = knst_c16string("/dev/");
@@ -1440,7 +1568,23 @@ inline knst_vector<knst_storage_info> storage() noexcept {
             int64_t rm = 0;
             if (detail::read_file_i64(path, rm)) s.is_removable = (rm != 0);
 
-  
+            // Override type by device prefix — rotational heuristic is unreliable.
+            if (detail::starts_with(e->d_name, "sr")) {
+                s.type = knst_storage_type::Optical;
+                s.is_removable = true;
+            } else if (detail::starts_with(e->d_name, "md")) {
+                s.type = knst_storage_type::RAID;
+            } else if (detail::starts_with(e->d_name, "fd")) {
+                s.type = knst_storage_type::Floppy;
+                s.is_removable = true;
+            } else if (detail::starts_with(e->d_name, "mmcblk")) {
+                s.type = s.is_removable ? knst_storage_type::SD_Card
+                                        : knst_storage_type::eMMC;
+            } else if (s.is_removable && s.type != knst_storage_type::NVMe) {
+                // Removable sdX is almost always a USB bridge.
+                s.type = knst_storage_type::USB;
+            }
+
             if (s.type == knst_storage_type::NVMe) {
                 char p2[256];
                 ::snprintf(p2, sizeof(p2), "/sys/block/%s/device/hwmon", e->d_name);
@@ -1470,20 +1614,19 @@ inline knst_vector<knst_storage_info> storage() noexcept {
     }
 
 
-    char mbuf[16384];
-    if (detail::read_file("/proc/mounts", mbuf, sizeof(mbuf))) {
-        char* line = mbuf;
-        while (*line) {
-            char* eol = ::strchr(line, '\n');
-            if (eol) *eol = '\0';
+    FILE* mounts_f = ::fopen("/proc/mounts", "r");
+    if (mounts_f) {
+        char line[1024];
+        while (::fgets(line, sizeof(line), mounts_f)) {
+            size_t ll = ::strlen(line);
+            while (ll > 0 && (line[ll-1] == '\n' || line[ll-1] == '\r')) line[--ll] = '\0';
 
-                        char dev[256] = {0}, mnt[512] = {0}, fs[64] = {0};
+            char dev[256] = {0}, mnt[512] = {0}, fs[64] = {0};
             if (::sscanf(line, "%255s %511s %63s", dev, mnt, fs) == 3) {
                 knst_c16string devc(dev);
 
-                // Normalise /dev/mapper/NAME and /dev/dm-N to their
-                // underlying physical disk. Required for LVM, LUKS and
-                // RAID — used by Pop!_OS, Ubuntu, Fedora, etc.
+                // Normalize /dev/mapper/NAME and /dev/dm-N to the underlying
+                // physical disk — required for LVM, LUKS and RAID setups.
                 const char* mapped_name = nullptr;
                 if (::strncmp(dev, "/dev/mapper/", 12) == 0) {
                     mapped_name = dev + 12;
@@ -1538,9 +1681,8 @@ inline knst_vector<knst_storage_info> storage() noexcept {
                     }
                 }
             }
-            if (!eol) break;
-            line = eol + 1;
         }
+        ::fclose(mounts_f);
     }
 
         for (auto& s : out) {
@@ -1553,6 +1695,14 @@ inline knst_vector<knst_storage_info> storage() noexcept {
 
     return out;
 }
+#endif // !KNST_USING_PLATFORM_ANDROID
+
+#if defined(KNST_USING_PLATFORM_ANDROID)
+namespace detail_android {
+    // Implemented in the Android block at the bottom of this file.
+    void enrich_network_wifi(knst_vector<knst_network_info>& out) noexcept;
+}
+#endif
 
 inline knst_vector<knst_network_info> network() noexcept {
     knst_vector<knst_network_info> out;
@@ -1678,14 +1828,36 @@ inline knst_vector<knst_network_info> network() noexcept {
             }
         }
 
+        // Sysfs is blocked on Android (SELinux) — infer type from name
+        if (n.type == knst_net_type::Unknown) {
+            const knst_c16string& nm = n.name;
+            if (nm.contains(u"wlan") || nm.contains(u"wifi")
+                || nm.contains(u"p2p") || nm.contains(u"ap0")) {
+                n.type = knst_net_type::WiFi;
+                n.is_wireless = true;
+            } else if (nm.contains(u"rmnet") || nm.contains(u"ccmni")
+                       || nm.contains(u"wwan") || nm.contains(u"pdp_ip")) {
+                n.type = knst_net_type::Cellular;
+            } else if (nm.contains(u"bt-pan")) {
+                n.type = knst_net_type::Bluetooth;
+            } else if (nm.contains(u"eth")) {
+                n.type = knst_net_type::Ethernet;
+            } else if (nm.starts_with(u"r_") || nm.contains(u"dummy")) {
+                n.is_virtual = true;
+                n.type = knst_net_type::Virtual;
+            }
+        }
         n.valid = true;
     }
+
+#if defined(KNST_USING_PLATFORM_ANDROID)
+    detail_android::enrich_network_wifi(out);
+#endif
 
     return out;
 }
 
-
-
+#if !defined(KNST_USING_PLATFORM_ANDROID)
 inline knst_vector<knst_usb_info> usb() noexcept {
     knst_vector<knst_usb_info> out;
 
@@ -1695,6 +1867,8 @@ inline knst_vector<knst_usb_info> usb() noexcept {
     struct dirent* e;
     while ((e = ::readdir(d)) != nullptr) {
         if (e->d_name[0] == '.') continue;
+        // Skip interface nodes (1-1:1.0) — collect devices only.
+        if (::strchr(e->d_name, ':')) continue;
         if (!::strchr(e->d_name, '-') && ::strncmp(e->d_name, "usb", 3) != 0) continue;
 
         char path[256], buf[256];
@@ -1760,6 +1934,7 @@ inline knst_vector<knst_usb_info> usb() noexcept {
 }
 
 
+#endif // !KNST_USING_PLATFORM_ANDROID
 
 inline knst_vector<knst_pci_info> pci() noexcept {
     knst_vector<knst_pci_info> out;
@@ -1803,19 +1978,31 @@ inline knst_vector<knst_pci_info> pci() noexcept {
         int64_t numa = -1;
         if (detail::read_file_i64(path, numa)) info.numa_node = (int32_t)numa;
 
-        ::snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/current_link_speed", e->d_name);
-        if (detail::read_file(path, buf, sizeof(buf))) {
-            double gts = ::atof(buf);
-            if (gts >= 31.0)      info.pcie_gen = 5;
-            else if (gts >= 15.0) info.pcie_gen = 4;
-            else if (gts >= 7.0)  info.pcie_gen = 3;
-            else if (gts >= 4.5)  info.pcie_gen = 2;
-            else if (gts > 0.0)   info.pcie_gen = 1;
-        }
-
-        ::snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/current_link_width", e->d_name);
-        uint64_t width = 0;
-        if (detail::read_file_u64(path, width)) info.pcie_width = (uint32_t)width;
+        // Prefer max_* (capability) over current_* — ASPM powers the link
+        // down to Gen1 when idle, so current readings are misleading.
+        auto read_gen = [&](const char* attr) -> uint32_t {
+            char p2[256], b2[64];
+            ::snprintf(p2, sizeof(p2), "/sys/bus/pci/devices/%s/%s", e->d_name, attr);
+            if (!detail::read_file(p2, b2, sizeof(b2))) return 0;
+            double gts = ::atof(b2);
+            if (gts >= 31.0) return 5;
+            if (gts >= 15.0) return 4;
+            if (gts >= 7.0)  return 3;
+            if (gts >= 4.5)  return 2;
+            if (gts > 0.0)   return 1;
+            return 0;
+        };
+        auto read_width = [&](const char* attr) -> uint32_t {
+            char p2[256];
+            uint64_t w = 0;
+            ::snprintf(p2, sizeof(p2), "/sys/bus/pci/devices/%s/%s", e->d_name, attr);
+            if (!detail::read_file_u64(p2, w)) return 0;
+            return (uint32_t)w;
+        };
+        info.pcie_gen   = read_gen("max_link_speed");
+        if (!info.pcie_gen) info.pcie_gen = read_gen("current_link_speed");
+        info.pcie_width = read_width("max_link_width");
+        if (!info.pcie_width) info.pcie_width = read_width("current_link_width");
 
         ::snprintf(path, sizeof(path), "/sys/bus/pci/devices/%s/power_state", e->d_name);
         if (detail::read_file(path, buf, sizeof(buf))) {
@@ -1832,44 +2019,77 @@ inline knst_vector<knst_pci_info> pci() noexcept {
     ::closedir(d);
 
 
-    auto r = detail::tool("lspci", { "-mm", "-nn" }, 3000);
+        // Parse `lspci -vmm -nn` — key: value blocks separated by blank lines.
+    // More robust than -mm: multi-function slots, domains and long names
+    // with special chars all parse cleanly.
+    auto r = detail::tool("lspci", { "-vmm", "-nn" }, 3000);
     if (r) {
+        unsigned cur_dom = 0, cur_bus = 0, cur_slot = 0, cur_func = 0;
+        bool     have_slot = false;
+        char     classbuf[256] = {0};
+        char     vendorbuf[256] = {0};
+        char     devbuf[256]   = {0};
+
+        auto flush = [&]() {
+            if (!have_slot) return;
+            for (auto& info : out) {
+                if (info.bus == cur_bus && info.slot == cur_slot &&
+                    info.function == cur_func &&
+                    (cur_dom == 0 || info.domain == cur_dom)) {
+                    if (classbuf[0] && info.class_name.empty())
+                        info.class_name = knst_c16string(classbuf);
+                    if (vendorbuf[0] && info.vendor_name.empty())
+                        info.vendor_name = knst_c16string(vendorbuf);
+                    if (devbuf[0] && info.device_name.empty())
+                        info.device_name = knst_c16string(devbuf);
+                    break;
+                }
+            }
+            have_slot = false;
+            classbuf[0] = vendorbuf[0] = devbuf[0] = '\0';
+        };
+
         const char* p = r.c_str();
         while (*p) {
             const char* e2 = ::strchr(p, '\n');
-            if (!e2) break;
+            size_t len = e2 ? (size_t)(e2 - p) : ::strlen(p);
             char line[512];
-            size_t l = (size_t)(e2 - p);
-            if (l >= sizeof(line)) l = sizeof(line) - 1;
-            ::memcpy(line, p, l); line[l] = '\0';
+            if (len >= sizeof(line)) len = sizeof(line) - 1;
+            ::memcpy(line, p, len); line[len] = '\0';
 
-            unsigned bus, slot, func;
-            if (::sscanf(line, "%x:%x.%x", &bus, &slot, &func) == 3) {
-                char classbuf[256] = {0}, vendorbuf[256] = {0}, devbuf[256] = {0};
-                const char* q = line;
-                int idx = 0;
-                while ((q = ::strchr(q, '"')) != nullptr && idx < 3) {
-                    q++;
-                    const char* qe = ::strchr(q, '"');
-                    if (!qe) break;
-                    size_t fl = (size_t)(qe - q);
-                    if (fl > 255) fl = 255;
-                    char* dst = (idx == 0) ? classbuf : (idx == 1) ? vendorbuf : devbuf;
-                    ::memcpy(dst, q, fl); dst[fl] = '\0';
-                    idx++;
-                    q = qe + 1;
+            if (line[0] == '\0') {
+                flush();
+            } else if (::strncmp(line, "Slot:", 5) == 0) {
+                const char* v = line + 5;
+                while (*v == ' ' || *v == '\t') ++v;
+                int n = ::sscanf(v, "%x:%x:%x.%x", &cur_dom, &cur_bus, &cur_slot, &cur_func);
+                if (n != 4) {
+                    n = ::sscanf(v, "%x:%x.%x", &cur_bus, &cur_slot, &cur_func);
+                    cur_dom = 0;
                 }
-                for (auto& info : out) {
-                    if (info.bus == bus && info.slot == slot && info.function == func) {
-                        if (classbuf[0]) info.class_name = knst_c16string(classbuf);
-                        if (vendorbuf[0]) info.vendor_name = knst_c16string(vendorbuf);
-                        if (devbuf[0]) info.device_name = knst_c16string(devbuf);
-                        break;
-                    }
-                }
+                if (n >= 3) have_slot = true;
+            } else if (::strncmp(line, "Class:", 6) == 0) {
+                const char* v = line + 6;
+                while (*v == ' ' || *v == '\t') ++v;
+                ::snprintf(classbuf, sizeof(classbuf), "%s", v);
+            } else if (::strncmp(line, "SVendor:", 8) == 0) {
+                // Subsystem vendor — skip, want primary vendor
+            } else if (::strncmp(line, "Vendor:", 7) == 0) {
+                const char* v = line + 7;
+                while (*v == ' ' || *v == '\t') ++v;
+                ::snprintf(vendorbuf, sizeof(vendorbuf), "%s", v);
+            } else if (::strncmp(line, "SDevice:", 8) == 0) {
+                // Subsystem device — skip, want primary device
+            } else if (::strncmp(line, "Device:", 7) == 0) {
+                const char* v = line + 7;
+                while (*v == ' ' || *v == '\t') ++v;
+                ::snprintf(devbuf, sizeof(devbuf), "%s", v);
             }
+
+            if (!e2) break;
             p = e2 + 1;
         }
+        flush();
     }
 
     return out;
@@ -2130,7 +2350,7 @@ inline knst_vector<knst_input_info> input() noexcept {
                     i.type = knst_input_type::Keyboard;
                     classified_by_name = true;
                 }
-                // yea my keybloard is logitech and my mouse :)
+                // Logitech peripherals lack usable HID descriptors — match by name prefix.
                 else if (detail::contains_ci(name_c, "logitech k")
                       || detail::contains_ci(name_c, "logitech k5")
                       || detail::contains_ci(name_c, "logitech k3")
@@ -2224,23 +2444,40 @@ inline knst_vector<knst_input_info> input() noexcept {
 }
 
 
-
+#if !defined(KNST_USING_PLATFORM_ANDROID)
 inline knst_audio_info audio() noexcept {
     knst_audio_info a;
 
-    // Fast path: no PulseAudio socket → nothing to query.
+    // Fast path: check for PulseAudio or PipeWire socket.
+    // Modern distros use PipeWire behind pactl — check both sockets.
     {
-        char pulse_sock[128];
+        char pulse_sock[128], pipewire_sock[128];
         ::snprintf(pulse_sock, sizeof(pulse_sock),
                    "/run/user/%u/pulse/native", (unsigned)::getuid());
+        ::snprintf(pipewire_sock, sizeof(pipewire_sock),
+                   "/run/user/%u/pipewire-0", (unsigned)::getuid());
         struct stat st;
-        if (::stat(pulse_sock, &st) != 0) { a.valid = true; return a; }
+        bool has_pulse    = (::stat(pulse_sock, &st) == 0);
+        bool has_pipewire = (::stat(pipewire_sock, &st) == 0);
+        if (!has_pulse && !has_pipewire) { a.valid = true; return a; }
     }
 
+    // Fetch default sink/source once — used below to flag devices.
+    auto ds = detail::tool("pactl", { "get-default-sink" }, 1000);
+    if (ds) a.default_sink = knst_c16string(ds.c_str());
+    auto dsrc = detail::tool("pactl", { "get-default-source" }, 1000);
+    if (dsrc) a.default_source = knst_c16string(dsrc.c_str());
+
+    // Parse `pactl list <kind>` (LONG format) — Name, Description and index
+    // come back in a single call.
     auto parse = [&](const char* kind, bool is_input) {
-        auto r = detail::tool("pactl", { "list", "short", kind }, 2000);
+        auto r = detail::tool("pactl", { "list", kind }, 3000);
         if (!r) return;
+
         const char* p = r.c_str();
+        knst_audio_device cur;
+        bool in_device = false;
+
         while (*p) {
             const char* e = ::strchr(p, '\n');
             if (!e) break;
@@ -2249,40 +2486,59 @@ inline knst_audio_info audio() noexcept {
             if (l >= sizeof(line)) l = sizeof(line) - 1;
             ::memcpy(line, p, l); line[l] = '\0';
 
-            unsigned idx;
-            char name[256] = {0};
-            if (::sscanf(line, "%u\t%255s", &idx, name) == 2) {
-                knst_audio_device dv;
-                dv.index = idx;
-                dv.name = knst_c16string(name);
-                dv.is_input = is_input;
-                dv.is_output = !is_input;
-                dv.valid = true;
-                a.devices.push_back(dv);
+            const char* content = line;
+            while (*content == '\t' || *content == ' ') ++content;
+
+            // New device block: "Sink #46" / "Source #46"
+            if ((::strncmp(content, "Sink #",   6) == 0) ||
+                (::strncmp(content, "Source #", 8) == 0)) {
+                if (in_device && cur.valid) a.devices.push_back(cur);
+                cur = knst_audio_device();
+                const char* hash = ::strrchr(content, '#');
+                if (hash) cur.index = (uint32_t)::strtoul(hash + 1, nullptr, 10);
+                cur.is_input  = is_input;
+                cur.is_output = !is_input;
+                in_device = true;
+            } else if (in_device) {
+                const char* v = nullptr;
+                if (detail::split_kv(content, "Name", v)) {
+                    cur.name = knst_c16string(v);
+                    cur.valid = true;
+                } else if (detail::split_kv(content, "Description", v)) {
+                    cur.description = knst_c16string(v);
+                }
             }
+
             p = e + 1;
         }
+        if (in_device && cur.valid) a.devices.push_back(cur);
     };
 
-    parse("sinks", false);
+    parse("sinks",   false);
     parse("sources", true);
 
-    auto ds = detail::tool("pactl", { "get-default-sink" }, 1000);
-    if (ds) a.default_sink = knst_c16string(ds.c_str());
-    auto dsrc = detail::tool("pactl", { "get-default-source" }, 1000);
-    if (dsrc) a.default_source = knst_c16string(dsrc.c_str());
+    // Mark defaults now that both the device list and default names exist.
+    for (uint32_t i = 0; i < a.devices.size(); ++i) {
+        if (!a.devices[i].is_input && a.devices[i].name == a.default_sink)
+            a.devices[i].is_default = true;
+        if ( a.devices[i].is_input && a.devices[i].name == a.default_source)
+            a.devices[i].is_default = true;
+    }
 
     a.valid = true;
     return a;
 }
 
-
-
+#endif // !KNST_USING_PLATFORM_ANDROID
+#if !defined(KNST_USING_PLATFORM_ANDROID)
 inline knst_power_info power() noexcept {
     knst_power_info p;
 
     DIR* d = ::opendir("/sys/class/power_supply");
     if (!d) return p;
+
+    bool ac_seen = false;   // AC adapter present
+    bool ac_on   = false;   // AC connected
 
     struct dirent* e;
     while ((e = ::readdir(d)) != nullptr) {
@@ -2295,10 +2551,21 @@ inline knst_power_info power() noexcept {
         ::snprintf(path, sizeof(path), "/sys/class/power_supply/%s/type", name_c);
         if (!detail::read_file(path, buf, sizeof(buf))) continue;
 
-        if (::strcmp(buf, "Battery") == 0) {
+                if (::strcmp(buf, "Battery") == 0) {
+            // Skip peripheral batteries (HID wireless mice/keyboards).
+            // If scope file exists and isn't "System", it's a peripheral.
+            // Older kernels lack scope file — treat as valid.
+            char scope_path[256], scope_buf[32] = {0};
+            ::snprintf(scope_path, sizeof(scope_path),
+                       "/sys/class/power_supply/%s/scope", name_c);
+            if (detail::read_file(scope_path, scope_buf, sizeof(scope_buf))
+                && scope_buf[0] != '\0'
+                && ::strcmp(scope_buf, "System") != 0) {
+                continue;
+            }
+
             knst_battery_info b;
             b.name = knst_c16string(e->d_name);
-            p.has_battery = true;
 
             ::snprintf(path, sizeof(path), "/sys/class/power_supply/%s/capacity", name_c);
             uint64_t cap = 0;
@@ -2356,12 +2623,18 @@ inline knst_power_info power() noexcept {
             ::snprintf(path, sizeof(path), "/sys/class/power_supply/%s/online", name_c);
             uint64_t on = 0;
             if (detail::read_file_u64(path, on)) {
-                if (on) p.ac_connected = true;
-                for (auto& b : p.batteries) b.ac_online = (on != 0);
+                ac_seen = true;
+                if (on) { p.ac_connected = true; ac_on = true; }
             }
         }
     }
     ::closedir(d);
+
+    // readdir order isn't guaranteed — AC may be read after BAT0.
+    // Propagate ac_online after all batteries are collected.
+    if (ac_seen) {
+        for (auto& b : p.batteries) b.ac_online = ac_on;
+    }
 
     p.valid = true;
     return p;
@@ -2448,10 +2721,9 @@ inline knst_vector<knst_sensor_info> sensors() noexcept {
 inline knst_bluetooth_info bluetooth() noexcept {
     knst_bluetooth_info b;
 
-    // Fast path: no Bluetooth adapter at all → skip the slow tool calls.
+    // Fast path: no adapter — skip the slow tool calls.
     // /sys/class/bluetooth has one entry per adapter (hci0, hci1, ...).
-    // If the directory is missing or empty, bluetoothctl would just
-    // wait for a D-Bus reply that never comes.
+    // If the dir is missing or empty, bluetoothctl would just hang on D-Bus.
     {
         DIR* bd = ::opendir("/sys/class/bluetooth");
         if (!bd) { b.valid = true; return b; }
@@ -2524,7 +2796,6 @@ inline knst_bluetooth_info bluetooth() noexcept {
 }
 
 
-
 inline knst_vector<knst_camera_info> cameras() noexcept {
     knst_vector<knst_camera_info> out;
 
@@ -2535,9 +2806,33 @@ inline knst_vector<knst_camera_info> cameras() noexcept {
     while ((e = ::readdir(d)) != nullptr) {
         if (e->d_name[0] == '.') continue;
 
+        // UVC webcams expose two nodes: capture (videoN) and metadata (videoN+1).
+        // Only capture nodes are cameras.
+        char dev_path[64];
+        ::snprintf(dev_path, sizeof(dev_path), "/dev/%s", e->d_name);
+
+        int vfd = ::open(dev_path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+        if (vfd < 0) vfd = ::open(dev_path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (vfd < 0) continue;
+
+        bool has_capture = false;
+        {
+            struct v4l2_capability vcap;
+            ::memset(&vcap, 0, sizeof(vcap));
+            int rc;
+            do { rc = ::ioctl(vfd, VIDIOC_QUERYCAP, &vcap); }
+            while (rc < 0 && errno == EINTR);
+            if (rc == 0) {
+                uint32_t caps = (vcap.capabilities & V4L2_CAP_DEVICE_CAPS)
+                                ? vcap.device_caps : vcap.capabilities;
+                has_capture = (caps & V4L2_CAP_VIDEO_CAPTURE) != 0;
+            }
+        }
+        ::close(vfd);
+        if (!has_capture) continue;
+
         knst_camera_info c;
-        c.device_path = knst_c16string("/dev/");
-        c.device_path.append((const char*)e->d_name);
+        c.device_path = knst_c16string(dev_path);
 
         char path[256], buf[256];
         ::snprintf(path, sizeof(path), "/sys/class/video4linux/%s/name", e->d_name);
@@ -2551,11 +2846,10 @@ inline knst_vector<knst_camera_info> cameras() noexcept {
 }
 
 
-
 inline knst_vector<knst_printer_info> printers() noexcept {
     knst_vector<knst_printer_info> out;
 
-    // Fast path: no CUPS socket → nothing to query.
+    // Fast path: no CUPS socket — nothing to query.
     {
         struct stat st;
         if (::stat("/run/cups/cups.sock", &st) != 0 &&
@@ -2626,60 +2920,39 @@ inline knst_system_info system() noexcept {
     put(s.chassis_serial, d.chassis_serial);
     put(s.asset_tag,      d.asset_tag);
 
-    // DMI chassis_type is numeric on the sysfs fallback path. Map it to
-    // readable text so both sources (dmidecode / sysfs) produce the same
-    // string. If dmidecode already returned text, the first char won't
-    // be a digit and this block is skipped.
-    if (!s.chassis_type.empty() && s.chassis_type[0] >= u'0' && s.chassis_type[0] <= u'9') {
-        int code = 0;
-        for (uint32_t i = 0; i < s.chassis_type.length(); ++i) {
-            char16_t c = s.chassis_type[i];
-            if (c < u'0' || c > u'9') break;
-            code = code * 10 + (c - u'0');
-        }
-        switch (code) {
-            case 1:  s.chassis_type = u"Other";                break;
-            case 2:  s.chassis_type = u"Unknown";              break;
-            case 3:  s.chassis_type = u"Desktop";              break;
-            case 4:  s.chassis_type = u"Low Profile Desktop";  break;
-            case 5:  s.chassis_type = u"Pizza Box";            break;
-            case 6:  s.chassis_type = u"Mini Tower";           break;
-            case 7:  s.chassis_type = u"Tower";                break;
-            case 8:  s.chassis_type = u"Portable";             break;
-            case 9:  s.chassis_type = u"Laptop";               break;
-            case 10: s.chassis_type = u"Notebook";             break;
-            case 11: s.chassis_type = u"Hand Held";            break;
-            case 12: s.chassis_type = u"Docking Station";      break;
-            case 13: s.chassis_type = u"All In One";           break;
-            case 14: s.chassis_type = u"Sub Notebook";         break;
-            case 15: s.chassis_type = u"Space-saving";         break;
-            case 16: s.chassis_type = u"Lunch Box";            break;
-            case 17: s.chassis_type = u"Main Server Chassis";  break;
-            case 18: s.chassis_type = u"Expansion Chassis";    break;
-            case 19: s.chassis_type = u"Sub Chassis";          break;
-            case 20: s.chassis_type = u"Bus Expansion Chassis";break;
-            case 21: s.chassis_type = u"Peripheral Chassis";   break;
-            case 22: s.chassis_type = u"RAID Chassis";         break;
-            case 23: s.chassis_type = u"Rack Mount Chassis";   break;
-            case 24: s.chassis_type = u"Sealed-case PC";       break;
-            default: break;   // leave the raw code
-        }
-    }
-
-       if (s.manufacturer == knst_c16string("QEMU")
-        || s.manufacturer == knst_c16string("VMware, Inc.")
-        || s.manufacturer == knst_c16string("innotek GmbH")
-        || s.manufacturer == knst_c16string("Microsoft Corporation")
+    // DMI chassis_type is numeric on the sysfs fallback. Map to readable
+    // text so both sources produce the same string. If dmidecode already
+    // returned text, the first char isn't a digit and this is a no-op.
+        detail::normalize_chassis_type(s.chassis_type);
+    // "Microsoft Corporation" alone matches Surface devices,
+    // so Hyper-V is also checked via product_name.
+    if (s.manufacturer == u"QEMU"
+        || s.manufacturer == u"VMware, Inc."
+        || s.manufacturer == u"innotek GmbH"
+        || s.manufacturer == u"Xen"
+        || s.manufacturer == u"Amazon EC2"
+        || s.manufacturer == u"Google"
+        || s.manufacturer == u"OpenStack Foundation"
+        || s.manufacturer == u"Oracle Corporation"
+        || s.manufacturer == u"Parallels Software International Inc."
+        || s.manufacturer == u"DigitalOcean"
         || s.product_name.contains(u"VirtualBox")
-        || s.product_name.contains(u"VMware"))
+        || s.product_name.contains(u"VMware")
+        || s.product_name.contains(u"Virtual Machine")
+        || s.product_name.contains(u"KVM")
+        || s.product_name.contains(u"Bochs")
+        || s.product_name.contains(u"Xen HVM")) {
         s.is_virtual_machine = true;
+    }
 
     if (s.chassis_type == u"Portable"
         || s.chassis_type == u"Laptop"
         || s.chassis_type == u"Notebook"
         || s.chassis_type == u"Sub Notebook"
         || s.chassis_type == u"Hand Held"
-        || s.chassis_type == u"Convertible") {
+        || s.chassis_type == u"Convertible"
+        || s.chassis_type == u"Tablet"
+        || s.chassis_type == u"Detachable") {
         s.is_laptop = true;
     }
 
@@ -2775,17 +3048,18 @@ inline knst_os_info os() noexcept {
 }
 
 
+#endif // !KNST_USING_PLATFORM_ANDROID
 
 inline knst_vector<knst_driver_info> drivers() noexcept {
     knst_vector<knst_driver_info> out;
 
-    char buf[32768];
-    if (!detail::read_file("/proc/modules", buf, sizeof(buf))) return out;
+    FILE* mod_f = ::fopen("/proc/modules", "r");
+    if (!mod_f) return out;
 
-    char* line = buf;
-    while (*line) {
-        char* e = ::strchr(line, '\n');
-        if (e) *e = '\0';
+    char line[1024];
+    while (::fgets(line, sizeof(line), mod_f)) {
+        size_t ll = ::strlen(line);
+        while (ll > 0 && (line[ll-1] == '\n' || line[ll-1] == '\r')) line[--ll] = '\0';
 
         char name[128] = {0};
         unsigned long size = 0;
@@ -2815,9 +3089,8 @@ inline knst_vector<knst_driver_info> drivers() noexcept {
             out.push_back(d);
         }
 
-        if (!e) break;
-        line = e + 1;
     }
+    ::fclose(mod_f);
 
     return out;
 }
@@ -2884,7 +3157,7 @@ inline knst_byte_string wmi_query(const char* cls,
     }
     cmd.append(u" | Select-Object ");
     cmd.append(props);
-    cmd.append(u" | ConvertTo-Csv -NoTypeInformation");
+    cmd.append(u" | ConvertTo-Csv -NoTypeInformation -Delimiter ','");
         auto r = knst_process::run_capture(
         u"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
         { u"-NoProfile", u"-NonInteractive", u"-Command", cmd },
@@ -2946,60 +3219,87 @@ inline bool first_data_row(const knst_byte_string& data, char* line, size_t line
 
 
 inline void enrich_wireless(knst_vector<knst_network_info>& out) noexcept {
-    auto r = knst_process::run_capture(u"netsh.exe",
-        { u"wlan", u"show", u"interfaces" }, {}, nullptr, 0, 3000);
-    if (r.error != knst_process_error::None || r.exit_code != 0) return;
-    if (r.out_data.empty()) return;
+    // netsh output is localized — WLAN API gives structured, language-free data.
+    HANDLE hClient = nullptr;
+    DWORD dwMaxClient = 2, dwCurVersion = 0;
+    if (::WlanOpenHandle(dwMaxClient, nullptr, &dwCurVersion, &hClient) != ERROR_SUCCESS)
+        return;
 
-    const char* p = (const char*)r.out_data.data();
-    knst_network_info* cur = nullptr;
+    PWLAN_INTERFACE_INFO_LIST ifList = nullptr;
+    if (::WlanEnumInterfaces(hClient, nullptr, &ifList) != ERROR_SUCCESS) {
+        ::WlanCloseHandle(hClient, nullptr);
+        return;
+    }
 
-    while (p && *p) {
-        const char* e = ::strchr(p, '\n');
-        size_t len = e ? (size_t)(e - p) : ::strlen(p);
-        char line[512];
-        if (len >= sizeof(line)) len = sizeof(line) - 1;
-        ::memcpy(line, p, len); line[len] = '\0';
+    for (DWORD i = 0; i < ifList->dwNumberOfItems; ++i) {
+        const WLAN_INTERFACE_INFO& ii = ifList->InterfaceInfo[i];
+        if (ii.isState != wlan_interface_state_connected) continue;
 
-        size_t ll = ::strlen(line);
-        while (ll > 0 && (line[ll-1] == '\r' || line[ll-1] == ' ')) line[--ll] = '\0';
+        // Match against description or name
+        knst_network_info* cur = nullptr;
+        knst_c16string if_desc(reinterpret_cast<const char16_t*>(ii.strInterfaceDescription));
+        for (auto& n : out) {
+            if (n.description == if_desc || n.name == if_desc) { cur = &n; break; }
+        }
+        if (!cur) continue;
 
-        char* content = line;
-        while (*content == ' ') ++content;
+        cur->is_wireless = true;
+        cur->type = knst_net_type::WiFi;
 
-        const char* colon = ::strchr(content, ':');
-        if (colon) {
-            char key[64] = {0};
-            size_t kl = (size_t)(colon - content);
-            while (kl > 0 && content[kl-1] == ' ') --kl;
-            if (kl >= sizeof(key)) kl = sizeof(key) - 1;
-            ::memcpy(key, content, kl); key[kl] = '\0';
+        DWORD dataSize = 0;
+        PWLAN_CONNECTION_ATTRIBUTES attrs = nullptr;
+        WLAN_OPCODE_VALUE_TYPE opType;
 
-            const char* v = colon + 1;
-            while (*v == ' ') ++v;
-
-            if (::strcmp(key, "Name") == 0) {
-                cur = nullptr;
-                for (auto& n : out) {
-                    if (n.name == knst_c16string(v)) { cur = &n; break; }
-                }
-                if (cur) { cur->is_wireless = true; cur->type = knst_net_type::WiFi; }
-            }
-            else if (cur && ::strcmp(key, "SSID") == 0) {
-                cur->ssid = knst_c16string(v);
+        if (::WlanQueryInterface(hClient, &ii.InterfaceGuid,
+                                 wlan_intf_opcode_current_connection,
+                                 nullptr, &dataSize,
+                                 reinterpret_cast<PVOID*>(&attrs), &opType) == ERROR_SUCCESS) {
+            // SSID (binary → string)
+            DWORD slen = attrs->wlanAssociationAttributes.dot11Ssid.uSSIDLength;
+            if (slen > 0) {
+                if (slen > 32) slen = 32;
+                char ssid[33] = {0};
+                ::memcpy(ssid, attrs->wlanAssociationAttributes.dot11Ssid.ucSSID, slen);
+                cur->ssid = knst_c16string(ssid);
                 cur->has_wifi = true;
             }
-            else if (cur && ::strcmp(key, "Channel") == 0) {
-                cur->channel = (uint32_t)::atoi(v);
-            }
-            else if (cur && ::strcmp(key, "Authentication") == 0) {
-                cur->security = knst_c16string(v);
-            }
-        }
+            // Signal quality % → rough dBm
+            uint32_t q = attrs->wlanAssociationAttributes.wlanSignalQuality;
+            cur->signal_dbm = static_cast<int32_t>(q) / 2 - 100;
 
-        if (!e) break;
-        p = e + 1;
+            // Channel
+            DWORD chSize = 0; PULONG pCh = nullptr;
+            if (::WlanQueryInterface(hClient, &ii.InterfaceGuid,
+                                     wlan_intf_opcode_channel_number,
+                                     nullptr, &chSize,
+                                     reinterpret_cast<PVOID*>(&pCh), &opType) == ERROR_SUCCESS) {
+                cur->channel = static_cast<uint32_t>(*pCh);
+                ::WlanFreeMemory(pCh);
+            }
+            // Channel → frequency
+            if (cur->channel >= 1 && cur->channel <= 14)
+                cur->frequency_mhz = 2407 + cur->channel * 5;
+            else if (cur->channel >= 32 && cur->channel <= 177)
+                cur->frequency_mhz = 5000 + cur->channel * 5;
+
+            // Security
+            switch (attrs->wlanSecurityAttributes.dot11AuthAlgorithm) {
+                case DOT11_AUTH_ALGO_80211_OPEN:        cur->security = u"Open";     break;
+                case DOT11_AUTH_ALGO_80211_SHARED_KEY:  cur->security = u"WEP";      break;
+                case DOT11_AUTH_ALGO_WPA:               cur->security = u"WPA";      break;
+                case DOT11_AUTH_ALGO_WPA_PSK:           cur->security = u"WPA-PSK";  break;
+                case DOT11_AUTH_ALGO_WPA_NONE:          cur->security = u"WPA-None"; break;
+                case DOT11_AUTH_ALGO_RSNA:              cur->security = u"WPA2";     break;
+                case DOT11_AUTH_ALGO_RSNA_PSK:          cur->security = u"WPA2-PSK"; break;
+                default:                                cur->security = u"Unknown";  break;
+            }
+
+            ::WlanFreeMemory(attrs);
+        }
     }
+
+    ::WlanFreeMemory(ifList);
+    ::WlanCloseHandle(hClient, nullptr);
 }
 
 // ============================================================
@@ -3013,7 +3313,7 @@ inline knst_byte_string wmi_query_ns(const char* ns, const char* cls,const char*
     cmd.append(knst_c16string(cls));
     cmd.append(u" | Select-Object ");
     cmd.append(knst_c16string(props));
-    cmd.append(u" | ConvertTo-Csv -NoTypeInformation");
+    cmd.append(u" | ConvertTo-Csv -NoTypeInformation -Delimiter ','");
     auto r = knst_process::run_capture(
         u"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
         { u"-NoProfile", u"-NonInteractive", u"-Command", cmd },
@@ -3032,8 +3332,8 @@ inline knst_byte_string wmi_monitor_id_query() noexcept {
     cmd.append(u"@{N='ManufacturerName';E={-join ($_.ManufacturerName | Where-Object {$_ -ne 0} | ForEach-Object {[char]$_})}},");
     cmd.append(u"ProductCodeID,");
     cmd.append(u"@{N='SerialNumberID';E={-join ($_.SerialNumberID | Where-Object {$_ -ne 0} | ForEach-Object {[char]$_})}},");
-    cmd.append(u"YearOfManufacture,WeekOfManufacture | ");
-    cmd.append(u"ConvertTo-Csv -NoTypeInformation");
+        cmd.append(u"YearOfManufacture,WeekOfManufacture | ");
+    cmd.append(u"ConvertTo-Csv -NoTypeInformation -Delimiter ','");
     auto r = knst_process::run_capture(
         u"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
         { u"-NoProfile", u"-NonInteractive", u"-Command", cmd },
@@ -3226,7 +3526,10 @@ inline knst_cpu_info cpu() noexcept {
     }
 
     // ─── Stepping ───
-    if (row.count > 13) c.stepping = (uint32_t)::atoi(row.cols[13]);
+    // Query order: ...,Architecture,Family,Stepping,SocketDesignation
+    //                                       [12]     [13]
+    // Stepping is at index 12; 13 is SocketDesignation (string), don't atoi.
+    if (row.count > 12) c.stepping = (uint32_t)::atoi(row.cols[12]);
 
     c.has_cores = true;
     c.has_frequency = true;
@@ -3260,7 +3563,6 @@ inline knst_memory_info memory() noexcept {
             char line[2048];
             if (len >= sizeof(line)) len = sizeof(line) - 1;
             ::memcpy(line, p, len); line[len] = '\0';
-
             auto row = detail::parse_csv(line);
             if (row.count >= 8) {
                 knst_memory_module mod;
@@ -3269,6 +3571,31 @@ inline knst_memory_info memory() noexcept {
                 mod.manufacturer = knst_c16string(row.cols[2]);
                 mod.part_number  = knst_c16string(row.cols[3]);
                 mod.serial       = knst_c16string(row.cols[4]);
+
+                // Win32_PhysicalMemory.MemoryType (SMBIOS memory type)
+                switch ((uint32_t)::atoi(row.cols[5])) {
+                    case 20: mod.type = u"DDR";           break;
+                    case 21: mod.type = u"DDR2";          break;
+                    case 22: mod.type = u"DDR2 FB-DIMM";  break;
+                    case 24: mod.type = u"DDR3";          break;
+                    case 26: mod.type = u"DDR4";          break;
+                    case 27: mod.type = u"LPDDR";         break;
+                    case 28: mod.type = u"LPDDR2";        break;
+                    case 29: mod.type = u"LPDDR3";        break;
+                    case 30: mod.type = u"LPDDR4";        break;
+                    case 34: mod.type = u"DDR5";          break;
+                    case 35: mod.type = u"LPDDR5";        break;
+                    default: mod.type = u"Unknown";       break;
+                }
+
+                // Win32_PhysicalMemory.FormFactor
+                switch ((uint32_t)::atoi(row.cols[6])) {
+                    case 8:  mod.form_factor = u"DIMM";   break;
+                    case 12: mod.form_factor = u"SODIMM"; break;
+                    case 13: mod.form_factor = u"SRIMM";  break;
+                    default: mod.form_factor = u"Unknown"; break;
+                }
+
                 mod.locator      = knst_c16string(row.cols[7]);
                 mod.slot_index   = slot++;
                 mod.valid = true;
@@ -3348,12 +3675,14 @@ inline knst_vector<knst_storage_info> storage() noexcept {
                 if (plen >= sizeof(pline)) plen = sizeof(pline) - 1;
                 ::memcpy(pline, pp, plen); pline[plen] = '\0';
 
-                auto prow = detail::parse_csv(pline);
+                                auto prow = detail::parse_csv(pline);
                 if (prow.count >= 5) {
-                    bool is_boot = (::strcmp(prow.cols[2], "TRUE") == 0
-                                 || ::strcmp(prow.cols[2], "True") == 0);
-                    bool is_sys  = (::strcmp(prow.cols[3], "TRUE") == 0
+                    // CSV order: DeviceID,DiskIndex,Index,BootPartition,SystemPartition
+                    //             →  0        1        2      3              4
+                    bool is_boot = (::strcmp(prow.cols[3], "TRUE") == 0
                                  || ::strcmp(prow.cols[3], "True") == 0);
+                    bool is_sys  = (::strcmp(prow.cols[4], "TRUE") == 0
+                                 || ::strcmp(prow.cols[4], "True") == 0);
                     if (is_boot || is_sys) {
                         uint32_t di = (uint32_t)::atoi(prow.cols[1]);
                         sys_disk_index = di;
@@ -3379,8 +3708,8 @@ inline knst_vector<knst_storage_info> storage() noexcept {
     }
 
    
-    auto pd = detail::wmi_query_ns("root\\Microsoft\\Windows\\Storage",
-        "MSFT_PhysicalDisk", "DeviceId,MediaType,FriendlyName");
+        auto pd = detail::wmi_query_ns("root\\Microsoft\\Windows\\Storage",
+        "MSFT_PhysicalDisk", "DeviceId,MediaType,FriendlyName,BusType");
     if (!pd.empty()) {
         const char* pdp = (const char*)pd.data();
         const char* pde1 = ::strchr(pdp, '\n');
@@ -3396,6 +3725,7 @@ inline knst_vector<knst_storage_info> storage() noexcept {
             if (pdrow.count >= 2) {
                 uint32_t did = (uint32_t)::atoi(pdrow.cols[0]);
                 uint32_t mt  = (uint32_t)::atoi(pdrow.cols[1]);
+                uint32_t bus = (pdrow.count > 3) ? (uint32_t)::atoi(pdrow.cols[3]) : 0;
                 for (auto& s : out) {
                     if (!s.device.contains(u"PHYSICALDRIVE")) continue;
                     uint32_t n = 0;
@@ -3410,10 +3740,15 @@ inline knst_vector<knst_storage_info> storage() noexcept {
                         }
                     }
                     if (got_num && n == did) {
-                        if (mt == 4) {           // 4 = SSD
+                        // BusType from MSFT_PhysicalDisk:
+                        //   3=ATA, 7=USB, 8=SCSI, 11=SATA, 17=NVMe
+                        if (bus == 17) {
+                            s.type = knst_storage_type::NVMe;
+                            s.is_solid_state = true;
+                        } else if (mt == 4) {           // 4 = SSD
                             s.is_solid_state = true;
                             s.type = knst_storage_type::SSD;
-                        } else if (mt == 3) {    // 3 = HDD
+                        } else if (mt == 3) {           // 3 = HDD
                             s.is_solid_state = false;
                             s.type = knst_storage_type::HDD;
                         }
@@ -3571,9 +3906,57 @@ inline knst_vector<knst_usb_info> usb() noexcept {
             unsigned v; if (::sscanf(pid, "PID_%04X", &v) == 1) u.pid = (uint16_t)v;
         }
 
-        auto row = detail::parse_csv(line);
+                auto row = detail::parse_csv(line);
         if (row.count > 0) u.product_name = knst_c16string(row.cols[0]);
         if (row.count > 2) u.manufacturer = knst_c16string(row.cols[2]);
+
+        // WMI's Win32_PnPEntity doesn't expose bDeviceClass, bus or device
+        // number. Infer the USB class from the Service column and the name.
+        const char* svc = (row.count > 3) ? row.cols[3] : "";
+        if (::strstr(svc, "usbhub") || ::strstr(svc, "USBHUB")) {
+            u.usb_class = knst_usb_class::Hub;
+            u.is_hub    = true;
+            if (u.product_name.contains(u"Root") ||
+                u.product_name.contains(u"Kok"))
+                u.is_root_hub = true;
+        }
+        else if (::strstr(svc, "usbhid") || ::strstr(svc, "HidUsb") ||
+                 ::strstr(svc, "kbdhid") || ::strstr(svc, "mouhid") ||
+                 ::strstr(svc, "hidbth"))
+            u.usb_class = knst_usb_class::HID;
+        else if (::strstr(svc, "usbvideo") || ::strstr(svc, "uvcvideo"))
+            u.usb_class = knst_usb_class::Video;
+        else if (::strstr(svc, "usbaudio") || ::strstr(svc, "snd-usb-audio"))
+            u.usb_class = knst_usb_class::Audio;
+        else if (::strstr(svc, "USBSTOR") || ::strstr(svc, "usbstor"))
+            u.usb_class = knst_usb_class::MassStorage;
+        else if (::strstr(svc, "usbprint"))
+            u.usb_class = knst_usb_class::Printer;
+                else if (::strstr(svc, "usbser"))
+            u.usb_class = knst_usb_class::CDC;
+        else if (::strstr(svc, "usbccgp")) {
+            // Composite parent — real class lives on child interfaces.
+            // Best-effort guess from the friendly name.
+            if (u.product_name.contains(u"Webcam") ||
+                u.product_name.contains(u"Camera") ||
+                u.product_name.contains(u"Kamera"))
+                u.usb_class = knst_usb_class::Video;
+            else if (u.product_name.contains(u"Audio") ||
+                     u.product_name.contains(u"Ses"))
+                u.usb_class = knst_usb_class::Audio;
+            else
+                u.usb_class = knst_usb_class::Other;
+        }
+        else if (!u.product_name.empty()) {
+            // Fallback: guess from friendly name when Service is empty.
+            if (u.product_name.contains(u"Hub")) {
+                u.usb_class = knst_usb_class::Hub;
+                u.is_hub    = true;
+                if (u.product_name.contains(u"Root") ||
+                    u.product_name.contains(u"Kök"))
+                    u.is_root_hub = true;
+            }
+        }
 
         u.valid = true;
         out.push_back(u);
@@ -3589,8 +3972,9 @@ inline knst_vector<knst_usb_info> usb() noexcept {
 
 inline knst_vector<knst_pci_info> pci() noexcept {
     knst_vector<knst_pci_info> out;
+    // PNPClass gives the device category so the tutorial can group correctly.
     auto data = detail::wmi_query("Win32_PnPEntity",
-        "Name,DeviceID,Manufacturer,Service",
+        "Name,DeviceID,Manufacturer,Service,PNPClass",
         "DeviceID LIKE 'PCI%'");
     if (data.empty()) return out;
 
@@ -3617,6 +4001,22 @@ inline knst_vector<knst_pci_info> pci() noexcept {
         auto row = detail::parse_csv(line);
         if (row.count > 0) info.device_name = knst_c16string(row.cols[0]);
         if (row.count > 2) info.vendor_name  = knst_c16string(row.cols[2]);
+        // Map PNPClass to a human-readable class (display, network, ...).
+        if (row.count > 4 && row.cols[4][0]) {
+            const char* cls = row.cols[4];
+            if      (::strcmp(cls, "Display")   == 0) info.class_name = u"Display";
+            else if (::strcmp(cls, "Net")       == 0) info.class_name = u"Network";
+            else if (::strcmp(cls, "MEDIA")     == 0) info.class_name = u"Audio";
+            else if (::strcmp(cls, "SCSIAdapter")==0) info.class_name = u"Storage";
+            else if (::strcmp(cls, "HDC")       == 0) info.class_name = u"Storage";
+            else if (::strcmp(cls, "USB")       == 0) info.class_name = u"USB Controller";
+            else if (::strcmp(cls, "System")    == 0) info.class_name = u"System";
+            else if (::strcmp(cls, "MEMORY")    == 0) info.class_name = u"Memory";
+            else if (::strcmp(cls, "BLUETOOTH") == 0) info.class_name = u"Bluetooth";
+            else if (::strcmp(cls, "HIDClass")  == 0) info.class_name = u"HID";
+            else if (::strcmp(cls, "SecurityDevices") == 0) info.class_name = u"Security (TPM)";
+            else info.class_name = knst_c16string(cls);
+        }
                if (row.count > 3) {
             info.driver = knst_c16string(row.cols[3]);
 
@@ -3667,10 +4067,72 @@ inline knst_motherboard_info motherboard() noexcept {
         }
     }
 
+        // Chassis type / serial come from Win32_SystemEnclosure on Windows.
     {
-        FIRMWARE_TYPE ft = FirmwareTypeUnknown;
-        if (GetFirmwareType(&ft)) {
-            m.uefi_boot = (ft == FirmwareTypeUefi);
+        auto enc = detail::wmi_query("Win32_SystemEnclosure", "ChassisTypes,SerialNumber");
+        char line[2048];
+        if (detail::first_data_row(enc, line, sizeof(line))) {
+            auto row = detail::parse_csv(line);
+            // ChassisTypes is an array like "{3}" or "3,4"; extract first int
+            if (row.count > 0) {
+                int code = 0;
+                const char* p = row.cols[0];
+                while (*p && (*p < '0' || *p > '9')) ++p;
+                if (*p) code = ::atoi(p);
+                if (code > 0) {
+                    // SMBIOS chassis type codes (DMTF spec). Local copy
+                    // because chassis_type_name() lives in the Linux-only block.
+                    switch (code) {
+                        case 1:  m.chassis_type = u"Other";              break;
+                        case 2:  m.chassis_type = u"Unknown";            break;
+                        case 3:  m.chassis_type = u"Desktop";            break;
+                        case 4:  m.chassis_type = u"Low Profile Desktop";break;
+                        case 5:  m.chassis_type = u"Pizza Box";          break;
+                        case 6:  m.chassis_type = u"Mini Tower";         break;
+                        case 7:  m.chassis_type = u"Tower";              break;
+                        case 8:  m.chassis_type = u"Portable";           break;
+                        case 9:  m.chassis_type = u"Laptop";             break;
+                        case 10: m.chassis_type = u"Notebook";           break;
+                        case 11: m.chassis_type = u"Hand Held";          break;
+                        case 12: m.chassis_type = u"Docking Station";    break;
+                        case 13: m.chassis_type = u"All In One";         break;
+                        case 14: m.chassis_type = u"Sub Notebook";       break;
+                        case 15: m.chassis_type = u"Space-saving";       break;
+                        case 16: m.chassis_type = u"Lunch Box";          break;
+                        case 17: m.chassis_type = u"Main Server Chassis";break;
+                        case 23: m.chassis_type = u"Rack Mount Chassis"; break;
+                        case 30: m.chassis_type = u"Tablet";             break;
+                        case 31: m.chassis_type = u"Convertible";        break;
+                        case 32: m.chassis_type = u"Detachable";         break;
+                        case 35: m.chassis_type = u"Mini PC";            break;
+                        default: m.chassis_type = u"Unknown";            break;
+                    }
+                    m.has_chassis = true;
+                }
+            }
+            if (row.count > 1 && row.cols[1][0])
+                m.chassis_serial = knst_c16string(row.cols[1]);
+        }
+    }
+
+        {
+
+        typedef enum {
+            KNST_FirmwareTypeUnknown = 0,
+            KNST_FirmwareTypeBios = 1,
+            KNST_FirmwareTypeUefi = 2,
+            KNST_FirmwareTypeMax = 3
+        } KNST_FIRMWARE_TYPE;
+        typedef BOOL (WINAPI *KNST_GetFirmwareTypeFn)(KNST_FIRMWARE_TYPE*);
+
+        HMODULE k32 = ::GetModuleHandleW(L"kernel32.dll");
+        KNST_GetFirmwareTypeFn fn = k32
+            ? reinterpret_cast<KNST_GetFirmwareTypeFn>(
+                  ::GetProcAddress(k32, "GetFirmwareType"))
+            : nullptr;
+        if (fn) {
+            KNST_FIRMWARE_TYPE ft = KNST_FirmwareTypeUnknown;
+            if (fn(&ft)) m.uefi_boot = (ft == KNST_FirmwareTypeUefi);
         }
     }
 
@@ -3741,12 +4203,15 @@ inline knst_vector<knst_driver_info> drivers() noexcept {
         if (len >= sizeof(line)) len = sizeof(line) - 1;
         ::memcpy(line, p, len); line[len] = '\0';
 
-        auto row = detail::parse_csv(line);
+                auto row = detail::parse_csv(line);
         if (row.count >= 5) {
             knst_driver_info d;
             d.name = knst_c16string(row.cols[0]);
             d.vendor = knst_c16string(row.cols[1]);
-            d.is_builtin = (::strcmp(row.cols[2], "Running") == 0);
+            // cols[2]=State ("Running"), cols[3]=StartMode
+            // Built-in drivers start with "Boot" or "System" mode.
+            d.is_builtin = (::strcmp(row.cols[3], "Boot")   == 0
+                         || ::strcmp(row.cols[3], "System") == 0);
             d.valid = true;
             out.push_back(d);
         }
@@ -3766,11 +4231,70 @@ inline knst_system_info system() noexcept {
     char line[2048];
     if (!detail::first_data_row(data, line, sizeof(line))) return s;
 
+    // OEM/BIOS placeholder strings — treat as "not provided" so the
+    // struct stays empty instead of showing false data.
+    auto put = [](knst_c16string& dst, const char* src) {
+        if (!src || !*src) return;
+        if (::strcmp(src, "Not Specified") == 0) return;
+        if (::strcmp(src, "Not Present") == 0) return;
+        if (::strcmp(src, "To be filled by O.E.M.") == 0) return;
+        if (::strcmp(src, "To Be Filled By O.E.M.") == 0) return;
+        if (::strcmp(src, "Default string") == 0) return;
+        if (::strcmp(src, "System Product Name") == 0) return;   // ASUS/Gigabyte default
+        if (::strcmp(src, "System Version") == 0) return;
+        if (::strcmp(src, "System Serial Number") == 0) return;
+        if (::strcmp(src, "SKU") == 0) return;
+        if (::strcmp(src, "Base Board Product Name") == 0) return;
+        dst = knst_c16string(src);
+    };
+
     auto row = detail::parse_csv(line);
-    if (row.count > 0) s.manufacturer = knst_c16string(row.cols[0]);
-    if (row.count > 1) s.product_name = knst_c16string(row.cols[1]);
-    if (row.count > 3) s.family = knst_c16string(row.cols[3]);
-    if (row.count > 4) s.sku = knst_c16string(row.cols[4]);
+    put(s.manufacturer, row.count > 0 ? row.cols[0] : "");
+    put(s.product_name, row.count > 1 ? row.cols[1] : "");
+    put(s.family,       row.count > 3 ? row.cols[3] : "");
+    put(s.sku,          row.count > 4 ? row.cols[4] : "");
+
+    // Same enclosure query as motherboard() — duplicated for system().
+    {
+        auto enc = detail::wmi_query("Win32_SystemEnclosure", "ChassisTypes,SerialNumber");
+        char eline[2048];
+        if (detail::first_data_row(enc, eline, sizeof(eline))) {
+            auto erow = detail::parse_csv(eline);
+            if (erow.count > 0) {
+                int code = 0;
+                const char* p = erow.cols[0];
+                while (*p && (*p < '0' || *p > '9')) ++p;
+                if (*p) code = ::atoi(p);
+                if (code > 0) {
+                    switch (code) {
+                        case 3:  s.chassis_type = u"Desktop"; break;
+                        case 6:  s.chassis_type = u"Mini Tower"; break;
+                        case 7:  s.chassis_type = u"Tower"; break;
+                        case 8:  s.chassis_type = u"Portable"; break;
+                        case 9:  s.chassis_type = u"Laptop"; break;
+                        case 10: s.chassis_type = u"Notebook"; break;
+                        case 13: s.chassis_type = u"All In One"; break;
+                        case 16: s.chassis_type = u"Lunch Box"; break;
+                        case 17: s.chassis_type = u"Main Server Chassis"; break;
+                        case 23: s.chassis_type = u"Rack Mount Chassis"; break;
+                        case 30: s.chassis_type = u"Tablet"; break;
+                        case 31: s.chassis_type = u"Convertible"; break;
+                        case 32: s.chassis_type = u"Detachable"; break;
+                        case 35: s.chassis_type = u"Mini PC"; break;
+                        default: s.chassis_type = u"Unknown"; break;
+                    }
+                }
+            }
+            if (erow.count > 1 && erow.cols[1][0])
+                s.chassis_serial = knst_c16string(erow.cols[1]);
+        }
+    }
+
+    // is_laptop heuristic from chassis type
+    if (s.chassis_type == u"Laptop" || s.chassis_type == u"Notebook"
+        || s.chassis_type == u"Portable" || s.chassis_type == u"Convertible"
+        || s.chassis_type == u"Detachable" || s.chassis_type == u"Tablet")
+        s.is_laptop = true;
 
     s.valid = true;
     return s;
@@ -3941,16 +4465,20 @@ inline knst_vector<knst_monitor_info> monitors() noexcept {
 
                     m.is_primary = (adapter.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) != 0;
 
-                    // Determine connection type from adapter name
+                    // Win32 has no direct connection-type API — check both
+                    // the adapter string and the monitor's device path.
                     const wchar_t* ad = adapter.DeviceString;
-                    if (::wcsstr(ad, L"HDMI"))          m.connection = knst_monitor_conn::HDMI;
-                    else if (::wcsstr(ad, L"DisplayPort")) m.connection = knst_monitor_conn::DisplayPort;
-                    else if (::wcsstr(ad, L"DVI"))         m.connection = knst_monitor_conn::DVI;
-                    else if (::wcsstr(ad, L"VGA"))         m.connection = knst_monitor_conn::VGA;
-                    else if (::wcsstr(ad, L"USB-C")
-                          || ::wcsstr(ad, L"USB Type-C")) m.connection = knst_monitor_conn::USB_C;
-                    else if (::wcsstr(ad, L"eDP"))         m.connection = knst_monitor_conn::eDP;
-                    else if (::wcsstr(ad, L"LVDS"))        m.connection = knst_monitor_conn::LVDS;
+                    const wchar_t* md = mon.DeviceString;
+                    auto has = [&](const wchar_t* k) {
+                        return (ad && ::wcsstr(ad, k)) || (md && ::wcsstr(md, k));
+                    };
+                    if      (has(L"HDMI"))                           m.connection = knst_monitor_conn::HDMI;
+                    else if (has(L"DisplayPort") || has(L"DP"))      m.connection = knst_monitor_conn::DisplayPort;
+                    else if (has(L"DVI"))                            m.connection = knst_monitor_conn::DVI;
+                    else if (has(L"VGA"))                            m.connection = knst_monitor_conn::VGA;
+                    else if (has(L"USB-C") || has(L"USB Type-C"))    m.connection = knst_monitor_conn::USB_C;
+                    else if (has(L"eDP"))                            m.connection = knst_monitor_conn::eDP;
+                    else if (has(L"LVDS"))                           m.connection = knst_monitor_conn::LVDS;
                 }
 
                 // Diagonal in inches
@@ -4119,7 +4647,7 @@ inline knst_vector<knst_input_info> input() noexcept {
                 if (!prod.empty()) {
                     info.name = prod;
                 } else {
-                    // Fallback isim
+                    // Fallback name
                     switch (info.type) {
                         case knst_input_type::Mouse:      info.name = u"Mouse";      break;
                         case knst_input_type::Keyboard:   info.name = u"Keyboard";   break;
@@ -4156,7 +4684,7 @@ inline knst_vector<knst_input_info> input() noexcept {
             }
         }
 
-        // Skip root-enumerated system devices (ROOT\RDP_MOU vs.)
+        // Skip root-enumerated system devices (ROOT\RDP_MOU etc.)
         if (info.device_path.contains(u"ROOT\\")) continue;
 
 
@@ -4274,7 +4802,7 @@ inline knst_audio_info audio() noexcept {
 inline knst_vector<knst_sensor_info> sensors() noexcept {
     knst_vector<knst_sensor_info> out;
 
-    // --- Thermal zones (ACPI) ---
+        // --- Thermal zones (ACPI) ---
     auto therm = detail::wmi_query_ns("root\\WMI", "MSAcpi_ThermalZoneTemperature",
         "CurrentTemperature,InstanceName", 3000);
     if (!therm.empty()) {
@@ -4303,6 +4831,51 @@ inline knst_vector<knst_sensor_info> sensors() noexcept {
             }
             if (!e) break;
             p = e + 1;
+        }
+    }
+
+    // --- Fallback: MSAcpi_ThermalZoneInformation ---
+    // Some boards (many AMD Ryzen with older/limited BIOS) leave
+    // MSAcpi_ThermalZoneTemperature empty, but still expose
+    // MSAcpi_ThermalZoneInformation — a parallel ACPI class that
+    // reports Temperature in the same tenths-of-Kelvin encoding.
+    // This fallback only runs when the primary class gave us nothing,
+    // so Intel/systems with a working primary path pay zero cost.
+    if (out.empty()) {
+        auto tz_info = detail::wmi_query_ns(
+            "root\\WMI", "MSAcpi_ThermalZoneInformation",
+            "Name,Temperature", 3000);
+        if (!tz_info.empty()) {
+            const char* p = (const char*)tz_info.data();
+            const char* e1 = ::strchr(p, '\n');
+            if (e1) p = e1 + 1;
+            while (p && *p) {
+                const char* e = ::strchr(p, '\n');
+                size_t len = e ? (size_t)(e - p) : ::strlen(p);
+                char line[1024];
+                if (len >= sizeof(line)) len = sizeof(line) - 1;
+                ::memcpy(line, p, len); line[len] = '\0';
+
+                auto row = detail::parse_csv(line);
+                if (row.count >= 2) {
+                    double tenths_k = ::atof(row.cols[1]);
+                    double celsius  = tenths_k / 10.0 - 273.15;
+                    // Filter out obvious garbage readings (sensor not
+                    // actually populated, or driver placeholder values).
+                    if (celsius > -50.0 && celsius < 150.0) {
+                        knst_sensor_info s;
+                        s.value = celsius;
+                        s.unit  = u"°C";
+                        s.type  = knst_sensor_type::Temperature;
+                        s.chip  = u"ACPI ThermalZone";
+                        s.name  = knst_c16string(row.cols[0]);
+                        s.valid = true;
+                        out.push_back(s);
+                    }
+                }
+                if (!e) break;
+                p = e + 1;
+            }
         }
     }
 
@@ -4569,14 +5142,7 @@ inline knst_vector<knst_camera_info> cameras() noexcept {
 #endif // KNST_USING_PLATFORM_WINDOWS
 
 
-
 namespace knst_devices {
-
-inline knst_device_error last_error() noexcept {
-    return knst_device_error::None;
-}
-
-
 
 inline knst_vector<knst_gpu_info> gpus() noexcept {
     return knst_gpu::list_all();
@@ -4607,3 +5173,1819 @@ inline knst_c16string cuda_version() noexcept {
 }
 
 } // namespace knst_devices
+
+
+
+namespace knst_dev {
+
+// ---------------------------------------------------------------------------
+// Status / result
+// ---------------------------------------------------------------------------
+enum class status : uint8_t {
+    Ok = 0,
+    NotFound,
+    PermissionDenied,
+    Busy,
+    NotSupported,
+    InvalidArgument,
+    IoError,
+    Timeout,
+    ToolMissing,
+    BadState,
+    OutOfMemory,
+    Unknown
+};
+
+inline const char* status_string(status s) noexcept {
+    switch (s) {
+        case status::Ok:               return "OK";
+        case status::NotFound:         return "Not found";
+        case status::PermissionDenied: return "Permission denied";
+        case status::Busy:             return "Device busy";
+        case status::NotSupported:     return "Not supported on this platform/device";
+        case status::InvalidArgument:  return "Invalid argument";
+        case status::IoError:          return "I/O error";
+        case status::Timeout:          return "Timeout";
+        case status::ToolMissing:      return "Required tool missing";
+        case status::BadState:         return "Invalid state for this operation";
+        case status::OutOfMemory:      return "Out of memory";
+        case status::Unknown:          return "Unknown error";
+    }
+    return "Unknown error";
+}
+
+template<typename T>
+struct result {
+    T      value{};
+    status st = status::Ok;
+    int    native = 0;                 // errno / GetLastError / HRESULT / exit code
+
+    bool ok() const noexcept { return st == status::Ok; }
+    explicit operator bool() const noexcept { return ok(); }
+    const char* error_string() const noexcept { return status_string(st); }
+
+    static result success(T v) noexcept { result r; r.value = std::move(v); return r; }
+    static result fail(status s, int native_code = 0) noexcept {
+        result r; r.st = s; r.native = native_code; return r;
+    }
+};
+
+template<>
+struct result<void> {
+    status st = status::Ok;
+    int    native = 0;
+
+    bool ok() const noexcept { return st == status::Ok; }
+    explicit operator bool() const noexcept { return ok(); }
+    const char* error_string() const noexcept { return status_string(st); }
+
+    static result success() noexcept { return result(); }
+    static result fail(status s, int native_code = 0) noexcept {
+        result r; r.st = s; r.native = native_code; return r;
+    }
+};
+
+// Propagate a failure from one result type to another.
+template<typename To, typename From>
+inline result<To> forward_error(const result<From>& r) noexcept {
+    return result<To>::fail(r.st, r.native);
+}
+
+// ---------------------------------------------------------------------------
+// Error mapping
+// ---------------------------------------------------------------------------
+#if KNST_USING_PLATFORM_LINUX || KNST_USING_PLATFORM_ANDROID
+inline status map_errno(int e) noexcept {
+    switch (e) {
+        case 0:        return status::Ok;
+        case ENOENT:
+        case ENODEV:
+        case ENXIO:    return status::NotFound;
+        case EACCES:
+        case EPERM:    return status::PermissionDenied;
+        case EBUSY:    return status::Busy;
+        case ENOMEM:   return status::OutOfMemory;
+        case EINVAL:   return status::InvalidArgument;
+        case ETIMEDOUT:
+        case EAGAIN:   return status::Timeout;
+        case ENOTTY:
+        case ENOSYS:
+        case EOPNOTSUPP: return status::NotSupported;
+        case EIO:
+        case EPIPE:    return status::IoError;
+        default:       return status::Unknown;
+    }
+}
+
+// Move-only RAII file descriptor.
+class unique_fd {
+public:
+    unique_fd() noexcept = default;
+    explicit unique_fd(int fd) noexcept : fd_(fd) {}
+    unique_fd(const unique_fd&) = delete;
+    unique_fd& operator=(const unique_fd&) = delete;
+    unique_fd(unique_fd&& o) noexcept : fd_(o.fd_) { o.fd_ = -1; }
+    unique_fd& operator=(unique_fd&& o) noexcept {
+        if (this != &o) { reset(); fd_ = o.fd_; o.fd_ = -1; }
+        return *this;
+    }
+    ~unique_fd() { reset(); }
+
+    int  get() const noexcept { return fd_; }
+    bool valid() const noexcept { return fd_ >= 0; }
+    int  release() noexcept { int f = fd_; fd_ = -1; return f; }
+    void reset(int fd = -1) noexcept {
+        if (fd_ >= 0) ::close(fd_);
+        fd_ = fd;
+    }
+private:
+    int fd_ = -1;
+};
+
+// write() until everything is written (handles EINTR / short writes).
+inline bool write_all(int fd, const void* data, size_t len) noexcept {
+    const unsigned char* p = static_cast<const unsigned char*>(data);
+    while (len > 0) {
+        ssize_t n = ::write(fd, p, len);
+        if (n < 0) { if (errno == EINTR) continue; return false; }
+        if (n == 0) return false;
+        p += n; len -= static_cast<size_t>(n);
+    }
+    return true;
+}
+#endif
+
+#if KNST_USING_PLATFORM_WINDOWS
+inline status map_win_error(unsigned long e) noexcept {
+    switch (e) {
+        case 0:                 return status::Ok;
+        case 2: case 3: case 1801: /* PRINTER_NOT_FOUND */ return status::NotFound;
+        case 5:                 return status::PermissionDenied;
+        case 32: case 170:      return status::Busy;
+        case 8: case 14:        return status::OutOfMemory;
+        case 87: case 123:      return status::InvalidArgument;
+        case 50: case 120:      return status::NotSupported;
+        case 1460:              return status::Timeout;
+        default:                return status::Unknown;
+    }
+}
+
+// Windows has no netlink uevent stream. knst_usb.hpp needs the type name
+// for template instantiation (handler signature), so provide a data-only
+// stub. All uevent APIs return NotSupported on Windows anyway.
+struct uevent {
+    knst_c16string action, subsystem, devtype, devpath, devname;
+};
+#endif
+
+// ---------------------------------------------------------------------------
+// String helpers
+// ---------------------------------------------------------------------------
+inline knst_byte_string to_utf8(const knst_c16string& s) noexcept {
+    return knst_byte_string(s);
+}
+
+// Conservative token validator for names passed to external tools
+// (printer names, ids, ...). Rejects whitespace, shell/meta chars and a
+// leading '-' so a value can never be parsed as an option.
+inline bool is_safe_token(const knst_c16string& s, uint32_t max_len = 127) noexcept {
+    uint32_t n = s.length();
+    if (n == 0 || n > max_len) return false;
+    if (s[0] == u'-') return false;
+    for (uint32_t i = 0; i < n; ++i) {
+        char16_t c = s[i];
+        bool ok = (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') ||
+                  (c >= u'0' && c <= u'9') || c == u'_' || c == u'-' ||
+                  c == u'.' || c == u'@' || c == u':';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+// Only digits, ',' and '-' (page ranges such as "1-3,5").
+inline bool is_page_range(const knst_c16string& s) noexcept {
+    uint32_t n = s.length();
+    if (n == 0 || n > 128) return false;
+    for (uint32_t i = 0; i < n; ++i) {
+        char16_t c = s[i];
+        if (!((c >= u'0' && c <= u'9') || c == u',' || c == u'-')) return false;
+    }
+    return true;
+}
+
+inline knst_c16string u32_to_string(uint32_t v) noexcept {
+    knst_c16string s;
+    s.append(static_cast<unsigned int>(v));
+    return s;
+}
+
+// ---------------------------------------------------------------------------
+// External tool runner. No shell involved: arguments are passed as an argv
+// vector through knst_process, so metacharacters have no special meaning.
+// ---------------------------------------------------------------------------
+inline result<knst_byte_string> run_tool(const char* prog,
+                                         const knst_vector<knst_c16string>& args,
+                                         uint32_t timeout_ms = 5000) noexcept {
+    auto res = knst_process::run_capture(knst_c16string(prog), args, {}, nullptr, 0, timeout_ms);
+    if (res.error != knst_process_error::None)
+        return result<knst_byte_string>::fail(status::ToolMissing);
+    if (res.exit_code != 0)
+        return result<knst_byte_string>::fail(status::IoError, static_cast<int>(res.exit_code));
+    return result<knst_byte_string>::success(std::move(res.out_data));
+}
+
+// Line iterator over a NUL-terminated buffer (no allocation).
+template<typename F>
+inline void for_each_line(const char* text, F&& fn) noexcept {
+    const char* p = text;
+    while (p && *p) {
+        const char* e = ::strchr(p, '\n');
+        size_t len = e ? static_cast<size_t>(e - p) : ::strlen(p);
+        if (len > 0 && p[len - 1] == '\r') --len;
+        fn(p, len);
+        if (!e) break;
+        p = e + 1;
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// argv builder + extra runners
+// ---------------------------------------------------------------------------
+struct argv {
+    knst_vector<knst_c16string> v;
+    argv& operator<<(const char* s) noexcept { v.push_back(knst_c16string(s)); return *this; }
+    argv& operator<<(const knst_c16string& s) noexcept { v.push_back(s); return *this; }
+    argv& operator<<(unsigned int n) noexcept { v.push_back(u32_to_string(n)); return *this; }
+    argv& operator<<(int n) noexcept {
+        if (n < 0) {
+            knst_c16string s;
+            s.append(u'-');
+            uint32_t mag = static_cast<uint32_t>(-(int64_t)n);
+            s.append(static_cast<unsigned int>(mag));
+            v.push_back(std::move(s));
+        } else {
+            v.push_back(u32_to_string(static_cast<uint32_t>(n)));
+        }
+        return *this;
+    }
+
+    // std::vector<std::string> call sites (in knst_printer.hpp) are migrated
+    // to argv without touching every push_back line.
+    argv& push_back(const char* s) noexcept { v.push_back(knst_c16string(s)); return *this; }
+    argv& push_back(const std::string& s) noexcept { v.push_back(knst_c16string(s.c_str())); return *this; }
+    argv& push_back(const knst_c16string& s) noexcept { v.push_back(s); return *this; }
+};
+
+inline knst_c16string format(const char* fmt, ...) noexcept {
+    char buf[1024];
+    va_list ap; va_start(ap, fmt);
+    ::vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    return knst_c16string(buf);
+}
+
+inline const char* text(const knst_byte_string& b) noexcept {
+    return b.empty() ? "" : reinterpret_cast<const char*>(b.data());
+}
+
+struct tool_result { bool launched = false; int exit_code = -1; knst_byte_string out; };
+
+// Runs a tool and always returns what it produced + its exit code.
+inline tool_result run_tool_raw(const char* prog, const argv& a, uint32_t timeout_ms = 5000) noexcept {
+    tool_result r;
+    auto res = knst_process::run_capture(knst_c16string(prog), a.v, {}, nullptr, 0, timeout_ms);
+    if (res.error != knst_process_error::None) return r;
+    r.launched = true; r.exit_code = static_cast<int>(res.exit_code); r.out = std::move(res.out_data);
+    return r;
+}
+
+inline result<knst_byte_string> run(const char* prog, const argv& a, uint32_t timeout_ms = 5000) noexcept {
+    return run_tool(prog, a.v, timeout_ms);
+}
+
+// Like run(), but extra exit codes count as success (e.g. coreutils `timeout` returns 124).
+inline result<knst_byte_string> run_codes(const char* prog, const argv& a, uint32_t timeout_ms,
+                                          std::initializer_list<int> ok_codes) noexcept {
+    auto t = run_tool_raw(prog, a, timeout_ms);
+    if (!t.launched) return result<knst_byte_string>::fail(status::ToolMissing);
+    bool ok = (t.exit_code == 0);
+    for (int c : ok_codes) if (t.exit_code == c) ok = true;
+    if (!ok) return result<knst_byte_string>::fail(status::IoError, t.exit_code);
+    return result<knst_byte_string>::success(std::move(t.out));
+}
+
+inline result<void> drop(const result<knst_byte_string>& r) noexcept {
+    return r.ok() ? result<void>::success() : result<void>::fail(r.st, r.native);
+}
+
+// ---------------------------------------------------------------------------
+// More validators
+// ---------------------------------------------------------------------------
+inline bool is_hex(char16_t c) noexcept {
+    return (c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f') || (c >= u'A' && c <= u'F');
+}
+// "AA:BB:CC:DD:EE:FF"
+inline bool is_mac(const knst_c16string& s) noexcept {
+    if (s.length() != 17) return false;
+    for (uint32_t i = 0; i < 17; ++i) {
+        if (i % 3 == 2) { if (s[i] != u':') return false; }
+        else if (!is_hex(s[i])) return false;
+    }
+    return true;
+}
+// "0000:00:1f.3"
+inline bool is_pci_addr(const knst_c16string& s) noexcept {
+    if (s.length() != 12) return false;
+    for (uint32_t i = 0; i < 12; ++i) {
+        if (i == 4 || i == 7) { if (s[i] != u':') return false; }
+        else if (i == 10)     { if (s[i] != u'.') return false; }
+        else if (!is_hex(s[i])) return false;
+    }
+    return true;
+}
+// "/dev/sda1", "/dev/nvme0n1p2", "/dev/input/event3" (no traversal, no odd chars)
+inline bool is_dev_path(const knst_c16string& s) noexcept {
+    uint32_t n = s.length();
+    if (n < 6 || n > 64 || !s.starts_with(u"/dev/")) return false;
+    for (uint32_t i = 5; i < n; ++i) {
+        char16_t c = s[i];
+        bool ok = (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') || (c >= u'0' && c <= u'9') || c == u'_' || c == u'-' || c == u'/';
+        if (!ok) return false;
+        if (c == u'/' && (s[i - 1] == u'/' || i + 1 == n)) return false;
+    }
+    return true;
+}
+inline bool is_ipv4_cidr(const knst_c16string& s) noexcept {      // "192.168.1.10/24"
+    knst_byte_string b = to_utf8(s);
+    const char* p = text(b);
+    unsigned a[4]; unsigned m = 0; char tail = 0;
+    if (::sscanf(p, "%3u.%3u.%3u.%3u/%2u%c", &a[0], &a[1], &a[2], &a[3], &m, &tail) != 5) return false;
+    for (unsigned x : a) if (x > 255) return false;
+    return m >= 1 && m <= 32;
+}
+inline bool is_ipv4(const knst_c16string& s) noexcept {
+    knst_byte_string b = to_utf8(s);
+    unsigned a[4]; char tail = 0;
+    if (::sscanf(text(b), "%3u.%3u.%3u.%3u%c", &a[0], &a[1], &a[2], &a[3], &tail) != 4) return false;
+    for (unsigned x : a) if (x > 255) return false;
+    return true;
+}
+
+#if KNST_USING_PLATFORM_LINUX
+// ---------------------------------------------------------------------------
+// sysfs helpers (paths are restricted to /sys and may not contain "..")
+// ---------------------------------------------------------------------------
+inline bool is_sysfs_path(const char* p) noexcept {
+    return p && ::strncmp(p, "/sys/", 5) == 0 && ::strstr(p, "..") == nullptr;
+}
+inline result<void> sysfs_write(const char* path, const char* value) noexcept {
+    if (!is_sysfs_path(path) || !value) return result<void>::fail(status::InvalidArgument);
+    unique_fd fd(::open(path, O_WRONLY | O_CLOEXEC));
+    if (!fd.valid()) return result<void>::fail(map_errno(errno), errno);
+    if (!write_all(fd.get(), value, ::strlen(value))) return result<void>::fail(map_errno(errno), errno);
+    return result<void>::success();
+}
+inline result<knst_c16string> sysfs_read(const char* path) noexcept {
+    using R = result<knst_c16string>;
+    if (!is_sysfs_path(path)) return R::fail(status::InvalidArgument);
+    unique_fd fd(::open(path, O_RDONLY | O_CLOEXEC));
+    if (!fd.valid()) return R::fail(map_errno(errno), errno);
+    char buf[512]; ssize_t n = ::read(fd.get(), buf, sizeof(buf) - 1);
+    if (n < 0) return R::fail(map_errno(errno), errno);
+    buf[n] = 0;
+    while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' || buf[n - 1] == ' ')) buf[--n] = 0;
+    return R::success(knst_c16string(buf));
+}
+
+// ---------------------------------------------------------------------------
+// Kernel uevent monitor (hotplug for usb / block / input / power_supply / ...)
+// Only messages whose sender is the kernel (nl_pid == 0) are accepted.
+// ---------------------------------------------------------------------------
+struct uevent {
+    knst_c16string action, subsystem, devtype, devpath, devname;
+};
+
+class uevent_monitor {
+public:
+    uevent_monitor() noexcept = default;
+    static result<uevent_monitor> open() noexcept {
+        using R = result<uevent_monitor>;
+        int fd = ::socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
+        if (fd < 0) return R::fail(map_errno(errno), errno);
+        sockaddr_nl sa{}; sa.nl_family = AF_NETLINK; sa.nl_groups = 1;
+        if (::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) < 0) { int e = errno; ::close(fd); return R::fail(map_errno(e), e); }
+        uevent_monitor m; m.fd_.reset(fd);
+        return R::success(std::move(m));
+    }
+    // Waits for the next event matching `subsystem` (nullptr = any).
+    result<uevent> wait(uint32_t timeout_ms, const char* subsystem = nullptr) noexcept {
+        using R = result<uevent>;
+        if (!fd_.valid()) return R::fail(status::BadState);
+        const auto t0 = std::chrono::steady_clock::now();
+        for (;;) {
+            auto el = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+            if (static_cast<uint64_t>(el) >= timeout_ms) return R::fail(status::Timeout);
+            pollfd p{}; p.fd = fd_.get(); p.events = POLLIN;
+            int pr = ::poll(&p, 1, static_cast<int>(timeout_ms - static_cast<uint32_t>(el)));
+            if (pr < 0) { if (errno == EINTR) continue; return R::fail(map_errno(errno), errno); }
+            if (pr == 0) return R::fail(status::Timeout);
+            char buf[8192]; sockaddr_nl from{}; socklen_t fl = sizeof(from);
+            ssize_t n = ::recvfrom(fd_.get(), buf, sizeof(buf) - 1, 0, reinterpret_cast<sockaddr*>(&from), &fl);
+            if (n <= 0) continue;
+            if (from.nl_pid != 0) continue;                       // not from the kernel
+            buf[n] = 0;
+            uevent ev; bool have = false;
+            for (const char* q = buf; q < buf + n; q += ::strlen(q) + 1) {
+                if (::strncmp(q, "ACTION=", 7) == 0)         { ev.action = knst_c16string(q + 7); have = true; }
+                else if (::strncmp(q, "SUBSYSTEM=", 10) == 0) ev.subsystem = knst_c16string(q + 10);
+                else if (::strncmp(q, "DEVTYPE=", 8) == 0)    ev.devtype = knst_c16string(q + 8);
+                else if (::strncmp(q, "DEVPATH=", 8) == 0)    ev.devpath = knst_c16string(q + 8);
+                else if (::strncmp(q, "DEVNAME=", 8) == 0)    ev.devname = knst_c16string(q + 8);
+            }
+            if (!have) continue;
+            if (subsystem && ev.subsystem != knst_c16string(subsystem)) continue;
+            return R::success(std::move(ev));
+        }
+    }
+private:
+    unique_fd fd_;
+};
+#endif
+
+} // namespace knst_dev
+
+#if defined(KNST_JSON_HPP)
+
+namespace knst_devices {
+
+// Full hardware inventory as a JSON object. Suitable for telemetry,
+// REST endpoints, or saving to disk.
+inline knst_json full_inventory_json() noexcept {
+    knst_json j = knst_json::make_object();
+    if (!j.is_object()) return knst_json();
+
+    // --- CPU ---
+    {
+        auto c = cpu();
+        if (c.valid) {
+            knst_json x = knst_json::make_object();
+            if (!x.is_object()) return knst_json();
+            x.set("vendor",         knst_json(c.vendor));
+            x.set("model_name",     knst_json(c.model_name));
+            x.set("architecture",   knst_json(c.architecture));
+            x.set("physical_cores", knst_json(static_cast<int64_t>(c.physical_cores)));
+            x.set("logical_cores",  knst_json(static_cast<int64_t>(c.logical_cores)));
+            x.set("socket_count",   knst_json(static_cast<int64_t>(c.socket_count)));
+            x.set("base_mhz",       knst_json(static_cast<int64_t>(c.base_mhz)));
+            x.set("max_mhz",        knst_json(static_cast<int64_t>(c.max_mhz)));
+            x.set("current_mhz",    knst_json(static_cast<int64_t>(c.current_mhz)));
+            x.set("cache_l3_kb",    knst_json(static_cast<int64_t>(c.cache_l3_kb)));
+            x.set("has_avx2",       knst_json(c.has_avx2));
+            x.set("has_aes",        knst_json(c.has_aes));
+            x.set("has_vmx",        knst_json(c.has_vmx));
+            j.set("cpu", std::move(x));
+        }
+    }
+
+    // --- Memory ---
+    {
+        auto m = memory();
+        if (m.valid) {
+            knst_json x = knst_json::make_object();
+            if (!x.is_object()) return knst_json();
+            x.set("total_bytes",     knst_json(static_cast<int64_t>(m.total_bytes)));
+            x.set("used_bytes",      knst_json(static_cast<int64_t>(m.used_bytes)));
+            x.set("free_bytes",      knst_json(static_cast<int64_t>(m.free_bytes)));
+            x.set("available_bytes", knst_json(static_cast<int64_t>(m.available_bytes)));
+            if (m.has_swap) {
+                x.set("swap_total", knst_json(static_cast<int64_t>(m.swap_total)));
+                x.set("swap_used",  knst_json(static_cast<int64_t>(m.swap_used)));
+            }
+            j.set("memory", std::move(x));
+        }
+    }
+
+    // --- System ---
+    {
+        auto s = system();
+        if (s.valid) {
+            knst_json x = knst_json::make_object();
+            if (!x.is_object()) return knst_json();
+            x.set("manufacturer",       knst_json(s.manufacturer));
+            x.set("product_name",       knst_json(s.product_name));
+            x.set("serial",             knst_json(s.serial));
+            x.set("is_laptop",          knst_json(s.is_laptop));
+            x.set("is_virtual_machine", knst_json(s.is_virtual_machine));
+            j.set("system", std::move(x));
+        }
+    }
+
+    // --- OS ---
+    {
+        auto o = os();
+        if (o.valid) {
+            knst_json x = knst_json::make_object();
+            if (!x.is_object()) return knst_json();
+            x.set("name",     knst_json(o.os_name));
+            x.set("version",  knst_json(o.os_version));
+            x.set("kernel",   knst_json(o.kernel_version));
+            x.set("arch",     knst_json(o.kernel_arch));
+            x.set("hostname", knst_json(o.hostname));
+            x.set("uptime_s", knst_json(static_cast<int64_t>(o.uptime_seconds)));
+            j.set("os", std::move(x));
+        }
+    }
+
+    // --- Storage ---
+    {
+        auto list = storage();
+        knst_json arr = knst_json::make_array();
+        if (arr.is_array()) {
+            for (uint32_t i = 0; i < list.size(); ++i) {
+                knst_json d = knst_json::make_object();
+                if (!d.is_object()) continue;
+                d.set("device",       knst_json(list[i].device));
+                d.set("model",        knst_json(list[i].model));
+                d.set("total_bytes",  knst_json(static_cast<int64_t>(list[i].total_bytes)));
+                d.set("is_removable", knst_json(list[i].is_removable));
+                d.set("is_system",    knst_json(list[i].is_system_disk));
+                arr.push_back(std::move(d));
+            }
+            j.set("storage", std::move(arr));
+        }
+    }
+
+    // --- Network ---
+    {
+        auto list = network();
+        knst_json arr = knst_json::make_array();
+        if (arr.is_array()) {
+            for (uint32_t i = 0; i < list.size(); ++i) {
+                knst_json d = knst_json::make_object();
+                if (!d.is_object()) continue;
+                d.set("name",     knst_json(list[i].name));
+                d.set("mac",      knst_json(list[i].mac));
+                d.set("ipv4",     knst_json(list[i].ipv4));
+                d.set("ipv6",     knst_json(list[i].ipv6));
+                d.set("is_up",    knst_json(list[i].is_up));
+                d.set("wireless", knst_json(list[i].is_wireless));
+                d.set("rx_bytes", knst_json(static_cast<int64_t>(list[i].rx_bytes)));
+                d.set("tx_bytes", knst_json(static_cast<int64_t>(list[i].tx_bytes)));
+                arr.push_back(std::move(d));
+            }
+            j.set("network", std::move(arr));
+        }
+    }
+
+    return j;
+}
+
+inline bool save_inventory_json(const knst_c16string& path,
+                                const knst_json_dump_options& opt = knst_json_dump_options()) noexcept {
+    knst_json j = full_inventory_json();
+    if (j.is_null()) return false;
+    knst_json_error e;
+    return j.save_file(path, opt, true, &e);
+}
+
+} // namespace knst_devices
+
+#endif // KNST_JSON_HPP
+
+// ============================================================================
+//  ANDROID IMPLEMENTATION
+//  ---------------------------------------------------------------------------
+//  JNI/NDK implementations for Android (replaces functions disabled in the
+//  Linux block for KNST_USING_PLATFORM_ANDROID).
+// ============================================================================
+#if defined(KNST_USING_PLATFORM_ANDROID)
+
+#include <jni.h>
+#include <android/log.h>
+#include <android/sensor.h>
+#include <camera/NdkCameraManager.h>
+#include <camera/NdkCameraMetadata.h>
+#include <sys/system_properties.h>
+#include <unistd.h>
+#include <ctime>
+namespace knst_devices {
+namespace detail_android {
+
+// ─── JNI Environment ────────────────────────────────────────────────────────
+static JavaVM* g_vm = nullptr;
+static jobject g_activity_obj = nullptr;
+
+inline void set_java_vm(JavaVM* vm, jobject activity) {
+    if (!vm) return;
+    g_vm = vm;
+    if (activity) {
+        JNIEnv* env = nullptr;
+        if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_EDETACHED) {
+            vm->AttachCurrentThread(&env, nullptr);
+        }
+        if (!env) return;
+        // Idempotent: same Java object → no-op (safe for repeated init()).
+        if (g_activity_obj && env->IsSameObject(g_activity_obj, activity)) return;
+        // Activity recreated (rotation / theme change) → replace the global ref.
+        if (g_activity_obj) {
+            env->DeleteGlobalRef(g_activity_obj);
+            g_activity_obj = nullptr;
+        }
+        g_activity_obj = env->NewGlobalRef(activity);
+
+                // Hand the context to KnstDevicesHelper.
+        // FindClass uses the *system* classloader, which cannot see app
+        // classes. Route through the activity's classloader.
+        {
+            jclass helper = nullptr;
+
+            jclass act_cls = env->GetObjectClass(activity);
+            if (act_cls) {
+                jmethodID get_cl = env->GetMethodID(act_cls, "getClassLoader",
+                                                     "()Ljava/lang/ClassLoader;");
+                if (get_cl) {
+                    jobject cl = env->CallObjectMethod(activity, get_cl);
+                    if (cl) {
+                        jclass cl_cls = env->GetObjectClass(cl);
+                        jmethodID load_class = env->GetMethodID(cl_cls, "loadClass",
+                            "(Ljava/lang/String;)Ljava/lang/Class;");
+                        if (load_class) {
+                            jstring jname = env->NewStringUTF(
+                                "com.knst.devices.KnstDevicesHelper");
+                            helper = (jclass)env->CallObjectMethod(
+                                cl, load_class, jname);
+                            env->DeleteLocalRef(jname);
+                        }
+                        env->DeleteLocalRef(cl_cls);
+                        env->DeleteLocalRef(cl);
+                    }
+                }
+                env->DeleteLocalRef(act_cls);
+            }
+            if (env->ExceptionCheck()) env->ExceptionClear();
+
+            if (helper) {
+                jmethodID set_ctx = env->GetStaticMethodID(helper,
+                    "setContext", "(Landroid/content/Context;)V");
+                if (set_ctx) {
+                    env->CallStaticVoidMethod(helper, set_ctx, activity);
+                }
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                env->DeleteLocalRef(helper);
+            } else {
+                if (env->ExceptionCheck()) env->ExceptionClear();
+            }
+        }
+
+                // Hand the context to KnstBluetoothHelper too.
+        {
+            jclass bt_helper = nullptr;
+            jclass act_cls = env->GetObjectClass(activity);
+            if (act_cls) {
+                jmethodID get_cl = env->GetMethodID(act_cls, "getClassLoader",
+                                                     "()Ljava/lang/ClassLoader;");
+                if (get_cl) {
+                    jobject cl = env->CallObjectMethod(activity, get_cl);
+                    if (cl) {
+                        jclass cl_cls = env->GetObjectClass(cl);
+                        jmethodID load_class = env->GetMethodID(cl_cls, "loadClass",
+                            "(Ljava/lang/String;)Ljava/lang/Class;");
+                        if (load_class) {
+                            jstring jname = env->NewStringUTF(
+                                "com.knst.devices.KnstBluetoothHelper");
+                            bt_helper = (jclass)env->CallObjectMethod(
+                                cl, load_class, jname);
+                            env->DeleteLocalRef(jname);
+                        }
+                        env->DeleteLocalRef(cl_cls);
+                        env->DeleteLocalRef(cl);
+                    }
+                }
+                env->DeleteLocalRef(act_cls);
+            }
+            if (env->ExceptionCheck()) env->ExceptionClear();
+
+            if (bt_helper) {
+                jmethodID set_bt_ctx = env->GetStaticMethodID(bt_helper,
+                    "setContext", "(Landroid/content/Context;)V");
+                if (set_bt_ctx) {
+                    env->CallStaticVoidMethod(bt_helper, set_bt_ctx, activity);
+                }
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                env->DeleteLocalRef(bt_helper);
+            } else {
+                if (env->ExceptionCheck()) env->ExceptionClear();
+            }
+        }
+                // Hand the Android paths to knst_file (temp / home / external).
+        {
+            jclass helper = nullptr;
+            jclass act_cls = env->GetObjectClass(activity);
+            if (act_cls) {
+                jmethodID get_cl = env->GetMethodID(act_cls, "getClassLoader",
+                                                     "()Ljava/lang/ClassLoader;");
+                if (get_cl) {
+                    jobject cl = env->CallObjectMethod(activity, get_cl);
+                    if (cl) {
+                        jclass cl_cls = env->GetObjectClass(cl);
+                        jmethodID load_class = env->GetMethodID(cl_cls, "loadClass",
+                            "(Ljava/lang/String;)Ljava/lang/Class;");
+                        if (load_class) {
+                            jstring jname = env->NewStringUTF(
+                                "com.knst.devices.KnstDevicesHelper");
+                            helper = (jclass)env->CallObjectMethod(
+                                cl, load_class, jname);
+                            env->DeleteLocalRef(jname);
+                        }
+                        env->DeleteLocalRef(cl_cls);
+                        env->DeleteLocalRef(cl);
+                    }
+                }
+                env->DeleteLocalRef(act_cls);
+            }
+            if (env->ExceptionCheck()) env->ExceptionClear();
+
+            if (helper) {
+                jmethodID get_paths = env->GetStaticMethodID(helper,
+                    "getAppPaths", "()[Ljava/lang/String;");
+                if (get_paths) {
+                    jobjectArray arr = (jobjectArray)env->CallStaticObjectMethod(
+                        helper, get_paths);
+                                        if (arr && env->GetArrayLength(arr) >= 4) {
+                        auto get_at = [&](int i) -> knst_c16string {
+                            jstring s = (jstring)env->GetObjectArrayElement(arr, i);
+                            knst_c16string r;
+                            if (s) {
+                                const char* utf = env->GetStringUTFChars(s, nullptr);
+                                if (utf) {
+                                    r = knst_c16string(utf);
+                                    env->ReleaseStringUTFChars(s, utf);
+                                }
+                                env->DeleteLocalRef(s);
+                            }
+                            return r;
+                        };
+                        knst_c16string files_dir = get_at(0);
+                        knst_c16string cache_dir = get_at(1);
+                        knst_c16string ext_dir   = get_at(2);
+                        knst_c16string home_dir  = get_at(3);
+                        (void)files_dir;   // filesDir is not a public knst_file concept
+                        knst_file::set_android_dirs(cache_dir, home_dir, ext_dir);
+                        env->DeleteLocalRef(arr);
+                    }
+                }
+                if (env->ExceptionCheck()) env->ExceptionClear();
+                env->DeleteLocalRef(helper);
+            } else {
+                if (env->ExceptionCheck()) env->ExceptionClear();
+            }
+        }
+    }
+}
+
+inline JNIEnv* get_env() {
+    if (!g_vm) return nullptr;
+    JNIEnv* env = nullptr;
+    if (g_vm->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_EDETACHED)
+        g_vm->AttachCurrentThread(&env, nullptr);
+    return env;
+}
+
+inline void clear_jni_exception(JNIEnv* env) {
+    if (env && env->ExceptionCheck()) {
+        env->ExceptionClear();
+    }
+}
+// ─── Helpers ────────────────────────────────────────────────────────────────
+inline knst_c16string getprop(const char* key) {
+    char value[PROP_VALUE_MAX] = {0};
+    int n = __system_property_get(key, value);
+    if (n > 0) return knst_c16string(value);
+    return knst_c16string();
+}
+
+inline knst_c16string jstr(JNIEnv* env, jstring s) {
+    if (!s) return knst_c16string();
+    const char* utf = env->GetStringUTFChars(s, nullptr);
+    knst_c16string r(utf);
+    env->ReleaseStringUTFChars(s, utf);
+    return r;
+}
+
+inline jobject get_service(JNIEnv* env, const char* name) {
+    if (!env || !g_activity_obj) {
+        return nullptr;
+    }
+    jclass ctx_cls = env->GetObjectClass(g_activity_obj);
+    jmethodID m = env->GetMethodID(ctx_cls, "getSystemService",
+                                    "(Ljava/lang/String;)Ljava/lang/Object;");
+    if (!m) {
+        clear_jni_exception(env);
+        return nullptr;
+    }
+    jstring jname = env->NewStringUTF(name);
+    jobject svc = env->CallObjectMethod(g_activity_obj, m, jname);
+    env->DeleteLocalRef(jname);
+    clear_jni_exception(env);
+    return svc;
+}
+
+inline knst_c16string audio_type_name(int t) {
+    switch (t) {
+        case 1:  return u"EARPIECE";
+        case 2:  return u"SPEAKER";
+        case 3:  return u"WIRED_HEADSET";
+        case 4:  return u"WIRED_HEADPHONES";
+        case 5:  return u"LINE_ANALOG";
+        case 6:  return u"LINE_DIGITAL";
+        case 7:  return u"BT_SCO";
+        case 8:  return u"BT_A2DP";
+        case 9:  return u"HDMI";
+        case 10: return u"HDMI_ARC";
+        case 11: return u"USB_DEVICE";
+        case 12: return u"USB_ACCESSORY";
+        case 13: return u"DOCK";
+        case 14: return u"FM";
+        case 15: return u"MIC";
+        case 16: return u"FM_TUNER";
+        case 17: return u"TV_TUNER";
+        case 18: return u"TELEPHONY";
+        case 19: return u"AUX_LINE";
+        case 20: return u"IP";
+        case 21: return u"BUS";
+        case 22: return u"USB_HEADSET";
+        case 23: return u"HEARING_AID";
+        case 24: return u"SPEAKER_SAFE";
+        case 25: return u"ECHO_REF";
+        case 26: return u"SPDIF";
+        default: return u"UNKNOWN";
+    }
+}
+
+// FindClass uses the system classloader, which cannot see app classes
+// on native threads. This fallback goes through the activity's
+// classloader — required for com.knst.devices.KnstDevicesHelper.
+inline jclass find_app_class(JNIEnv* env, const char* dotted_name) {
+    if (!env || !g_activity_obj || !dotted_name) return nullptr;
+
+    jclass ctx_cls = env->GetObjectClass(g_activity_obj);
+    if (!ctx_cls) { clear_jni_exception(env); return nullptr; }
+
+    jmethodID get_cl = env->GetMethodID(ctx_cls, "getClassLoader",
+                                         "()Ljava/lang/ClassLoader;");
+    if (!get_cl) { clear_jni_exception(env); env->DeleteLocalRef(ctx_cls); return nullptr; }
+
+    jobject cl = env->CallObjectMethod(g_activity_obj, get_cl);
+    env->DeleteLocalRef(ctx_cls);
+    if (!cl) { clear_jni_exception(env); return nullptr; }
+
+    jclass cl_cls = env->GetObjectClass(cl);
+    jmethodID load_class = env->GetMethodID(cl_cls, "loadClass",
+                                             "(Ljava/lang/String;)Ljava/lang/Class;");
+    if (!load_class) {
+        clear_jni_exception(env);
+        env->DeleteLocalRef(cl_cls);
+        env->DeleteLocalRef(cl);
+        return nullptr;
+    }
+
+    jstring jname = env->NewStringUTF(dotted_name);
+    jclass result = (jclass)env->CallObjectMethod(cl, load_class, jname);
+    env->DeleteLocalRef(jname);
+    env->DeleteLocalRef(cl_cls);
+    env->DeleteLocalRef(cl);
+    clear_jni_exception(env);
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  motherboard() — ro.product / ro.hardware properties
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_motherboard_info motherboard() {
+    knst_motherboard_info m;
+    m.manufacturer = getprop("ro.product.manufacturer");
+    m.product      = getprop("ro.product.board");
+    m.version      = getprop("ro.board.platform");
+    m.serial       = getprop("ro.boot.serialno");
+    m.bios_vendor  = getprop("ro.product.vendor.manufacturer");
+    m.bios_version = getprop("ro.build.version.release");
+    m.bios_date    = getprop("ro.build.date");
+    m.chassis_type = u"Tablet";  // heuristic; refine if you want
+    m.has_board    = !m.product.empty();
+    m.has_bios     = !m.bios_version.empty();
+    m.has_chassis  = true;
+    m.valid = true;
+    return m;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  usb() — JNI UsbManager (OTG devices)
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_vector<knst_usb_info> usb() {
+    knst_vector<knst_usb_info> out;
+    JNIEnv* env = get_env();
+    if (!env) return out;
+
+    jobject mgr = get_service(env, "usb");
+    if (!mgr) return out;
+
+    jclass mgr_cls = env->GetObjectClass(mgr);
+    jmethodID get_list = env->GetMethodID(mgr_cls, "getDeviceList",
+                                           "()Ljava/util/HashMap;");
+    if (!get_list) { env->DeleteLocalRef(mgr); return out; }
+
+    jobject map = env->CallObjectMethod(mgr, get_list);
+    if (!map) { env->DeleteLocalRef(mgr); return out; }
+
+    jclass map_cls = env->GetObjectClass(map);
+    jmethodID values = env->GetMethodID(map_cls, "values", "()Ljava/util/Collection;");
+    jobject coll = env->CallObjectMethod(map, values);
+
+    if (coll) {
+        jclass coll_cls = env->GetObjectClass(coll);
+        jmethodID to_array = env->GetMethodID(coll_cls, "toArray", "()[Ljava/lang/Object;");
+        jobjectArray arr = (jobjectArray)env->CallObjectMethod(coll, to_array);
+
+        if (arr) {
+            jsize n = env->GetArrayLength(arr);
+            for (jsize i = 0; i < n; ++i) {
+                jobject dev = env->GetObjectArrayElement(arr, i);
+                if (!dev) continue;
+                jclass dev_cls = env->GetObjectClass(dev);
+
+                knst_usb_info u;
+
+                jmethodID get_vid = env->GetMethodID(dev_cls, "getVendorId", "()I");
+                jmethodID get_pid = env->GetMethodID(dev_cls, "getProductId", "()I");
+                jmethodID get_name = env->GetMethodID(dev_cls, "getProductName", "()Ljava/lang/String;");
+                jmethodID get_mfg = env->GetMethodID(dev_cls, "getManufacturerName", "()Ljava/lang/String;");
+                jmethodID get_serial = env->GetMethodID(dev_cls, "getSerialNumber", "()Ljava/lang/String;");
+
+                if (get_vid) u.vid = (uint16_t)env->CallIntMethod(dev, get_vid);
+                if (get_pid) u.pid = (uint16_t)env->CallIntMethod(dev, get_pid);
+                if (get_name) {
+                    jstring s = (jstring)env->CallObjectMethod(dev, get_name);
+                    if (s) { u.product_name = jstr(env, s); env->DeleteLocalRef(s); }
+                }
+                if (get_mfg) {
+                    jstring s = (jstring)env->CallObjectMethod(dev, get_mfg);
+                    if (s) { u.manufacturer = jstr(env, s); env->DeleteLocalRef(s); }
+                }
+                if (get_serial) {
+                    jstring s = (jstring)env->CallObjectMethod(dev, get_serial);
+                    if (s) { u.serial = jstr(env, s); env->DeleteLocalRef(s); }
+                }
+
+                u.valid = true;
+                out.push_back(u);
+                env->DeleteLocalRef(dev);
+            }
+            env->DeleteLocalRef(arr);
+        }
+        env->DeleteLocalRef(coll);
+    }
+
+    env->DeleteLocalRef(map);
+    env->DeleteLocalRef(mgr);
+    return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  audio() — JNI AudioManager.getDevices()
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_audio_info audio() {
+    knst_audio_info a;
+    JNIEnv* env = get_env();
+    if (!env) { a.valid = true; return a; }
+
+    jclass helper = find_app_class(env, "com.knst.devices.KnstDevicesHelper");
+    if (!helper) {
+        a.valid = true; return a;
+    }
+
+    jmethodID get_info = env->GetStaticMethodID(helper,
+        "getAudioDevicesInfo", "()[Ljava/lang/Object;");
+    if (!get_info) {
+        clear_jni_exception(env);
+        env->DeleteLocalRef(helper);
+        a.valid = true; return a;
+    }
+
+    jobjectArray arr = (jobjectArray)env->CallStaticObjectMethod(helper, get_info);
+    if (!arr) {
+        clear_jni_exception(env);
+        env->DeleteLocalRef(helper);
+        a.valid = true; return a;
+    }
+
+    jsize total = env->GetArrayLength(arr);
+    jsize n = total / 5;
+
+    for (jsize i = 0; i < n; ++i) {
+        auto get_at = [&](int idx) -> jobject {
+            return env->GetObjectArrayElement(arr, i * 5 + idx);
+        };
+
+        knst_audio_device d;
+        d.index = (uint32_t)i;
+
+        // slot 0: type (Integer)
+        jobject jtype = get_at(0);
+        if (jtype) {
+            jclass ic = env->GetObjectClass(jtype);
+            jmethodID int_val = env->GetMethodID(ic, "intValue", "()I");
+            if (int_val) {
+                jint t = env->CallIntMethod(jtype, int_val);
+                d.name = audio_type_name((int)t);
+            }
+            env->DeleteLocalRef(ic);
+            env->DeleteLocalRef(jtype);
+        }
+
+                // slot 1: name (String) — Android built-in devices return
+        // getProductName() == Build.MODEL. Mark external devices distinctly.
+        jobject jname = get_at(1);
+        if (jname) {
+            knst_c16string desc = jstr(env, (jstring)jname);
+            static knst_c16string s_phone_model;
+            if (s_phone_model.empty()) {
+                s_phone_model = getprop("ro.product.model");
+            }
+            if (!desc.empty() && desc != s_phone_model) {
+                d.description = desc;
+            } else {
+                d.description = u"(built-in)";
+            }
+            env->DeleteLocalRef(jname);
+        }
+
+        // slot 2: isSink (Boolean)
+        jobject jsink = get_at(2);
+        if (jsink) {
+            jclass bc = env->GetObjectClass(jsink);
+            jmethodID bval = env->GetMethodID(bc, "booleanValue", "()Z");
+            if (bval) d.is_output = env->CallBooleanMethod(jsink, bval);
+            env->DeleteLocalRef(bc);
+            env->DeleteLocalRef(jsink);
+        }
+
+        // slot 3: isSource (Boolean)
+        jobject jsrc = get_at(3);
+        if (jsrc) {
+            jclass bc = env->GetObjectClass(jsrc);
+            jmethodID bval = env->GetMethodID(bc, "booleanValue", "()Z");
+            if (bval) d.is_input = env->CallBooleanMethod(jsrc, bval);
+            env->DeleteLocalRef(bc);
+            env->DeleteLocalRef(jsrc);
+        }
+
+        // slot 4: id (Integer) — unused
+        jobject jid = get_at(4);
+        if (jid) env->DeleteLocalRef(jid);
+
+        clear_jni_exception(env);
+        d.valid = true;
+        a.devices.push_back(d);
+    }
+
+    env->DeleteLocalRef(arr);
+    env->DeleteLocalRef(helper);
+    a.valid = true;
+    return a;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  power() — JNI BatteryManager + sticky ACTION_BATTERY_CHANGED
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_power_info power() {
+    knst_power_info p;
+    JNIEnv* env = get_env();
+    if (!env) { p.valid = true; return p; }
+
+    // Path 1: sysfs fallback (fast, works on most devices)
+    {
+        char path[128], buf[64];
+        ::snprintf(path, sizeof(path), "/sys/class/power_supply/battery/capacity");
+        int fd = ::open(path, O_RDONLY);
+        if (fd >= 0) {
+            ssize_t n = ::read(fd, buf, sizeof(buf) - 1);
+            ::close(fd);
+            if (n > 0) {
+                buf[n] = 0;
+                knst_battery_info b;
+                b.name = u"battery";
+                b.percent = (uint32_t)::atoi(buf);
+
+                ::snprintf(path, sizeof(path), "/sys/class/power_supply/battery/status");
+                fd = ::open(path, O_RDONLY);
+                if (fd >= 0) {
+                    n = ::read(fd, buf, sizeof(buf) - 1);
+                    ::close(fd);
+                    if (n > 0) {
+                        buf[n] = 0;
+                        if (::strncmp(buf, "Charging", 8) == 0)        b.state = knst_battery_state::Charging;
+                        else if (::strncmp(buf, "Discharging", 11) == 0) b.state = knst_battery_state::Discharging;
+                        else if (::strncmp(buf, "Full", 4) == 0)         b.state = knst_battery_state::Full;
+                        else if (::strncmp(buf, "Not charging", 12) == 0) b.state = knst_battery_state::NotCharging;
+                    }
+                }
+                b.valid = true;
+                p.batteries.push_back(b);
+                p.has_battery = true;
+                p.valid = true;
+                return p;
+            }
+        }
+    }
+
+    // ── Path 2: ACTION_BATTERY_CHANGED sticky broadcast (state + plugged) ──
+    int state_from_intent   = -1;
+    int plugged_from_intent = -1;
+    int level_from_intent   = -1;
+
+    if (g_activity_obj) {
+        jclass intent_cls = env->FindClass("android/content/Intent");
+        jclass filter_cls = env->FindClass("android/content/IntentFilter");
+        if (intent_cls && filter_cls) {
+            jmethodID filter_ctor = env->GetMethodID(filter_cls, "<init>",
+                                                     "(Ljava/lang/String;)V");
+            jstring action = env->NewStringUTF("android.intent.action.BATTERY_CHANGED");
+            jobject filter = filter_ctor
+                ? env->NewObject(filter_cls, filter_ctor, action) : nullptr;
+            if (filter) {
+                jclass ctx_cls = env->GetObjectClass(g_activity_obj);
+                jmethodID reg_recv = env->GetMethodID(ctx_cls, "registerReceiver",
+                    "(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;)"
+                    "Landroid/content/Intent;");
+                if (reg_recv) {
+                    jobject intent = env->CallObjectMethod(
+                        g_activity_obj, reg_recv, nullptr, filter);
+                    if (intent) {
+                        jmethodID get_int_extra = env->GetMethodID(intent_cls,
+                            "getIntExtra", "(Ljava/lang/String;I)I");
+                        if (get_int_extra) {
+                            jstring k1 = env->NewStringUTF("status");
+                            state_from_intent = env->CallIntMethod(
+                                intent, get_int_extra, k1, -1);
+                            env->DeleteLocalRef(k1);
+                            jstring k2 = env->NewStringUTF("plugged");
+                            plugged_from_intent = env->CallIntMethod(
+                                intent, get_int_extra, k2, -1);
+                            env->DeleteLocalRef(k2);
+                            jstring k3 = env->NewStringUTF("level");
+                            level_from_intent = env->CallIntMethod(
+                                intent, get_int_extra, k3, -1);
+                            env->DeleteLocalRef(k3);
+                        }
+                        env->DeleteLocalRef(intent);
+                    }
+                }
+                env->DeleteLocalRef(ctx_cls);
+                env->DeleteLocalRef(filter);
+            }
+            env->DeleteLocalRef(action);
+            env->DeleteLocalRef(intent_cls);
+            env->DeleteLocalRef(filter_cls);
+            clear_jni_exception(env);
+        }
+    }
+
+    // ── Reopen sysfs — override state/level ──
+    knst_battery_info b;
+    b.name = u"battery";
+    bool got_data = false;
+
+    {
+        char path[128], buf[64];
+        ::snprintf(path, sizeof(path), "/sys/class/power_supply/battery/capacity");
+        int fd = ::open(path, O_RDONLY);
+        if (fd >= 0) {
+            ssize_t n = ::read(fd, buf, sizeof(buf) - 1);
+            ::close(fd);
+            if (n > 0) {
+                buf[n] = 0;
+                b.percent = (uint32_t)::atoi(buf);
+                got_data = true;
+            }
+        }
+
+        ::snprintf(path, sizeof(path), "/sys/class/power_supply/battery/technology");
+        fd = ::open(path, O_RDONLY);
+        if (fd >= 0) {
+            ssize_t n = ::read(fd, buf, sizeof(buf) - 1);
+            ::close(fd);
+            if (n > 0) {
+                buf[n] = 0;
+                while (n > 0 && (buf[n-1] == '\n' || buf[n-1] == '\r')) buf[--n] = 0;
+                b.technology = knst_c16string(buf);
+            }
+        }
+
+        ::snprintf(path, sizeof(path), "/sys/class/power_supply/battery/charge_full");
+        fd = ::open(path, O_RDONLY);
+        if (fd >= 0) {
+            ssize_t n = ::read(fd, buf, sizeof(buf) - 1);
+            ::close(fd);
+            if (n > 0) {
+                buf[n] = 0;
+                uint64_t cf = ::strtoull(buf, nullptr, 10);
+                b.capacity_full_mah = (uint32_t)(cf / 1000);
+            }
+        }
+    }
+
+    // ── Apply intent results ──
+    if (level_from_intent >= 0 && level_from_intent <= 100) {
+        b.percent = (uint32_t)level_from_intent;
+        got_data = true;
+    }
+    if (state_from_intent >= 0) {
+        switch (state_from_intent) {
+            case 2: b.state = knst_battery_state::Charging;    break;
+            case 3: b.state = knst_battery_state::Discharging; break;
+            case 4: b.state = knst_battery_state::NotCharging; break;
+            case 5: b.state = knst_battery_state::Full;        break;
+            default: break;
+        }
+    }
+    if (plugged_from_intent > 0) {
+        p.ac_connected = true;
+        b.ac_online = true;
+    }
+
+    // ── Path 3: BatteryManager (last resort — CAPACITY only) ──
+    if (!got_data) {
+        jobject mgr = get_service(env, "batterymanager");
+        if (mgr) {
+            jclass mgr_cls = env->GetObjectClass(mgr);
+            jmethodID get_int_prop = env->GetMethodID(mgr_cls, "getIntProperty", "(I)I");
+            if (get_int_prop) {
+                jint cap = env->CallIntMethod(mgr, get_int_prop, 4);
+                if (cap >= 0 && cap <= 100) {
+                    b.percent = (uint32_t)cap;
+                    got_data = true;
+                }
+            }
+            env->DeleteLocalRef(mgr_cls);
+            env->DeleteLocalRef(mgr);
+            clear_jni_exception(env);
+        }
+    }
+
+    if (got_data) {
+        b.valid = true;
+        p.batteries.push_back(b);
+        p.has_battery = true;
+    }
+    p.valid = true;
+    return p;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  sensors() — NDK ASensorManager
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_vector<knst_sensor_info> sensors() {
+    knst_vector<knst_sensor_info> out;
+    ASensorManager* mgr = ASensorManager_getInstance();
+    if (!mgr) return out;
+
+    ASensorList list = nullptr;
+    int count = ASensorManager_getSensorList(mgr, &list);
+    if (count <= 0) return out;
+
+    for (int i = 0; i < count; ++i) {
+        const ASensor* s = list[i];
+        if (!s) continue;
+
+        knst_sensor_info info;
+        const char* name = ASensor_getName(s);
+        const char* vendor = ASensor_getVendor(s);
+        int type = ASensor_getType(s);
+
+        info.name = knst_c16string(name ? name : "");
+        info.chip = knst_c16string(vendor ? vendor : "");
+
+        switch (type) {
+            case ASENSOR_TYPE_ACCELEROMETER:       info.type = knst_sensor_type::Accelerometer;   info.unit = u"m/s²"; break;
+            case ASENSOR_TYPE_MAGNETIC_FIELD:      info.type = knst_sensor_type::Magnetometer;    info.unit = u"µT";   break;
+            case ASENSOR_TYPE_GYROSCOPE:           info.type = knst_sensor_type::Gyroscope;       info.unit = u"rad/s";break;
+            case ASENSOR_TYPE_LIGHT:               info.type = knst_sensor_type::Light;           info.unit = u"lx";   break;
+            case ASENSOR_TYPE_PROXIMITY:           info.type = knst_sensor_type::Proximity;       info.unit = u"cm";   break;
+            case ASENSOR_TYPE_PRESSURE:            info.type = knst_sensor_type::Pressure;        info.unit = u"hPa";  break;
+            case ASENSOR_TYPE_RELATIVE_HUMIDITY:   info.type = knst_sensor_type::RelativeHumidity;info.unit = u"%";    break;
+            case ASENSOR_TYPE_AMBIENT_TEMPERATURE: info.type = knst_sensor_type::AmbientTemperature; info.unit = u"°C"; break;
+            default:                               info.type = knst_sensor_type::Unknown;         break;
+        }
+
+        info.valid = true;
+        out.push_back(info);
+    }
+    return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  bluetooth() — JNI BluetoothAdapter
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_bluetooth_info bluetooth() {
+    knst_bluetooth_info b;
+    JNIEnv* env = get_env();
+    if (!env) { b.valid = true; return b; }
+
+    jobject mgr = get_service(env, "bluetooth");
+    if (!mgr) { b.valid = true; return b; }
+
+    jclass mgr_cls = env->GetObjectClass(mgr);
+    jmethodID get_adapter = env->GetMethodID(mgr_cls, "getAdapter",
+                                              "()Landroid/bluetooth/BluetoothAdapter;");
+    if (!get_adapter) { env->DeleteLocalRef(mgr); b.valid = true; return b; }
+
+    jobject adapter = env->CallObjectMethod(mgr, get_adapter);
+    if (adapter) {
+        jclass ad_cls = env->GetObjectClass(adapter);
+
+        jmethodID is_enabled = env->GetMethodID(ad_cls, "isEnabled", "()Z");
+        if (is_enabled) b.powered = env->CallBooleanMethod(adapter, is_enabled);
+
+        jmethodID get_name = env->GetMethodID(ad_cls, "getName", "()Ljava/lang/String;");
+        if (get_name) {
+            jstring s = (jstring)env->CallObjectMethod(adapter, get_name);
+            if (s) { b.adapter_name = jstr(env, s); env->DeleteLocalRef(s); }
+        }
+
+        jmethodID get_addr = env->GetMethodID(ad_cls, "getAddress", "()Ljava/lang/String;");
+        if (get_addr) {
+            jstring s = (jstring)env->CallObjectMethod(adapter, get_addr);
+            if (s) { b.adapter_address = jstr(env, s); env->DeleteLocalRef(s); }
+        }
+
+        b.has_adapter = true;
+
+        // Paired devices
+        jmethodID get_bonded = env->GetMethodID(ad_cls, "getBondedDevices", "()Ljava/util/Set;");
+        if (get_bonded) {
+            jobject set = env->CallObjectMethod(adapter, get_bonded);
+            if (set) {
+                jclass set_cls = env->GetObjectClass(set);
+                jmethodID to_array = env->GetMethodID(set_cls, "toArray", "()[Ljava/lang/Object;");
+                jobjectArray arr = (jobjectArray)env->CallObjectMethod(set, to_array);
+                if (arr) {
+                    jsize n = env->GetArrayLength(arr);
+                    for (jsize i = 0; i < n; ++i) {
+                        jobject dev = env->GetObjectArrayElement(arr, i);
+                        if (!dev) continue;
+                        jclass dev_cls = env->GetObjectClass(dev);
+
+                        knst_bluetooth_device d;
+                        jmethodID gn = env->GetMethodID(dev_cls, "getName", "()Ljava/lang/String;");
+                        jmethodID ga = env->GetMethodID(dev_cls, "getAddress", "()Ljava/lang/String;");
+                        jmethodID gbs = env->GetMethodID(dev_cls, "getBondState", "()I");
+
+                        if (gn) { jstring s=(jstring)env->CallObjectMethod(dev,gn); if(s){d.name=jstr(env,s);env->DeleteLocalRef(s);} }
+                        if (ga) { jstring s=(jstring)env->CallObjectMethod(dev,ga); if(s){d.address=jstr(env,s);env->DeleteLocalRef(s);} }
+                        if (gbs) { jint st = env->CallIntMethod(dev, gbs); d.paired = (st == 12); }
+
+                        d.valid = true;
+                        b.devices.push_back(d);
+                        env->DeleteLocalRef(dev);
+                    }
+                    env->DeleteLocalRef(arr);
+                }
+                env->DeleteLocalRef(set);
+            }
+        }
+        env->DeleteLocalRef(adapter);
+    }
+
+    env->DeleteLocalRef(mgr);
+    b.valid = true;
+    return b;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  cameras() — NDK ACameraManager
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_vector<knst_camera_info> cameras() {
+    knst_vector<knst_camera_info> out;
+    ACameraManager* mgr = ACameraManager_create();
+    if (!mgr) return out;
+
+    ACameraIdList* ids = nullptr;
+    if (ACameraManager_getCameraIdList(mgr, &ids) != ACAMERA_OK) {
+        ACameraManager_delete(mgr);
+        return out;
+    }
+
+    for (int i = 0; i < ids->numCameras; ++i) {
+        const char* id = ids->cameraIds[i];
+        knst_camera_info cam;
+        cam.device_path = knst_c16string(id);
+        cam.name = knst_c16string(id);
+
+        ACameraMetadata* meta = nullptr;
+        if (ACameraManager_getCameraCharacteristics(mgr, id, &meta) == ACAMERA_OK && meta) {
+            ACameraMetadata_const_entry e;
+            if (ACameraMetadata_getConstEntry(meta, ACAMERA_LENS_FACING, &e) == ACAMERA_OK
+                && e.count > 0) {
+                if (e.data.u8[0] == 0) cam.name.append(u" (Front)");
+                else if (e.data.u8[0] == 1) cam.name.append(u" (Back)");
+                else if (e.data.u8[0] == 2) cam.name.append(u" (External)");
+            }
+            if (ACameraMetadata_getConstEntry(meta, ACAMERA_SENSOR_INFO_PIXEL_ARRAY_SIZE, &e) == ACAMERA_OK
+                && e.count >= 2) {
+                cam.max_width  = (uint32_t)e.data.i32[0];
+                cam.max_height = (uint32_t)e.data.i32[1];
+            }
+            ACameraMetadata_free(meta);
+        }
+
+        cam.valid = true;
+        out.push_back(cam);
+    }
+
+    ACameraManager_deleteCameraIdList(ids);
+    ACameraManager_delete(mgr);
+    return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  printers() — no CUPS on Android, defer to PrintManager helper
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_vector<knst_printer_info> printers() {
+    knst_vector<knst_printer_info> out;
+    JNIEnv* env = get_env();
+    if (!env || !g_activity_obj) return out;
+
+    // Resolve KnstPrintDiscoveryHelper via the activity classloader
+    jclass helper = find_app_class(env, "com.knst.print.KnstPrintDiscoveryHelper");
+    if (!helper) return out;
+
+    jmethodID discover = env->GetStaticMethodID(helper, "discover",
+                                                 "(I)[Ljava/lang/String;");
+    if (!discover) { clear_jni_exception(env); env->DeleteLocalRef(helper); return out; }
+
+    jobjectArray arr = (jobjectArray)env->CallStaticObjectMethod(helper, discover, 4000);
+    if (arr) {
+        jsize n = env->GetArrayLength(arr);
+        for (jsize i = 0; i < n; ++i) {
+            jstring js = (jstring)env->GetObjectArrayElement(arr, i);
+            if (!js) continue;
+            const char* u = env->GetStringUTFChars(js, nullptr);
+            if (u) {
+                std::string line(u);
+                env->ReleaseStringUTFChars(js, u);
+                size_t p1 = line.find('|');
+                size_t p2 = (p1 != std::string::npos) ? line.find('|', p1 + 1) : std::string::npos;
+                size_t p3 = (p2 != std::string::npos) ? line.find('|', p2 + 1) : std::string::npos;
+                if (p3 != std::string::npos) {
+                    knst_printer_info pi;
+                    pi.name = knst_c16string(line.substr(0, p1).c_str());
+                    pi.model = pi.name;
+                    pi.uri = knst_c16string(line.substr(p3 + 1).c_str());
+                    pi.status = u"ready";
+                    pi.valid = true;
+                    out.push_back(pi);
+                }
+            }
+            env->DeleteLocalRef(js);
+        }
+        env->DeleteLocalRef(arr);
+    }
+    clear_jni_exception(env);
+    env->DeleteLocalRef(helper);
+    return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  system() — ro.product.* properties
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_system_info system() {
+    knst_system_info s;
+    s.manufacturer = getprop("ro.product.manufacturer");
+    s.product_name = getprop("ro.product.model");
+    s.version      = getprop("ro.build.version.release");
+        s.serial       = getprop("ro.serialno");
+    if (s.serial.empty()) s.serial = getprop("ro.boot.serialno");
+    if (s.serial.empty()) s.serial = getprop("ril.serialnumber");
+    if (s.serial.empty()) s.serial = getprop("persist.radio.serialno");
+    if (s.serial.empty()) {
+        // Last resort: Java Build.getSerial() (API 26+ or reflective)
+        JNIEnv* env = get_env();
+        if (env) {
+            jclass helper = find_app_class(env, "com.knst.devices.KnstDevicesHelper");
+            if (helper) {
+                jmethodID get_serial = env->GetStaticMethodID(helper,
+                    "getSystemSerial", "()Ljava/lang/String;");
+                if (get_serial) {
+                    jstring js = (jstring)env->CallStaticObjectMethod(helper, get_serial);
+                    if (js) {
+                        s.serial = jstr(env, js);
+                        env->DeleteLocalRef(js);
+                    }
+                    clear_jni_exception(env);
+                }
+                env->DeleteLocalRef(helper);
+            }
+        }
+    }
+    s.sku          = getprop("ro.boot.sku");
+    s.family       = getprop("ro.product.device");
+    s.chassis_type = u"Tablet";
+    s.is_laptop    = false;
+
+    // Emulator detection
+    knst_c16string hw = getprop("ro.hardware");
+    knst_c16string model = s.product_name;
+    if (model.contains(u"sdk") || model.contains(u"Emulator")
+        || hw == u"goldfish" || hw == u"ranchu") {
+        s.is_virtual_machine = true;
+    }
+
+    s.valid = true;
+    return s;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  os() — Build properties + uname
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_os_info os() {
+    knst_os_info o;
+    o.os_name        = u"Android";
+    o.os_version     = getprop("ro.build.version.release");
+    o.os_id          = getprop("ro.build.id");
+    o.kernel_name    = u"Linux";
+    o.kernel_version = getprop("ro.kernel.version");
+    o.kernel_arch    = getprop("ro.product.cpu.abi");
+    o.hostname       = getprop("net.hostname");
+
+    // Fallback: uname()
+    struct utsname u;
+    if (::uname(&u) == 0) {
+        if (o.kernel_version.empty()) o.kernel_version = knst_c16string(u.release);
+        if (o.hostname.empty())       o.hostname       = knst_c16string(u.nodename);
+        if (o.kernel_arch.empty())    o.kernel_arch    = knst_c16string(u.machine);
+    }
+
+    // Uptime: /proc/uptime, fallback /proc/stat btime
+    {
+           // Uptime via CLOCK_BOOTTIME (works even when /proc is restricted)
+    {
+        struct timespec ts;
+        if (::clock_gettime(CLOCK_BOOTTIME, &ts) == 0) {
+            o.uptime_seconds = (uint64_t)ts.tv_sec;
+        } else {
+            FILE* f = ::fopen("/proc/uptime", "r");
+            if (f) {
+                double up = 0;
+                if (::fscanf(f, "%lf", &up) == 1) o.uptime_seconds = (uint64_t)up;
+                ::fclose(f);
+            }
+        }
+    }
+        if (o.uptime_seconds == 0) {
+            FILE* sf = ::fopen("/proc/stat", "r");
+            if (sf) {
+                char line[256];
+                uint64_t btime = 0;
+                while (::fgets(line, sizeof(line), sf)) {
+                    if (::sscanf(line, "btime %llu", (unsigned long long*)&btime) == 1) break;
+                }
+                ::fclose(sf);
+                if (btime > 0) {
+                    uint64_t now = (uint64_t)::time(nullptr);
+                    if (now > btime) o.uptime_seconds = now - btime;
+                }
+            }
+        }
+    }
+
+    o.valid = true;
+    return o;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  storage() — JNI StatFs + Environment
+// ═══════════════════════════════════════════════════════════════════════════
+inline knst_vector<knst_storage_info> storage() {
+    knst_vector<knst_storage_info> out;
+    JNIEnv* env = get_env();
+    if (!env || !g_activity_obj) return out;
+
+        auto probe_path = [&](jobject file_obj, bool removable) {
+        if (!file_obj) return;
+
+        jclass file_cls = env->GetObjectClass(file_obj);
+        jmethodID get_path = env->GetMethodID(file_cls, "getAbsolutePath",
+                                               "()Ljava/lang/String;");
+        if (!get_path) { clear_jni_exception(env); env->DeleteLocalRef(file_cls); return; }
+
+        jstring jpath = (jstring)env->CallObjectMethod(file_obj, get_path);
+        if (!jpath) { clear_jni_exception(env); env->DeleteLocalRef(file_cls); return; }
+        knst_c16string path = jstr(env, jpath);
+
+        jclass statfs_cls = env->FindClass("android/os/StatFs");
+        if (!statfs_cls) { clear_jni_exception(env); env->DeleteLocalRef(jpath); env->DeleteLocalRef(file_cls); return; }
+
+        jmethodID ctor = env->GetMethodID(statfs_cls, "<init>", "(Ljava/lang/String;)V");
+
+        // API 18+ signatures: getBlockCountLong()J / getBlockSizeLong()J
+        // Older devices: fallback to int variants.
+        jmethodID get_blocks_long = env->GetMethodID(statfs_cls, "getBlockCountLong", "()J");
+        jmethodID get_bsize_long  = env->GetMethodID(statfs_cls, "getBlockSizeLong",  "()J");
+        jmethodID get_avail_long  = env->GetMethodID(statfs_cls, "getAvailableBytes",  "()J");
+
+        jmethodID get_blocks_int  = nullptr;
+        jmethodID get_bsize_int   = nullptr;
+        jmethodID get_avail_int   = nullptr;
+
+        if (!get_blocks_long || !get_bsize_long) {
+            clear_jni_exception(env);
+            // Fallback: legacy int getters
+            get_blocks_int = env->GetMethodID(statfs_cls, "getBlockCount", "()I");
+            get_bsize_int  = env->GetMethodID(statfs_cls, "getBlockSize",  "()I");
+            get_avail_int  = env->GetMethodID(statfs_cls, "getAvailableBlocks", "()I");
+            clear_jni_exception(env);
+        }
+        clear_jni_exception(env);
+
+        knst_storage_info s;
+        s.device = path;
+        s.type = removable ? knst_storage_type::SD_Card : knst_storage_type::eMMC;
+        s.is_removable = removable;
+        s.is_solid_state = true;
+
+        if (ctor) {
+            jobject statfs = env->NewObject(statfs_cls, ctor, jpath);
+            if (statfs) {
+                uint64_t total = 0, free_b = 0;
+                if (get_blocks_long && get_bsize_long) {
+                    jlong blocks = env->CallLongMethod(statfs, get_blocks_long);
+                    jlong bsize  = env->CallLongMethod(statfs, get_bsize_long);
+                    total = (uint64_t)blocks * (uint64_t)bsize;
+                    if (get_avail_long) {
+                        jlong avail = env->CallLongMethod(statfs, get_avail_long);
+                        free_b = (uint64_t)avail;
+                    }
+                } else if (get_blocks_int && get_bsize_int) {
+                    jint blocks = env->CallIntMethod(statfs, get_blocks_int);
+                    jint bsize  = env->CallIntMethod(statfs, get_bsize_int);
+                    total = (uint64_t)blocks * (uint64_t)bsize;
+                    if (get_avail_int) {
+                        jint avail = env->CallIntMethod(statfs, get_avail_int);
+                        free_b = (uint64_t)avail * (uint64_t)bsize;
+                    }
+                }
+                clear_jni_exception(env);
+                s.total_bytes = total;
+                s.free_bytes  = free_b;
+                s.used_bytes  = (total > free_b) ? total - free_b : 0;
+                env->DeleteLocalRef(statfs);
+            }
+        }
+        clear_jni_exception(env);
+
+        if (s.total_bytes > 0) {
+            knst_storage_partition pt;
+            pt.device = path;
+            pt.mount_point = path;
+            pt.fs_type = removable ? u"vfat" : u"f2fs";
+            pt.total_bytes = s.total_bytes;
+            pt.free_bytes = s.free_bytes;
+            pt.used_bytes = s.used_bytes;
+            pt.is_removable = removable;
+            pt.is_boot = !removable;
+            pt.valid = true;
+            s.partitions.push_back(pt);
+            s.has_partitions = true;
+            s.is_system_disk = !removable;
+            s.valid = true;
+            out.push_back(s);
+        }
+
+        env->DeleteLocalRef(jpath);
+        env->DeleteLocalRef(file_cls);
+    };
+
+    jclass env_cls = env->FindClass("android/os/Environment");
+
+    // /data
+    {
+        jmethodID get_data_dir = env->GetStaticMethodID(env_cls,
+            "getDataDirectory", "()Ljava/io/File;");
+        if (get_data_dir) {
+            jobject data_dir = env->CallStaticObjectMethod(env_cls, get_data_dir);
+            probe_path(data_dir, false);
+            if (data_dir) env->DeleteLocalRef(data_dir);
+        }
+    }
+
+    // /storage/emulated/0
+    {
+        jmethodID get_ext = env->GetStaticMethodID(env_cls,
+            "getExternalStorageDirectory", "()Ljava/io/File;");
+        if (get_ext) {
+            jobject ext = env->CallStaticObjectMethod(env_cls, get_ext);
+            probe_path(ext, true);
+            if (ext) env->DeleteLocalRef(ext);
+        }
+    }
+
+    clear_jni_exception(env);
+    return out;
+}
+
+} // namespace detail_android
+
+// ─── Public wrappers (take over from Linux block) ──────────────────────────
+inline knst_motherboard_info motherboard() noexcept { return detail_android::motherboard(); }
+inline knst_vector<knst_storage_info> storage() noexcept { return detail_android::storage(); }
+inline knst_vector<knst_usb_info> usb()          noexcept { return detail_android::usb(); }
+inline knst_audio_info       audio()             noexcept { return detail_android::audio(); }
+inline knst_power_info       power()             noexcept { return detail_android::power(); }
+inline knst_vector<knst_sensor_info>  sensors()  noexcept { return detail_android::sensors(); }
+inline knst_bluetooth_info   bluetooth()         noexcept { return detail_android::bluetooth(); }
+inline knst_vector<knst_camera_info>  cameras()  noexcept { return detail_android::cameras(); }
+inline knst_vector<knst_printer_info> printers() noexcept { return detail_android::printers(); }
+inline knst_system_info      system()            noexcept { return detail_android::system(); }
+inline knst_os_info          os()                noexcept { return detail_android::os(); }
+
+} // namespace knst_devices
+
+// ─── Out-of-line implementation of the forward declaration ─────────────────
+namespace knst_devices {
+namespace detail_android {
+
+inline void enrich_network_wifi(knst_vector<knst_network_info>& out) noexcept {
+    JNIEnv* env = get_env();
+    if (!env || out.empty()) return;
+
+    jclass helper = find_app_class(env, "com.knst.devices.KnstDevicesHelper");
+    if (!helper) return;
+
+    jmethodID get_wifi = env->GetStaticMethodID(helper,
+        "getWifiInfo", "()[Ljava/lang/Object;");
+    if (!get_wifi) {
+        clear_jni_exception(env);
+        env->DeleteLocalRef(helper);
+        return;
+    }
+
+    jobjectArray arr = (jobjectArray)env->CallStaticObjectMethod(helper, get_wifi);
+    if (!arr) {
+        clear_jni_exception(env);
+        env->DeleteLocalRef(helper);
+        return;
+    }
+
+    if (env->GetArrayLength(arr) >= 6) {
+        auto int_at = [&](int i) -> jint {
+            jobject o = env->GetObjectArrayElement(arr, i);
+            jint v = 0;
+            if (o) {
+                jclass c = env->GetObjectClass(o);
+                jmethodID m = env->GetMethodID(c, "intValue", "()I");
+                if (m) v = env->CallIntMethod(o, m);
+                env->DeleteLocalRef(c);
+                env->DeleteLocalRef(o);
+            }
+            return v;
+        };
+
+        knst_c16string ssid, bssid;
+        {
+            jstring s = (jstring)env->GetObjectArrayElement(arr, 0);
+            if (s) { ssid = jstr(env, s); env->DeleteLocalRef(s); }
+        }
+        {
+            jstring s = (jstring)env->GetObjectArrayElement(arr, 1);
+            if (s) { bssid = jstr(env, s); env->DeleteLocalRef(s); }
+        }
+        jint rssi      = int_at(2);
+        jint link_mbps = int_at(3);
+        jint freq_mhz  = int_at(4);
+
+        for (auto& n : out) {
+            if (!n.is_wireless) continue;
+            if (!ssid.empty())  n.ssid = ssid;
+            if (n.mac.empty() && !bssid.empty()) n.mac = bssid;
+            if (rssi < 0) n.signal_dbm = (int32_t)rssi;
+            if (link_mbps > 0) n.speed_mbps = (uint32_t)link_mbps;
+            if (freq_mhz > 0) {
+                n.frequency_mhz = (uint32_t)freq_mhz;
+                if (freq_mhz >= 2412 && freq_mhz <= 2484)
+                    n.channel = (uint32_t)((freq_mhz - 2407) / 5);
+                else if (freq_mhz >= 5000)
+                    n.channel = (uint32_t)((freq_mhz - 5000) / 5);
+            }
+            n.has_wifi = true;
+            break;  // only the primary WiFi interface
+        }
+    }
+    env->DeleteLocalRef(arr);
+    env->DeleteLocalRef(helper);
+}
+
+} // namespace detail_android
+} // namespace knst_devices
+
+#endif // KNST_USING_PLATFORM_ANDROID

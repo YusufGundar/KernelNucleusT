@@ -15,6 +15,13 @@ knst_global_functions.hpp
 
 #pragma once
 
+
+#if defined(_MSC_VER) && !defined(_SSIZE_T_DEFINED)
+#  include <BaseTsd.h>
+   typedef SSIZE_T ssize_t;
+#  define _SSIZE_T_DEFINED
+#endif
+
 #include "knst_memory.hpp" 
 #include <cstdint> // uint8_t
 #include <cstddef>

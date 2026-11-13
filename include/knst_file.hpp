@@ -47,6 +47,9 @@ knst_file.hpp
     #include <ctime>
     #include <climits>
     #include <cstdlib>
+    #ifndef PATH_MAX
+        #define PATH_MAX 4096
+    #endif
 #endif
 
 
@@ -414,6 +417,24 @@ inline void ResolvePathSegment(const knst_c16string& source,
     parts.push_back(source.substr(seg_start, seg_len));
 }
 
+#if defined(KNST_USING_PLATFORM_ANDROID)
+// Paths that JNI fills in at startup. Android has no $HOME, no /tmp,
+// and app-private dirs are only reachable through the Activity context.
+inline knst_c16string& g_android_temp_dir() noexcept {
+    static knst_c16string d;
+    return d;
+}
+inline knst_c16string& g_android_home_dir() noexcept {
+    static knst_c16string d;
+    return d;
+}
+inline knst_c16string& g_android_external_dir() noexcept {
+    static knst_c16string d;
+    return d;
+}
+#endif
+
+
 } // namespace knst_file_detail
 
 
@@ -472,7 +493,19 @@ struct knst_file {
     static knst_c16string resolve_path(const knst_c16string& p) noexcept;
     static bool is_absolute_path(const knst_c16string& p) noexcept;
     static knst_c16string join_path(const knst_c16string& a,const knst_c16string& b) noexcept;
-                                     
+                    #if defined(KNST_USING_PLATFORM_ANDROID)
+    // Called once at app startup with paths from JNI:
+    //   temp_dir     -> getCacheDir()           e.g. /data/user/0/<pkg>/cache
+    //   home_dir     -> getFilesDir() parent    e.g. /data/user/0/<pkg>
+    //   external_dir -> getExternalFilesDir()   e.g. /storage/emulated/0/Android/data/<pkg>/files
+    static void set_android_dirs(const knst_c16string& temp_dir,
+                                  const knst_c16string& home_dir,
+                                  const knst_c16string& external_dir = knst_c16string()) noexcept {
+        knst_file_detail::g_android_temp_dir()     = temp_dir;
+        knst_file_detail::g_android_home_dir()     = home_dir;
+        knst_file_detail::g_android_external_dir() = external_dir;
+    }
+#endif                   
     static knst_c16string get_current_dir() noexcept;
     static bool set_current_dir(const knst_c16string& p) noexcept;
     static knst_c16string get_executable_dir() noexcept;
@@ -1599,56 +1632,72 @@ inline knst_c16string knst_file::normalize_path(const knst_c16string& p) noexcep
 
 
 inline knst_c16string knst_file::join_path(const knst_c16string& a,const knst_c16string& b) noexcept {
-    if (a.empty()) return b;
-    if (b.empty()) return a;
+    // join_path produces a NATIVE-formatted path on every platform:
+    //   • Windows : result uses '\' even if inputs contained '/'
+    //               (matches std::filesystem::path::operator/ semantics)
+    //   • POSIX   : result uses '/' (the only valid separator)
+    //
+    // This is a PURE string operation: it does NOT resolve '.' or '..'
+    // segments. Use normalize_path() for that.
+    //
+    // Examples:
+    //   join_path("/home/user", "docs/file.txt")
+    //     → Windows : "\home\user\docs\file.txt"
+    //     → POSIX   : "/home/user/docs/file.txt"
+    //   join_path("C:\\Users", "name.txt")
+    //     → Windows : "C:\Users\name.txt"
 
-   
-    char16_t sep = KNST_FILE_SEPARATOR;
-    for (uint32_t i = 0; i < a.length(); ++i) {
-        if (a[i] == u'/') { sep = u'/'; break; }
+    if (a.empty() && b.empty()) return knst_c16string();
+
+    // One side empty → return the other in native format.
+    if (a.empty() || b.empty()) {
+        const knst_c16string& src = a.empty() ? b : a;
 #if KNST_USING_PLATFORM_WINDOWS
-        if (a[i] == u'\\') { sep = u'\\'; break; }
+        knst_c16string out;
+        out.reserve(src.length());
+        for (uint32_t i = 0; i < src.length(); ++i) {
+            char16_t c = src[i];
+            out.append(c == u'/' ? u'\\' : c);
+        }
+        return out;
+#else
+        return src;
 #endif
     }
 
     knst_c16string result;
     result.reserve(a.length() + b.length() + 2);
-    result.append(a);
 
-  
-    while (result.length() > 0 && knst_file_detail::IsSep(result[result.length() - 1])) {
-        result.resize(result.length() - 1);
-    }
+    // ── Append `a` (trailing separators trimmed), converting '/' → '\' on
+    //    Windows so the result is uniformly native.
+    uint32_t a_end = a.length();
+    while (a_end > 0 && knst_file_detail::IsSep(a[a_end - 1])) --a_end;
 
-  
-    bool a_is_root = false;
-    if (result.length() == 0) {
-        a_is_root = true;
-    }
+    for (uint32_t i = 0; i < a_end; ++i) {
+        char16_t c = a[i];
 #if KNST_USING_PLATFORM_WINDOWS
-    else if (result.length() == 2 && result[1] == u':') {
-        a_is_root = true;
-    }
+        if (c == u'/') c = u'\\';
 #endif
-
-    if (a_is_root) {
-        if (result.length() == 0) result.append(sep);
-        else result.append(sep);
-    } else {
-        result.append(sep);
+        result.append(c);
     }
 
-   
-    uint32_t b_start = 0;
-    while (b_start < b.length() && knst_file_detail::IsSep(b[b_start])) b_start++;
+    // ── Exactly one native separator.
+    result.append(KNST_FILE_SEPARATOR);
 
-    if (b_start < b.length()) {
-        result.append(b.substr(b_start, b.length() - b_start));
+    // ── Append `b` (leading separators skipped), same '/' → '\' conversion.
+    uint32_t b_start = 0;
+    while (b_start < b.length() && knst_file_detail::IsSep(b[b_start])) ++b_start;
+
+    for (uint32_t i = b_start; i < b.length(); ++i) {
+        char16_t c = b[i];
+#if KNST_USING_PLATFORM_WINDOWS
+        if (c == u'/') c = u'\\';
+#endif
+        result.append(c);
     }
 
     return result;
 }
-
 inline knst_c16string knst_file::get_parent_dir(const knst_c16string& p) noexcept {
     if (p.empty()) return u".";
 
@@ -1846,9 +1895,19 @@ inline knst_c16string knst_file::read_symlink_target(const knst_c16string& p) no
 
 inline bool knst_file::create_symlink(const knst_c16string& target,const knst_c16string& link_path,bool is_directory) noexcept {
     if (target.empty() || link_path.empty()) return false;
-    DWORD flags = (is_directory ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0)| SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
-                
-    return CreateSymbolicLinkW(reinterpret_cast<const wchar_t*>(link_path.data()),reinterpret_cast<const wchar_t*>(target.data()),flags) != 0;
+    DWORD base_flags = (is_directory ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0);
+    DWORD flags = base_flags | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
+    if (CreateSymbolicLinkW(reinterpret_cast<const wchar_t*>(link_path.data()),
+                            reinterpret_cast<const wchar_t*>(target.data()), flags) != 0)
+        return true;
+    // ALLOW_UNPRIVILEGED_CREATE is unsupported on Win7/8 or when the process
+    // lacks "Create symbolic links" privilege (Win10 without Developer Mode).
+    // Retry without it: this needs administrator rights but at least works.
+    if (GetLastError() == ERROR_INVALID_PARAMETER) {
+        return CreateSymbolicLinkW(reinterpret_cast<const wchar_t*>(link_path.data()),
+                                   reinterpret_cast<const wchar_t*>(target.data()), base_flags) != 0;
+    }
+    return false;
 }
 
 inline bool knst_file::create_directory(const knst_c16string& p) noexcept {
@@ -2092,26 +2151,46 @@ inline bool knst_file::is_absolute_path(const knst_c16string& p) noexcept {
 }
 
 inline knst_c16string knst_file::get_executable_dir() noexcept {
+#if defined(KNST_USING_PLATFORM_ANDROID)
+    // On Android there is no "executable directory" in the Windows sense:
+    // /proc/self/exe points to the zygote binary (/system/bin/app_process*),
+    // not to the app's own directory. Use JNI to get applicationInfo.nativeLibraryDir
+    // if you need the app's library directory.
+    return knst_c16string();
+#else
     char buffer[PATH_MAX];
     ssize_t n = ::readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
-    if (n <= 0) {
-        return get_current_dir();
-    }
+    if (n <= 0) return get_current_dir();
     buffer[n] = '\0';
-    knst_c16string exe_path(buffer);
-    return get_directory(exe_path);
+    return get_directory(knst_c16string(buffer));
+#endif
 }
-
 inline knst_c16string knst_file::get_home_dir() noexcept {
+#if defined(KNST_USING_PLATFORM_ANDROID)
+    // Android has no $HOME. The JNI bridge fills this from getFilesDir()'s
+    // parent, e.g. /data/user/0/<package>.
+    const auto& d = knst_file_detail::g_android_home_dir();
+    if (!d.empty() && dir_exists(d)) return d;
+    return knst_c16string();
+#else
     const char* home = getenv("HOME");
     if (home == nullptr || home[0] == '\0') return knst_c16string();
     return knst_c16string(home);
+#endif
 }
 
 inline knst_c16string knst_file::get_temp_dir() noexcept {
+#if defined(KNST_USING_PLATFORM_ANDROID)
+    // Android has no /tmp. The JNI bridge fills this from getCacheDir().
+    const auto& d = knst_file_detail::g_android_temp_dir();
+    if (!d.empty() && dir_exists(d)) return d;
+    if (dir_exists(u"/data/local/tmp")) return u"/data/local/tmp";
+    return knst_c16string();   // no writable temp dir
+#else
     const char* tmp = getenv("TMPDIR");
     if (tmp != nullptr && tmp[0] != '\0') return knst_c16string(tmp);
     return u"/tmp";
+#endif
 }
 
 inline bool knst_file::path_exists(const knst_c16string& p) noexcept {

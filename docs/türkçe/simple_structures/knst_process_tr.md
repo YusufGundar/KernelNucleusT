@@ -2,7 +2,7 @@
 
 Selamlar! 👋 Bu doküman `knst_process` sınıfının ne olduğunu, nasıl kullanıldığını ve neden KernelNucleusT'de tercih edildiğini açıklar.
 
-Kısaca: **Cross-platform process yönetimi + GPU izleme kütüphanesi.** Linux ve Windows'ta aynı API'yi kullanarak program başlatır, çıktısını yakalar, stdin'e yazar, timeout uygular, PID listeler, thread/FD/env bilgisi okur ve **NVIDIA/AMD GPU**'ları izler.
+Kısaca: **Cross-platform process yönetimi + GPU izleme kütüphanesi.** Linux ve Windows'ta aynı API'yi kullanarak program başlatır, çıktısını yakalar, stdin'e yazar, timeout uygular, PID listeler, thread/FD/env bilgisi okur ve **NVIDIA/AMD/Intel GPU**'ları izler. Android'de sensör/cihaz modu kısıtlı ama detection çalışır.
 
 ---
 
@@ -10,21 +10,22 @@ Kısaca: **Cross-platform process yönetimi + GPU izleme kütüphanesi.** Linux 
 
 | Özellik | Ne kazandırır? |
 |---|---|
-| **Cross-platform** | Linux ve Windows'ta aynı API |
+| **Cross-platform** | Linux + Windows + Android'de aynı API |
 | **Program başlatma** | `run`, `run_shell`, `run_capture`, `run_detached` |
-| **Output capture** | stdout + stderr aynı anda, binary-safe |
-| **stdin piping** | Çocuk process'e veri gönder |
+| **Output capture** | stdout + stderr paralel, binary-safe |
+| **stdin piping** | Çocuk process'e veri gönder (thread'li, non-blocking) |
 | **Timeout** | Belirtilen sürede bitmezse otomatik kill |
-| **Detached process** | Fire-and-forget, parent beklemez |
+| **Detached process** | POSIX'te double-fork, Windows'ta `DETACHED_PROCESS` |
 | **Process listeleme** | PID listesi, isim arama, children, descendants |
 | **Process inspection** | RSS/VSZ, CPU süresi, thread sayısı, FD sayısı |
-| **Thread / FD / Env** | `/proc/[pid]/task`, `/proc/[pid]/fd`, `/proc/[pid]/environ` |
+| **Thread / FD / Env** | Her iki platformda da okunur (FD: handle enumeration, Env: PEB) |
 | **Suspend / Resume** | Process'i duraklat ve devam ettir |
 | **Priority / Affinity** | nice değeri ve CPU çekirdek ataması |
-| **GPU izleme** | NVIDIA (NVML), AMD (Linux: sysfs / Windows: DXGI+PDH), Intel (DXGI) |
+| **GPU izleme** | NVIDIA (NVML), AMD/Intel (Linux: sysfs / Windows: DXGI+PDH) |
 | **GPU process listesi** | Hangi process hangi GPU'yu kullanıyor, VRAM |
-| **Shell seçimi** | sh, bash, zsh, fish, cmd, powershell |
+| **Shell seçimi** | sh, bash, zsh, fish, cmd, powershell, pwsh |
 | **UTF-16 dostu** | `knst_c16string` ile Unicode yollar |
+| **Suspend after spawn** | Başlat + hemen duraklat (debugger için) |
 
 ---
 
@@ -88,7 +89,9 @@ if (p.error == knst_process_error::None) {
 }
 ```
 
-**Avantajı:** Shell injection riski yok. Argümanlar doğrudan `execve`'ye gider.
+**Avantajı:** Shell injection riski yok. Argümanlar doğrudan `execve`/`CreateProcessW`'ye gider.
+
+**POSIX'te exec yolu:** Eğer program adında `/` yoksa `PATH` üzerinden aranır (`ExecvpeCompat`). Aksi halde doğrudan `execve` çağrılır.
 
 ### `run_shell` — Shell Komutu
 
@@ -121,6 +124,10 @@ Desteklenen shell'ler:
 | `PowerShellCore` | — | `pwsh.exe` |
 | `Custom` | `opts.shell_path` | `opts.shell_path` |
 
+**Android özel:** `Sh`, `Bash`, `Zsh`, `Fish` hepsi `/system/bin/sh`'a map edilir.
+
+**Windows varsayılan (`Auto`):** `cmd.exe /c`.
+
 ### `run_capture` — Tek Çağrıda Çalıştır + Yakala
 
 En pratik API — başlatır, bekler, output döner:
@@ -138,6 +145,8 @@ std::cout << r.out_data << "\n";
 std::cout << "Exit: " << r.exit_code << "\n";
 ```
 
+**İçeride:** `run()` + `communicate()`.
+
 ### `run_detached` — Fire-and-Forget
 
 Arka planda çalışır, parent beklemez:
@@ -148,10 +157,11 @@ knst_process p = knst_process::run_detached(
     { u"Başlık", u"Mesaj" });
 
 std::cout << "PID: " << p.pid() << "\n";
-// Program devam ederken bu process arka planda çalışır
 ```
 
-**Windows'ta:** `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB` kullanılır.
+**POSIX:** Double-fork + `setsid()` + `/dev/null` stdio. Parent'a gerçek PID ara pipe ile döner.
+
+**Windows:** `DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB`. Job access denied olursa `CREATE_BREAKAWAY_FROM_JOB` olmadan retry.
 
 ---
 
@@ -181,16 +191,25 @@ struct knst_process_result {
 };
 ```
 
+### POSIX vs Windows Davranışı
+
+**POSIX:** `poll()` ile stdin/stdout/stderr tek döngüde multiplex edilir. Verimli, tek thread.
+
+**Windows:** stdin writer ayrı bir `knst_thread`'de çalışır (paralel write), main thread `PeekNamedPipe` + `ReadFile` döngüsüyle output okur. `communicate()` sonunda writer thread join edilir.
+
 ### Timeout Davranışı
 
-Timeout **aşılırsa** process otomatik kill edilir:
+Timeout **aşılırsa** process otomatik kill edilir ve **500 ms drain** yapılır:
 
 ```cpp
 knst_process p = knst_process::run(u"/bin/sleep", { u"5" });
 auto r = p.communicate(nullptr, 0, 300);   // 300 ms timeout
 
+// Timeout sonrası:
+//   - force_kill() çağrıldı
+//   - wait(0) beklendi
+//   - 500 ms ek drain ile pipe boşaltıldı
 std::cout << "timed_out: " << (r.timed_out ? "evet" : "hayır") << "\n";
-// "evet" — sleep 5 kill edildi
 ```
 
 ### Alternatif Okuma Metodları
@@ -198,7 +217,7 @@ std::cout << "timed_out: " << (r.timed_out ? "evet" : "hayır") << "\n";
 ```cpp
 // stdout'u oku
 knst_byte_string data = p.read_stdout();
-knst_c16string text = p.read_stdout_text();   // UTF-16'ya çevirir
+knst_c16string text = p.read_stdout_text();   // UTF-16'ya çevirir, trailing newline trim eder
 
 // stderr'u oku
 knst_byte_string err = p.read_stderr();
@@ -209,7 +228,7 @@ while (p.read_line(line)) {
     std::cout << "> " << line << "\n";
 }
 
-// Timeout ile oku
+// Timeout ile oku (bloklamaz)
 knst_byte_string chunk;
 if (p.try_read_stdout(100, chunk)) {
     std::cout << "Gelen veri: " << chunk.length() << " byte\n";
@@ -217,9 +236,11 @@ if (p.try_read_stdout(100, chunk)) {
 
 // stdin'e yaz
 p.write_stdin("veri\n", 6);
-p.write_stdin(knst_c16string(u"UTF-16 metin\n"));
+p.write_stdin(knst_c16string(u"UTF-16 metin\n"));   // otomatik UTF-8'e çevrilir
 p.close_stdin();   // EOF sinyali
 ```
+
+> ⚠️ **`read_line` non-blocking değil.** Satır gelmezse bloklar. Bloklamamak için `try_read_stdout` kullan.
 
 ---
 
@@ -247,6 +268,8 @@ if (p.is_running()) { /* ... */ }
 // Exit code
 int code = p.exit_code();
 ```
+
+**Detached process:** `is_running()` ve `wait()` `kill(pid, 0)` ile kontrol eder (child reap edilemez).
 
 ---
 
@@ -296,7 +319,11 @@ knst_process::terminate_graceful(12345, 3000);
 | `SIGSTOP` | 19 | Duraklat (yakalanamaz) |
 | `SIGCONT` | 18 | Devam ettir |
 
-**Windows'ta:** Sinyaller desteklenmez, hepsi `TerminateProcess` çağırır.
+**Windows davranışı:**
+- **`kill(sig)`:** `TerminateProcess(h, sig)` — signal kavramı yok
+- **`send_signal(15)`** detached process'te → `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT)`
+- **`kill_tree()`:** `CreateJobObject` + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` + `TerminateJobObject` — child'ları da yakalar
+- `kill_tree` job'a assign edilemezse → fallback `TerminateProcess`
 
 ---
 
@@ -317,7 +344,8 @@ knst_process::resume_pid(12345);
 ```
 
 **Linux:** `SIGSTOP` / `SIGCONT`
-**Windows:** `NtSuspendProcess` / `NtResumeProcess` (ntdll'den)
+
+**Windows:** `NtSuspendProcess` / `NtResumeProcess` (runtime `ntdll.dll`'den yüklenir). `resume()` hem `ResumeThread` (ana thread) hem `NtResumeProcess` dener.
 
 ---
 
@@ -347,6 +375,8 @@ knst_process::set_priority(12345, 10);
 | 15 .. 20 | `BELOW_NORMAL_PRIORITY_CLASS` |
 | 20+ | `IDLE_PRIORITY_CLASS` |
 
+**Not:** `knst_process_options`'ta hem `nice_value` hem `priority` var. `nice_value` öncelikli — sıfır değilse onu kullanır, sıfırsa `priority`'yi.
+
 ### Affinity (CPU Çekirdek Ataması)
 
 ```cpp
@@ -357,8 +387,9 @@ p.set_affinity(0b0101);   // bit 0 ve bit 2
 knst_process::set_affinity(12345, 0xFF);   // ilk 8 çekirdek
 ```
 
-**Linux:** `sched_setaffinity()`
-**Windows:** `SetProcessAffinityMask()`
+**Linux:** `sched_setaffinity()` — 64 bit maske desteklenir.
+
+**Windows:** `SetProcessAffinityMask()`.
 
 ---
 
@@ -370,6 +401,10 @@ knst_process::set_affinity(12345, 0xFF);   // ilk 8 çekirdek
 knst_vector<uint32_t> pids = knst_process::list_pids();
 std::cout << "Toplam " << pids.size() << " process\n";
 ```
+
+**POSIX:** `/proc/*` tarama (numeric dizinler).
+
+**Windows:** `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)`.
 
 ### Detaylı Liste
 
@@ -401,6 +436,8 @@ auto found = knst_process::find_by_name(u"chrome", false);
 auto exact = knst_process::find_by_name(u"chrome", true);
 ```
 
+Hem `name` (process adı) hem `exe_path` basename'i kontrol edilir.
+
 ### Çocuk ve Torunlar
 
 ```cpp
@@ -411,6 +448,10 @@ knst_vector<uint32_t> kids = knst_process::children_of(12345);
 knst_vector<knst_process_info> descendants = 
     knst_process::descendants_of(12345);
 ```
+
+**POSIX:** Her PID için `/proc/[pid]/stat` okunur (ppid çıkarmak için).
+
+**Windows:** `CreateToolhelp32Snapshot` + `pe.th32ParentProcessID`.
 
 ---
 
@@ -436,8 +477,8 @@ struct knst_process_info {
     uint32_t gid = 0;
 
     // Bellek
-    uint64_t rss_bytes    = 0;   // Resident set size
-    uint64_t vsz_bytes    = 0;   // Virtual size
+    uint64_t rss_bytes    = 0;
+    uint64_t vsz_bytes    = 0;
     uint64_t shared_bytes = 0;
     uint64_t text_bytes   = 0;
 
@@ -500,8 +541,17 @@ std::cout << "FDs       : " << info.fd_count << "\n";
 | `Stopped` | Duraklatılmış |
 | `Tracing` | Debugger tarafından izleniyor |
 | `Dead` | Ölü |
-| `Idle` | Boş |
-| `Waiting` | Bekliyor |
+| `Idle` | Boş (kernel thread) |
+| `Waiting` | Bekliyor (Windows WrWaiting) |
+
+**POSIX:** `/proc/[pid]/stat`'tan okunur — `R`, `S`, `D`, `Z`, `T`, `t`, `X`, `I`, `W`.
+
+**Windows:** `NtQuerySystemInformation(SystemProcessInformation)` ile thread state'lerinden sentezlenir:
+- Tüm thread'ler terminated → `Dead`
+- Herhangi bir thread running → `Running`
+- Hepsi suspended → `Stopped`
+- Herhangi biri disk wait → `DiskSleep`
+- Herhangi biri wait → `Sleeping`
 
 ### Static Erişimciler
 
@@ -516,6 +566,35 @@ uint64_t rss = knst_process::get_rss_bytes(pid);
 uint64_t vsz = knst_process::get_vsz_bytes(pid);
 knst_process_state s = knst_process::get_state(pid);
 ```
+
+### Platform Davranışları
+
+**POSIX `get_info`:** `/proc/[pid]/stat` + `/proc/[pid]/status` + `readlink("/proc/[pid]/exe")` + `readlink("/proc/[pid]/cwd")` + `/proc/[pid]/cmdline` + `/proc/[pid]/fd` sayımı.
+
+**Android `get_info`:** `exe`, `cmdline`, `cwd` **sadece self (kendi PID) için** okunur. Diğer process'ler için bu alanlar boş kalır (SELinux engeller).
+
+**Windows `get_info`:**
+- `exe_path` → `QueryFullProcessImageNameW`
+- `cmdline` → PEB okuma (WOW64 desteği var — 32-bit process'lerde PEB32 okunur)
+- `cwd` → PEB okuma (CurrentDirectory.DosPath)
+- `user` → `OpenProcessToken` + `LookupAccountSid`
+- `uid` → SID'in FNV-1a hash'i (POSIX uid karşılığı yok)
+- `nice` → `GetPriorityClass` → nice'a çevrilir
+- `thread_count` → `CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)`
+- `state` → yukarıda anlatıldı
+- `is_zombie` → **her zaman `false`** (Windows'ta zombie kavramı yok)
+
+### `exists`, `is_alive`, `is_zombie`
+
+```cpp
+bool e = knst_process::exists(12345);    // herhangi bir state'te var mı?
+bool a = knst_process::is_alive(12345);  // zombie/dead değil mi?
+bool z = knst_process::is_zombie(12345); // sadece zombie mi?
+```
+
+- **POSIX `exists`:** `/proc/[pid]` var mı?
+- **Windows `exists`:** `OpenProcess` dener, olmazsa snapshot'ta arar
+- **`is_zombie`:** POSIX'te state kontrolü, Windows'ta her zaman `false`
 
 ---
 
@@ -532,12 +611,25 @@ for (const auto& t : threads) {
 knst_vector<uint32_t> tids = knst_process::get_thread_ids(pid);
 ```
 
-**Linux:** `/proc/[pid]/task/`
-**Windows:** `CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD)`
+**`knst_thread_info`:**
+
+```cpp
+struct knst_thread_info {
+    uint32_t tid = 0;
+    knst_c16string name;                    // sadece POSIX'te dolu
+    knst_process_state state = knst_process_state::Unknown;   // (şu an doldurulmuyor)
+    uint64_t cpu_user_ms = 0;
+    uint64_t cpu_system_ms = 0;
+};
+```
+
+**POSIX:** `/proc/[pid]/task/*` + `/proc/[pid]/task/[tid]/comm` → isim dolu.
+
+**Windows:** `TH32CS_SNAPTHREAD` → sadece TID listesi. **Thread ismi boş kalır** (Windows'ta thread naming extra API gerekir).
 
 ---
 
-## 🔗 10) File Descriptor Bilgisi (POSIX)
+## 🔗 10) File Descriptor Bilgisi
 
 ```cpp
 knst_vector<knst_fd_info> fds = knst_process::get_fds(pid);
@@ -551,21 +643,27 @@ for (const auto& fd : fds) {
 }
 ```
 
-**Örnek çıktı:**
+**`knst_fd_info`:**
 
-```
-FD 0 -> /dev/pts/2 (file)
-FD 1 -> /dev/pts/2 (file)
-FD 2 -> /dev/pts/2 (file)
-FD 3 -> socket:[12345] (socket)
-FD 5 -> /home/user/data.txt (file)
+```cpp
+struct knst_fd_info {
+    int32_t fd = -1;
+    knst_c16string target;
+    bool is_socket = false;
+    bool is_pipe = false;
+    bool is_file = false;
+};
 ```
 
-**Not:** Sadece Linux'ta desteklenir.
+**POSIX:** `/proc/[pid]/fd/*` — `readlink` ile target okunur. `socket:`, `pipe:`, `/` prefix'leriyle ayırt edilir.
+
+**Windows:** `NtQuerySystemInformation(SystemExtendedHandleInformation)` + `NtQueryObject` + `DuplicateHandle` + `GetFinalPathNameByHandleW`. Sadece **`File`** ve **`Pipe`** tipleri döner — diğer handle'lar (event, mutex, section) atlanır.
+
+> ⚠️ **Windows'ta "fd" kavramı farklı.** Handle numarası `fd` olarak raporlanır, POSIX FD numarası değildir.
 
 ---
 
-## 🌍 11) Environment Variables (POSIX)
+## 🌍 11) Environment Variables
 
 ```cpp
 knst_vector<knst_env_var> env = knst_process::get_env(pid);
@@ -575,7 +673,18 @@ for (const auto& e : env) {
 }
 ```
 
-**Kaynak:** `/proc/[pid]/environ`
+**`knst_env_var`:**
+
+```cpp
+struct knst_env_var {
+    knst_c16string name;
+    knst_c16string value;
+};
+```
+
+**POSIX:** `/proc/[pid]/environ` — `\0` ayırıcı ile okunur.
+
+**Windows:** PEB okuma (`ProcessParameters.Environment`). WOW64 destekli. `kMaxEnv = 256 KB` sınırı var; daha büyükse 32 KB → 256 KB arası chunk artırımıyla denenir.
 
 ---
 
@@ -598,6 +707,8 @@ o.env.push_back(env);
 o.inherit_env = true;   // parent env'i kullan
 ```
 
+**`inherit_env` + `env` birleşik:** Eğer `inherit_env=true` ise `env`'deki değişkenler parent env'e **eklenir** (aynı isimde varsa override edilir). `false` ise sadece `env` kullanılır.
+
 ### Stdio Kontrolü
 
 ```cpp
@@ -609,11 +720,16 @@ o.stderr_mode = knst_stdio_mode::Pipe;
 o.stdout_file = u"/tmp/out.log";
 o.stderr_file = u"/tmp/err.log";
 
-// Kolaylık bayrakları
+// Kolaylık bayrakları (mode'ları override eder)
 o.capture_stdout = true;
 o.capture_stderr = true;
 o.inherit_stdin  = true;
 ```
+
+**`EffectiveMode` mantığı:**
+- `File` veya `Null` explicit mode → kullan
+- `capture_*=true` → `Pipe`
+- `capture_*=false` → `Inherit`
 
 ### Pencere ve Session
 
@@ -621,8 +737,8 @@ o.inherit_stdin  = true;
 o.window_mode = knst_window_mode::Hidden;   // Hidden, Minimized, Maximized, Normal
 o.new_session        = true;   // POSIX: setsid()
 o.new_console        = true;   // Windows: CREATE_NEW_CONSOLE
-o.new_process_group  = true;
-o.detached           = true;
+o.new_process_group  = true;   // POSIX: setpgid(0,0) / Windows: CREATE_NEW_PROCESS_GROUP
+o.detached           = true;   // POSIX: double-fork / Windows: DETACHED_PROCESS
 ```
 
 ### Shell Seçimi
@@ -635,8 +751,8 @@ o.shell_path = u"/usr/bin/bash";   // Custom için
 ### Priority ve Affinity
 
 ```cpp
-o.nice_value    = 10;    // POSIX nice
-o.priority      = 10;    // Windows priority class
+o.nice_value    = 10;    // POSIX nice (öncelikli)
+o.priority      = 10;    // nice_value=0 ise kullanılır
 o.affinity_mask = 0b0011;  // ilk 2 çekirdek
 ```
 
@@ -647,6 +763,8 @@ o.suspend_after_spawn = true;   // SIGSTOP/CREATE_SUSPENDED ile başlat
 o.close_extra_fds     = true;
 o.win_unicode         = true;
 ```
+
+**`suspend_after_spawn` ne işe yarar?** Process `SIGSTOP`/`CREATE_SUSPENDED` ile başlatılır → hemen askıda. Debugger attach etmek veya `set_affinity` gibi erken işlemler yapmak için kullanışlı. `resume()` ile devam ettirilir.
 
 ---
 
@@ -679,30 +797,23 @@ struct knst_gpu_info {
     knst_c16string vbios_version;
     knst_gpu_vendor vendor;         // NVIDIA, AMD, Intel, Apple, Other
 
-    // Bellek
     uint64_t memory_total;
     uint64_t memory_used;
     uint64_t memory_free;
 
-    // Kullanım
     uint32_t utilization_gpu;       // %
     uint32_t utilization_mem;       // %
 
-    // Sıcaklık
     int32_t  temperature_core;      // °C
 
-    // Güç
     uint32_t power_usage_mw;        // mW
     uint32_t power_limit_mw;
 
-    // Frekanslar
     uint32_t clock_core_mhz;
     uint32_t clock_mem_mhz;
 
-    // Fan
     uint32_t fan_percent;           // %
 
-    // PCIe
     uint32_t pcie_gen;
     uint32_t pcie_width;
 
@@ -756,25 +867,47 @@ for (const auto& p : procs) {
 }
 ```
 
-**Çıktı:**
-
-```
-PID 12345  GPU0  VRAM=2048 MB  blender
-PID 23456  GPU0  VRAM=512 MB   firefox
-```
+**Kaynaklar:**
+- **NVIDIA:** NVML `nvmlDeviceGetComputeRunningProcesses_v2` + `nvmlDeviceGetGraphicsRunningProcesses_v2` (MIG desteği). v2 yoksa v1'e fallback.
+- **AMD:** `/proc/[pid]/fdinfo/*` içinde `drm-memory-vram:` satırı toplanır. Aynı PID birden fazla fd açmışsa toplanır.
 
 ### GPU Vendor Detection
 
 **Linux:**
 - **NVIDIA:** NVML (libnvidia-ml.so)
-- **AMD:** `/sys/class/drm/card*/device/mem_info_vram_*`
-- **Intel:** `/sys/class/drm/card*/device/vendor` (0x8086)
+- **AMD:** `/sys/class/drm/card*/device/mem_info_vram_*`, `gpu_busy_percent`, `pp_dpm_sclk`, `hwmon/temp1_input`, `power1_average`
+- **Intel:** `/sys/class/drm/card*/device/vendor` (0x8086), `gt_act_freq_mhz`, `gt_cur_freq_mhz`, `gt_busy_percent`
 
 **Windows:**
 - **NVIDIA:** NVML (nvml.dll) — tam veri
-- **Tüm markalar:** DXGI (`IDXGIFactory1` + `IDXGIAdapter3`) — isim, VRAM total/used
-- **GPU kullanım %:** PDH (`\GPU Engine(*)\Utilization Percentage`) — LUID bazlı
-- **Fallback:** WMI `Win32_VideoController` — eski sürücüler için son çare
+- **Tüm markalar:** DXGI (`IDXGIFactory1` + `IDXGIAdapter3`) — isim, VRAM total/used (QueryVideoMemoryInfo)
+- **GPU kullanım %:** PDH (`\GPU Engine(*)\Utilization Percentage`) — LUID bazlı toplanır
+- **Fallback:** WMI `Win32_VideoController` — eski sürücüler için son çare (cache'lenir)
+
+**Android:**
+- **Qualcomm Adreno:** `/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage`, `gpuclk`
+- **ARM Mali:** `/sys/class/misc/mali0/device/utilisation`, `clock`
+
+### GPU Cache Detayları
+
+- **PDH cache:** 2 saniye (thread_local). Her `list_all()` PDH sorgu yapmasın diye.
+- **WMI cache:** `std::once_flag` — program başına sadece bir kez sorgu.
+- **NVML cache:** `std::once_flag` — bir kez `nvmlInit`.
+
+### NVML Sentinel Değerler
+
+Bazı sürücüler VRAM bilgisi yokken **`0xFFFFFFFFFFFF` ve üstü sentinel** döner. Kod bunları otomatik **0'a çeker** (bilinmiyor olarak işaretler):
+
+```cpp
+constexpr uint64_t NVML_SENTINEL_MIN = 0xFFFFFFFFFFFFULL;
+auto safe_vram = [](uint64_t raw) -> uint64_t {
+    return (raw >= NVML_SENTINEL_MIN) ? 0ULL : raw;
+};
+```
+
+### Duplicate Filtreleme
+
+**NVIDIA GPU**'lar NVML'den alındıysa, sysfs/DXGI/WMI listelerinde aynı isimli GPU **tekrar eklenmez** (`has_nvidia_from_nvml` bayrağı).
 
 ### Process + GPU Bilgisi
 
@@ -805,6 +938,10 @@ std::cout << "RAM boş    : " << si.free_memory / (1024*1024*1024) << " GB\n";
 std::cout << "Uptime     : " << si.uptime_ms / 1000 / 3600 << " saat\n";
 ```
 
+**POSIX:** `/proc/meminfo` + `/proc/uptime` (Android'de uptime yoksa `CLOCK_BOOTTIME` fallback).
+
+**Windows:** `GlobalMemoryStatusEx` + `GetSystemInfo` + `GetTickCount64`.
+
 ### Aktif Process Bilgisi
 
 ```cpp
@@ -815,11 +952,13 @@ knst_c16string user = knst_process::current_user();
 knst_c16string exe  = knst_process::current_exe_path();
 ```
 
+**Windows notu:** `current_uid()` **her zaman 0** döner — POSIX uid kavramı yok. `current_user()` `GetUserNameW` kullanır.
+
 ---
 
 ## 🛡️ 15) Hata Yönetimi
 
-### `knst_process_error` Enum
+### `knst_process_error` Enum (23 değer)
 
 ```cpp
 enum class knst_process_error : uint8_t {
@@ -867,28 +1006,53 @@ int32_t native = p.native_error_code();
 // Windows: GetLastError()
 ```
 
+### POSIX errno → process_error eşlemesi
+
+| errno | process_error |
+|---|---|
+| `ENOENT`, `ENOTDIR` | `NotFound` |
+| `EACCES`, `EPERM` | `PermissionDenied` |
+| `ENOMEM` | `OutOfMemory` |
+| `EINVAL` | `InvalidArgument` |
+| `ESRCH` | `NoSuchProcess` |
+| Diğer | `ExecFailed` |
+
+### Windows GetLastError → process_error eşlemesi
+
+| GetLastError | process_error |
+|---|---|
+| `ERROR_FILE_NOT_FOUND`, `ERROR_PATH_NOT_FOUND` | `NotFound` |
+| `ERROR_ACCESS_DENIED` | `PermissionDenied` |
+| Diğer | `ExecFailed` |
+
 ---
 
 ## 🌍 16) Platform Farkları
 
-| Konu | Linux (POSIX) | Windows |
-|---|---|---|
-| **Spawn** | `fork()` + `execve()` | `CreateProcessW()` |
-| **Shell** | `/bin/sh` | `cmd.exe` |
-| **Signal** | Tam destek (SIGTERM, SIGKILL, ...) | Sadece kill |
-| **Suspend** | `SIGSTOP` | `NtSuspendProcess` |
-| **Resume** | `SIGCONT` | `NtResumeProcess` |
-| **Priority** | nice (-20..19) | Priority class |
-| **Affinity** | `sched_setaffinity` | `SetProcessAffinityMask` |
-| **Process list** | `/proc` tarama | `CreateToolhelp32Snapshot` |
-| **Cmdline** | `/proc/[pid]/cmdline` | PEB okuma |
-| **Threads** | `/proc/[pid]/task` | `TH32CS_SNAPTHREAD` |
-| **FDs** | `/proc/[pid]/fd` | Yok |
-| **Environment** | `/proc/[pid]/environ` | Yok |
-| **GPU (NVIDIA)** | NVML | NVML |
-| **GPU (AMD)** | sysfs (tam) | DXGI (VRAM+isim) + PDH (kullanım %) |
-| **GPU (Intel)** | sysfs i915 | DXGI + PDH |
-| **Uptime** | `/proc/uptime` | `GetTickCount64` |
+| Konu | Linux (POSIX) | Windows | Android |
+|---|---|---|---|
+| **Spawn** | `fork()` + `execve()` | `CreateProcessW()` | `fork()` + `execve()` |
+| **Shell** | `/bin/sh` | `cmd.exe` | `/system/bin/sh` |
+| **Signal** | Tam destek (SIGTERM, SIGKILL, ...) | Sadece `TerminateProcess` | Tam destek |
+| **Suspend** | `SIGSTOP` | `NtSuspendProcess` | `SIGSTOP` |
+| **Resume** | `SIGCONT` | `NtResumeProcess` | `SIGCONT` |
+| **Priority** | nice (-20..19) | Priority class | nice |
+| **Affinity** | `sched_setaffinity` (64 bit) | `SetProcessAffinityMask` | `sched_setaffinity` |
+| **Process list** | `/proc` tarama | `CreateToolhelp32Snapshot` | `/proc` tarama |
+| **Cmdline** | `/proc/[pid]/cmdline` | PEB okuma (WOW64) | **Sadece self** |
+| **CWD** | `/proc/[pid]/cwd` | PEB okuma (WOW64) | **Sadece self** |
+| **Exe path** | `/proc/[pid]/exe` | `QueryFullProcessImageNameW` | **Sadece self** |
+| **Threads** | `/proc/[pid]/task` + isim | `TH32CS_SNAPTHREAD` (isim yok) | `/proc/[pid]/task` |
+| **FDs** | `/proc/[pid]/fd` | Handle enumeration (File+Pipe) | `/proc/[pid]/fd` |
+| **Environment** | `/proc/[pid]/environ` | PEB okuma | `/proc/[pid]/environ` |
+| **`is_zombie`** | state kontrolü | **her zaman false** | state kontrolü |
+| **`current_uid`** | `getuid()` | **her zaman 0** | `getuid()` |
+| **GPU (NVIDIA)** | NVML | NVML | — |
+| **GPU (AMD)** | sysfs (tam) | DXGI (VRAM+isim) + PDH (%) | — |
+| **GPU (Intel)** | sysfs i915 | DXGI + PDH | — |
+| **GPU (Adreno)** | — | — | kgsl sysfs |
+| **GPU (Mali)** | — | — | mali0 sysfs |
+| **Uptime** | `/proc/uptime` | `GetTickCount64` | `/proc/uptime` veya `CLOCK_BOOTTIME` |
 
 ---
 
@@ -1041,13 +1205,33 @@ void pause_and_resume(uint32_t pid) {
 }
 ```
 
+### Örnek 8: Suspend-After-Spawn (Debugger için)
+
+```cpp
+void attach_debugger(const knst_c16string& program) {
+    knst_process_options o;
+    o.suspend_after_spawn = true;
+
+    knst_process p = knst_process::run(program, {}, o);
+    if (p.error != knst_process_error::None) return;
+
+    std::cout << "PID " << p.pid() << " askıda, debugger bağlanabilir\n";
+
+    // Debugger attach et...
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    p.resume();
+}
+```
+
 ---
 
 ## 📊 18) Performans Notları
 
 | İşlem | Karmaşıklık | Not |
 |---|---|---|
-| `run` | O(1) | fork + exec |
+| `run` | O(1) | fork + exec (~1-5 ms) |
+| `run_shell` | O(1) | Shell spawn ekstra maliyet |
 | `communicate` | O(n) | Tüm çıktı bellekte |
 | `wait` | O(1) | waitpid |
 | `list_pids` | O(pid sayısı) | `/proc` tarama |
@@ -1055,14 +1239,22 @@ void pause_and_resume(uint32_t pid) {
 | `find_by_name` | O(pid sayısı) | `list_all` üzerinden |
 | `get_info` | O(dosya) | `/proc/[pid]/*` okuma |
 | `children_of` | O(pid sayısı) | Her `/proc/*/stat` okuma |
+| `get_fds` (POSIX) | O(fd sayısı) | readlink her fd |
+| `get_fds` (Win) | O(handle sayısı) | NtQueryObject + DuplicateHandle |
+| `get_env` (Win) | O(env boyutu) | PEB okuma, chunk artırımlı |
 | `knst_gpu::list_all` | O(GPU sayısı) | NVML/sysfs |
+| `knst_gpu::get_processes` | O(fd × process) | POSIX'te fdinfo tarama |
 
 ### Ne Zaman Yavaş?
 
-- **`list_all`** — 300+ process varsa 1-2 saniye sürebilir
+- **`list_all`** — 300+ process varsa 1-2 saniye sürebilir (her PID için ~5 dosya okuma)
 - **`descendants_of`** — Recursive olduğu için process tree büyükse yavaş
 - **`get_env`** — `/proc/[pid]/environ` büyükse yavaş
-- **GPU cache** — İlk çağrı NVML yükleme + WMI sorgu yapar (yavaş), sonrası cache
+- **`get_fds`** (Windows) — Yüzlerce handle varsa `DuplicateHandle` + `NtQueryObject` her handle için çalışır, ~100ms-1s
+- **GPU cache** — İlk çağrı NVML yükleme + WMI sorgu + PDH 250ms sample yapar (yavaş), sonrası cache:
+  - PDH: 2 saniye
+  - WMI: program başına 1 kez
+  - NVML: program başına 1 kez
 
 ### Optimizasyon İpuçları
 
@@ -1079,6 +1271,72 @@ for (int i = 0; i < 100; ++i) {
 }
 ```
 
+```cpp
+// ❌ Yavaş: Her frame'de GPU listele (PDH cache 2s ama ilk çağrı yavaş)
+for (int i = 0; i < 60; ++i) {
+    auto gpus = knst_gpu::list_all();
+}
+
+// ✅ Hızlı: 1 kez al, ara sıra yenile
+auto gpus = knst_gpu::list_all();
+```
+
+---
+
+## ✅ 19) Yap / ❌ Yapma
+
+### ✅ Yap
+
+```cpp
+// 1. Output yakalamak için communicate kullan
+auto r = p.communicate(stdin_data, size, 5000);
+
+// 2. Timeout'u her zaman ver
+p.communicate(nullptr, 0, 5000);   // 5 saniye
+
+// 3. Shell injection istemiyorsan run() kullan
+knst_process::run(u"/bin/ls", { u"-la" });
+
+// 4. Detached process'te wait() yapma
+auto p = knst_process::run_detached(u"notify-send", { u"hi" });
+// p.wait() ÇAĞIRMA — çalışmasına izin ver
+
+// 5. list_all sonucunu cache'le
+auto procs = knst_process::list_all();
+// ... birden fazla işlemde kullan
+
+// 6. Windows'ta File+Pipe dışındaki handle'ları bekleme (fds)
+// (event, mutex, section handle'ları dönmez)
+```
+
+### ❌ Yapma
+
+```cpp
+// 1. read_stdout() + read_stderr() ayrı ayrı çağırma (interleave sorunu)
+p.read_stdout();
+p.read_stderr();   // ❌ stderr'da kalabilir
+
+// ✅ communicate() kullan
+
+// 2. Windows'ta is_zombie() true bekleme
+knst_process::is_zombie(12345);   // ❌ her zaman false
+
+// 3. Android'de başka process'in exe_path'ini bekleme
+knst_process::get_exe_path(1);   // ❌ boş döner (self değil)
+
+// 4. Shell injection'dan kaçınmak için run_shell kullan
+knst_process::run_shell(u"rm -rf " + user_input);   // ❌ tehlikeli
+
+// ✅ knst_process::run(u"rm", { u"-rf", user_input });
+
+// 5. Suspend edilmiş process'te timeout bekleme
+p.suspend();
+p.communicate(nullptr, 0, 1000);   // ❌ timeout (process askıda)
+
+// 6. get_info içinde her şeyin dolu olduğunu bekleme
+knst_process::get_info(pid);   // Windows: is_zombie=false, uid=SID hash
+```
+
 ---
 
 ## 🎯 Size Getireceği Kazanç
@@ -1086,9 +1344,12 @@ for (int i = 0; i < 100; ++i) {
 `knst_process` şu durumlarda ciddi avantaj sağlar:
 
 - ✅ **Build / CI sistemleri** — komut çalıştır, output yakala, timeout uygula
-- ✅ **Sistem izleme araçları** — process listesi, thread, memory
-- ✅ **GPU telemetri** — mining, oyun, render izleme
+- ✅ **Sistem izleme araçları** — process listesi, thread, memory, FDs, env
+- ✅ **GPU telemetri** — mining, oyun, render izleme, NVIDIA/AMD/Intel
 - ✅ **Otomasyon scriptleri** — Python/Node.js yerine C++ ile
-- ✅ **Cross-platform tooling** — Windows ve Linux'ta aynı kod
+- ✅ **Cross-platform tooling** — Windows + Linux + Android aynı kod
 - ✅ **Güvenli komut çalıştırma** — shell injection olmadan argüman geçirme
-
+- ✅ **Süreç ağacı analizi** — children, descendants, kill_tree
+- ✅ **Suspend/Resume** — batch işlemleri duraklat, devam ettir
+- ✅ **Priority/Affinity** — CPU çekirdek sabitleme, nice ayarı
+- ✅ **Debugger-friendly** — `suspend_after_spawn` ile erkenden yakala

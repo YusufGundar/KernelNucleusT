@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- ============================================================================
+     KernelNucleusT — Aggregated Simple Structures Test Manifest
+     Scan disabled — ML Kit entries removed.
+     ============================================================================ -->
+
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.knst.test.simple">
+
+    <uses-sdk
+        android:minSdkVersion="24"
+        android:targetSdkVersion="34" />
+
+    <!-- ========================================================================
+         PERMISSIONS
+         ======================================================================== -->
+
+    <!-- Network / HTTP -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- Storage / file -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <!-- Audio / microphone -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Camera -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Bluetooth (legacy + modern split) -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
+    <!-- Location (required by legacy BT scan) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Misc -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- ========================================================================
+         FEATURES  — all optional; missing ones skip gracefully at runtime
+         ======================================================================== -->
+
+    <uses-feature android:glEsVersion="0x00030000" android:required="false" />
+
+    <uses-feature android:name="android.hardware.camera"            android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any"        android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus"  android:required="false" />
+
+    <uses-feature android:name="android.hardware.microphone"        android:required="false" />
+
+    <uses-feature android:name="android.hardware.bluetooth"         android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le"      android:required="false" />
+
+    <uses-feature android:name="android.hardware.usb.host"          android:required="false" />
+
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope"     android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.compass"       android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.light"         android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.proximity"     android:required="false" />
+
+    <uses-feature android:name="android.hardware.touchscreen" android:required="true" />
+
+    <!-- ========================================================================
+         APPLICATION
+         ======================================================================== -->
+
+    <application
+        android:hasCode="true"
+        android:label="KNST Simple Tests"
+        android:requestLegacyExternalStorage="true"
+        android:preserveLegacyExternalStorage="true"
+        android:extractNativeLibs="true">
+
+        <activity
+            android:name="com.knst.window.KnstActivity"
+            android:exported="true"
+            android:label="KNST Simple Tests"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode|density|navigation"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize|stateHidden">
+
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="knst_app" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+
+</manifest>

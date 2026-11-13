@@ -44,8 +44,7 @@ int main() {
 
     std::cout << "Size    : " << img.width << " x " << img.height << "\n";
     std::cout << "Channels: " << img.channels << "\n";
-    std::cout << "Format  : "
-              << knst_image_loader::format_name(img.source_format) << "\n";
+    std::cout << "Format  : " << knst_image_loader::format_name(img.source_format) << "\n";
 
     return 0;
 }

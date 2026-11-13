@@ -24,9 +24,6 @@
 
 // X11/Xlib.h defines `None` as a macro; the library clears it in
 // KernelNucleusT.hpp, but we keep this guard for extra safety.
-#ifdef None
-    #undef None
-#endif
 
 
 static void section(const char* title) {

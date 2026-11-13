@@ -4,9 +4,13 @@
 #
 #  Overview
 #  --------
-#   Header-only C++20 window / GUI framework with optional GPU backends.
-#   Every compile definition, include path and system library is propagated
-#   through the INTERFACE target `KernelNucleusT::KernelNucleusT`.
+#   Header-only C++20 framework with optional window/GPU/network backends.
+#   Library-only target: KernelNucleusT::KernelNucleusT (INTERFACE).
+#
+#   This configuration builds EXACTLY ONE executable from the source you
+#   pass via -DKNST_APP_SOURCE=... — nothing else. If KNST_APP_SOURCE is
+#   empty, only the header target is configured (installable, usable from
+#   other projects via find_package(KernelNucleusT)).
 #
 #  Supported platforms
 #  -------------------
@@ -14,20 +18,52 @@
 #   Linux    — X11 / Wayland / Dual (runtime-selected)
 #   Android  — NDK (API 24+)
 #
-#  GPU backends (optional, can be combined)
+#  GPU backends (optional, may be combined)
 #  ----------------------------------------
 #   -DKNST_WINDOW_USE_OPENGL=ON   GLAD + EGL/WGL
 #   -DKNST_WINDOW_USE_VULKAN=ON   Vulkan loader
 #
-#  Quick start
-#  -----------
-#   Linux X11:      cmake -B build -DKNST_LINUX_PLATFORM=X11 -DKNST_WINDOW_USE_OPENGL=ON
-#   Linux Wayland:  cmake -B build -DKNST_LINUX_PLATFORM=Wayland -DKNST_WINDOW_USE_OPENGL=ON
-#   Linux Dual:     cmake -B build -DKNST_WINDOW_EMBEDDED_X11_AND_WAYLAND=ON
-#   Windows:        cmake -B build -DKNST_WINDOW_USE_OPENGL=ON
-#   Android:        cmake -B build \
-#                     -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake \
-#                     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24
+#  Network stack (optional, auto-detected)
+#  ---------------------------------------
+#   Detection order per component:
+#     1. find_package(<name> CONFIG)     — vcpkg / Conan / cmake-installed
+#     2. pkg_check_modules(<pc-name>)    — Linux / pkg-config
+#     3. find_library + find_path         — last resort
+#
+#   Opt-out flags:
+#     -DKNST_NETWORK_DISABLE_TLS=ON
+#     -DKNST_NETWORK_DISABLE_H2=ON
+#     -DKNST_NETWORK_DISABLE_H3=ON
+#
+#   Tiers (highest wins):
+#     H3  →  quictls + nghttp2 + ngtcp2 + nghttp3   (TLS + H2 + H3)
+#     H2  →  system OpenSSL + nghttp2               (TLS + H2)
+#     H1  →  system OpenSSL                         (TLS + H1)
+#     off →  none                                   (no network TLS at all)
+#
+#  quictls discovery (H3 only)
+#  ---------------------------
+#   Search order:
+#     1. -DKNST_QUICTLS_ROOT=/path/to/quictls   (cache override)
+#     2. $ENV{QUICTLS_ROOT}                     (environment variable)
+#     3. Common prefixes: /usr/local/quictls, /opt/quictls, $HOME/quictls
+#
+#   If quictls is not found, H3 is silently disabled and the build
+#   continues with H2 or H1.
+#
+#  IMPORTANT: when H3 is enabled, this build links ONLY quictls
+#  (libssl + libcrypto from the quictls prefix). System OpenSSL is
+#  NOT linked in the same binary, which avoids an ABI clash. At
+#  runtime, RPATH prepends the quictls lib directory so libssl.so.3
+#  resolves to the QUIC-capable build.
+#
+#  Building an executable
+#  ----------------------
+#   cmake -S . -B build \
+#     -DCMAKE_BUILD_TYPE=Release \
+#     -DKNST_APP_SOURCE=examples/simple_structures/knst_json/knst_json_basic.cpp
+#   cmake --build build -j
+#   ./build/bin/knst_app
 #
 #  Consuming from another project
 #  ------------------------------
@@ -39,7 +75,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(KernelNucleusT
     VERSION     1.0.0
-    DESCRIPTION "KernelNucleusT cross-platform window / GUI framework"
+    DESCRIPTION "KernelNucleusT cross-platform C++20 framework"
     LANGUAGES   C CXX
 )
 
@@ -55,21 +91,33 @@ endif()
 # ─────────────────────────────────────────────────────────────────────────────
 #  User options
 # ─────────────────────────────────────────────────────────────────────────────
-option(KNST_BUILD_EXAMPLES      "Build the example applications"                 OFF)
 option(KNST_ENABLE_SANITIZERS   "Enable AddressSanitizer + UBSan (debug builds)" OFF)
 option(KNST_WARNINGS_AS_ERRORS  "Treat compiler warnings as errors"              OFF)
 option(KNST_STATIC_MSVC_RUNTIME "Use the static MSVC runtime (/MT, /MTd)"        ON)
 
-# GPU backends — independent, may be combined
 option(KNST_WINDOW_USE_OPENGL "Enable the OpenGL backend (GLAD + EGL/WGL)" OFF)
 option(KNST_WINDOW_USE_VULKAN "Enable the Vulkan backend"                  OFF)
 
-# Linux dual-backend mode (X11 + Wayland in a single binary, runtime-selected)
+option(KNST_NETWORK_DISABLE_TLS "Disable TLS entirely (no OpenSSL, no wss://, no h2/h3)" OFF)
+option(KNST_NETWORK_DISABLE_H2  "Disable HTTP/2 even if nghttp2 is installed"            OFF)
+option(KNST_NETWORK_DISABLE_H3  "Disable HTTP/3 even if ngtcp2/nghttp3/quictls are installed" OFF)
+
 option(KNST_WINDOW_EMBEDDED_X11_AND_WAYLAND
        "Compile both X11 and Wayland backends; select one at runtime" OFF)
 
+set(KNST_QUICTLS_ROOT "" CACHE PATH
+    "Path to quictls install prefix (QUIC-capable OpenSSL). Empty = auto-detect.")
+set(KNST_NGTCP2_ROOT "" CACHE PATH
+    "Path to ngtcp2 install prefix. Empty = auto-detect via find_package/pkg-config.")
+set(KNST_NGHTTP3_ROOT "" CACHE PATH
+    "Path to nghttp3 install prefix. Empty = auto-detect via find_package/pkg-config.")
+set(KNST_NGHTTP2_ROOT "" CACHE PATH
+    "Path to nghttp2 install prefix. Empty = auto-detect via find_package/pkg-config.")
+
+# The ONLY source that is built. Absolute or relative to this CMakeLists.
+# Empty = headers only (library target still exported / installable).
 set(KNST_APP_SOURCE "" CACHE FILEPATH
-    "Optional: absolute or relative path to a .cpp file built as 'knst_app'")
+    "Path to a .cpp file to build as 'knst_app'. Empty = headers only.")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
     set(KNST_LINUX_PLATFORM "X11" CACHE STRING
@@ -133,7 +181,6 @@ target_include_directories(KernelNucleusT INTERFACE
 )
 target_compile_features(KernelNucleusT INTERFACE cxx_std_20)
 
-# Accumulators — applied to the INTERFACE target at the very end
 set(KNST_DEFINITIONS    "")
 set(KNST_LINK_ITEMS     "")
 set(KNST_PLATFORM_DETAIL "${KNST_PLATFORM}")
@@ -154,7 +201,7 @@ if(KNST_PLATFORM STREQUAL "Android")
     list(APPEND KNST_DEFINITIONS
         KNST_USING_PLATFORM_ANDROID
         KNST_USING_PLATFORM_LINUX)
-    list(APPEND KNST_LINK_ITEMS android log)
+            list(APPEND KNST_LINK_ITEMS android log)
 
     if(DEFINED ANDROID_PLATFORM_LEVEL)
         set(KNST_ANDROID_API "${ANDROID_PLATFORM_LEVEL}")
@@ -170,22 +217,195 @@ if(KNST_PLATFORM STREQUAL "Android")
             "Some features may not work.")
     endif()
 
+    # ---- quictls (Android NDK cross-compile) ----
+    if(NOT KNST_NETWORK_DISABLE_TLS)
+        set(QUICTLS_ROOT "$ENV{HOME}/.knst-cache/quictls-android-${ANDROID_ABI}")
+        set(_quictls_src "$ENV{HOME}/.knst-cache/quictls-src-${ANDROID_ABI}")
+
+        if(ANDROID_ABI STREQUAL "arm64-v8a")
+            set(_quictls_target "android-arm64")
+            set(_quictls_triple "aarch64-linux-android")
+        elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+            set(_quictls_target "android-arm")
+            set(_quictls_triple "armv7a-linux-androideabi")
+        elseif(ANDROID_ABI STREQUAL "x86_64")
+            set(_quictls_target "android-x86_64")
+            set(_quictls_triple "x86_64-linux-android")
+        elseif(ANDROID_ABI STREQUAL "x86")
+            set(_quictls_target "android-x86")
+            set(_quictls_triple "i686-linux-android")
+        else()
+            message(FATAL_ERROR "Android TLS: unsupported ABI '${ANDROID_ABI}'")
+        endif()
+
+        set(_quictls_ndk_bin "${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/bin")
+        set(_quictls_api "${KNST_ANDROID_API}")
+
+        if(NOT EXISTS "${QUICTLS_ROOT}/lib/libssl.a")
+            message(STATUS "Android quictls: downloading + building (10-15 min first time)...")
+            include(FetchContent)
+            FetchContent_Declare(quictls_src
+                GIT_REPOSITORY https://github.com/quictls/openssl.git
+                GIT_TAG        openssl-3.1.5+quic
+                GIT_SHALLOW    TRUE
+                SOURCE_DIR     "${_quictls_src}")
+            FetchContent_GetProperties(quictls_src)
+            if(NOT quictls_src_POPULATED)
+                FetchContent_Populate(quictls_src)
+            endif()
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E env
+                    "ANDROID_NDK_ROOT=${ANDROID_NDK}"
+                    "ANDROID_NDK_HOME=${ANDROID_NDK}"
+                    "PATH=${_quictls_ndk_bin}:$ENV{PATH}"
+                    "CC=${_quictls_ndk_bin}/${_quictls_triple}${_quictls_api}-clang"
+                    "CXX=${_quictls_ndk_bin}/${_quictls_triple}${_quictls_api}-clang++"
+                    "AR=${_quictls_ndk_bin}/llvm-ar"
+                    "RANLIB=${_quictls_ndk_bin}/llvm-ranlib"
+                    "STRIP=${_quictls_ndk_bin}/llvm-strip"
+                    "${_quictls_src}/Configure"
+                        "${_quictls_target}"
+                        "-D__ANDROID_API__=${_quictls_api}"
+                        no-shared
+                        "--prefix=${QUICTLS_ROOT}"
+                        "--openssldir=${QUICTLS_ROOT}/ssl"
+                WORKING_DIRECTORY "${_quictls_src}"
+                RESULT_VARIABLE _quictls_cfg_rc)
+            if(NOT _quictls_cfg_rc EQUAL 0)
+                message(FATAL_ERROR "quictls Configure failed (rc=${_quictls_cfg_rc})")
+            endif()
+            set(_quictls_jobs "4")
+            if(DEFINED ENV{CMAKE_BUILD_PARALLEL_LEVEL})
+                set(_quictls_jobs "$ENV{CMAKE_BUILD_PARALLEL_LEVEL}")
+            endif()
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E env "PATH=${_quictls_ndk_bin}:$ENV{PATH}"
+                    make "-j${_quictls_jobs}"
+                WORKING_DIRECTORY "${_quictls_src}"
+                RESULT_VARIABLE _quictls_build_rc)
+            if(NOT _quictls_build_rc EQUAL 0)
+                message(FATAL_ERROR "quictls make failed (rc=${_quictls_build_rc})")
+            endif()
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E env "PATH=${_quictls_ndk_bin}:$ENV{PATH}"
+                    make install_sw
+                WORKING_DIRECTORY "${_quictls_src}"
+                RESULT_VARIABLE _quictls_install_rc)
+            if(NOT _quictls_install_rc EQUAL 0)
+                message(FATAL_ERROR "quictls install_sw failed (rc=${_quictls_install_rc})")
+            endif()
+        else()
+            message(STATUS "Android quictls: ready (${QUICTLS_ROOT})")
+        endif()
+
+        target_include_directories(KernelNucleusT INTERFACE "${QUICTLS_ROOT}/include")
+        target_link_libraries(KernelNucleusT INTERFACE
+            "${QUICTLS_ROOT}/lib/libssl.a"
+            "${QUICTLS_ROOT}/lib/libcrypto.a"
+            dl)
+        list(APPEND KNST_DEFINITIONS KNST_NETWORK_ENABLE_TLS)
+
+        set(OPENSSL_ROOT_DIR    "${QUICTLS_ROOT}"              CACHE PATH     "" FORCE)
+        set(OPENSSL_INCLUDE_DIR "${QUICTLS_ROOT}/include"     CACHE PATH     "" FORCE)
+        set(OPENSSL_SSL_LIBRARY "${QUICTLS_ROOT}/lib/libssl.a" CACHE FILEPATH "" FORCE)
+        set(OPENSSL_CRYPTO_LIBRARY "${QUICTLS_ROOT}/lib/libcrypto.a" CACHE FILEPATH "" FORCE)
+        set(OPENSSL_FOUND TRUE CACHE BOOL "" FORCE)
+    endif()
+
+    # ---- nghttp2 (Android, FetchContent) ----
+    if(NOT KNST_NETWORK_DISABLE_TLS AND NOT KNST_NETWORK_DISABLE_H2)
+        include(FetchContent)
+        set(ENABLE_LIB_ONLY        ON  CACHE BOOL "" FORCE)
+        set(ENABLE_STATIC_LIB      ON  CACHE BOOL "" FORCE)
+        set(ENABLE_SHARED_LIB      OFF CACHE BOOL "" FORCE)
+        set(ENABLE_APP             OFF CACHE BOOL "" FORCE)
+        set(ENABLE_HPACK_TOOLS     OFF CACHE BOOL "" FORCE)
+        set(ENABLE_EXAMPLES        OFF CACHE BOOL "" FORCE)
+        set(ENABLE_PYTHON_BINDINGS OFF CACHE BOOL "" FORCE)
+        set(ENABLE_FAILALL         OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTING          OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(nghttp2
+            GIT_REPOSITORY https://github.com/nghttp2/nghttp2.git
+            GIT_TAG        v1.58.0)
+        FetchContent_MakeAvailable(nghttp2)
+        list(APPEND KNST_DEFINITIONS KNST_NETWORK_ENABLE_H2)
+    endif()
+
+    # ---- nghttp3 (Android, FetchContent) ----
+    if(NOT KNST_NETWORK_DISABLE_TLS AND NOT KNST_NETWORK_DISABLE_H3)
+        include(FetchContent)
+        set(ENABLE_LIB_ONLY    ON  CACHE BOOL "" FORCE)
+        set(ENABLE_STATIC_LIB  ON  CACHE BOOL "" FORCE)
+        set(ENABLE_SHARED_LIB  OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTING      OFF CACHE BOOL "" FORCE)
+        set(ENABLE_TESTING     OFF CACHE BOOL "" FORCE)
+        set(ENABLE_FAILALL     OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(nghttp3
+            GIT_REPOSITORY https://github.com/ngtcp2/nghttp3.git
+            GIT_TAG        v1.6.0)
+        FetchContent_GetProperties(nghttp3)
+        if(NOT nghttp3_POPULATED)
+            FetchContent_Populate(nghttp3)
+            set(_nghttp3_cml "${nghttp3_SOURCE_DIR}/CMakeLists.txt")
+            if(EXISTS "${_nghttp3_cml}")
+                file(READ "${_nghttp3_cml}" _nghttp3_content)
+                string(REPLACE "add_custom_target(check" "# add_custom_target(check"
+                       _nghttp3_content "${_nghttp3_content}")
+                file(WRITE "${_nghttp3_cml}" "${_nghttp3_content}")
+            endif()
+            add_subdirectory(${nghttp3_SOURCE_DIR} ${nghttp3_BINARY_DIR})
+        endif()
+    endif()
+
+    # ---- ngtcp2 (Android, FetchContent) ----
+    if(NOT KNST_NETWORK_DISABLE_TLS AND NOT KNST_NETWORK_DISABLE_H3)
+        include(FetchContent)
+        set(ENABLE_LIB_ONLY    ON  CACHE BOOL "" FORCE)
+        set(ENABLE_STATIC_LIB  ON  CACHE BOOL "" FORCE)
+        set(ENABLE_SHARED_LIB  OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTING      OFF CACHE BOOL "" FORCE)
+        set(ENABLE_TESTING     OFF CACHE BOOL "" FORCE)
+        set(ENABLE_OPENSSL     ON  CACHE BOOL "" FORCE)
+        FetchContent_Declare(ngtcp2
+            GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
+            GIT_TAG        v1.6.0)
+        FetchContent_GetProperties(ngtcp2)
+        if(NOT ngtcp2_POPULATED)
+            FetchContent_Populate(ngtcp2)
+            set(_ngtcp2_cml "${ngtcp2_SOURCE_DIR}/CMakeLists.txt")
+            if(EXISTS "${_ngtcp2_cml}")
+                file(READ "${_ngtcp2_cml}" _ngtcp2_content)
+                string(REPLACE "add_custom_target(check" "# add_custom_target(check"
+                       _ngtcp2_content "${_ngtcp2_content}")
+                file(WRITE "${_ngtcp2_cml}" "${_ngtcp2_content}")
+            endif()
+            add_subdirectory(${ngtcp2_SOURCE_DIR} ${ngtcp2_BINARY_DIR})
+        endif()
+        list(APPEND KNST_DEFINITIONS KNST_NETWORK_ENABLE_H3)
+    endif()
+
     set(KNST_PLATFORM_DETAIL "Android (API ${KNST_ANDROID_API}, ABI ${ANDROID_ABI})")
 
 # =============================================================================
 #  Platform: Windows
 # =============================================================================
 elseif(KNST_PLATFORM STREQUAL "Windows")
-    list(APPEND KNST_DEFINITIONS
-        KNST_USING_PLATFORM_WINDOWS
-        NOMINMAX
-        OEMRESOURCE
-        _CRT_SECURE_NO_WARNINGS)
+list(APPEND KNST_DEFINITIONS
+    KNST_USING_PLATFORM_WINDOWS
+    WIN32_LEAN_AND_MEAN        # winsock.h (v1) → winsock2.h çakışmasını önler
+    NOMINMAX
+    OEMRESOURCE
+    _CRT_SECURE_NO_WARNINGS
+    _WIN32_WINNT=0x0A00        # Win10: MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING
+    WINVER=0x0A00)             # için Win8+ şart; hedefimiz Win10 olduğu için 0x0A00
 
-    list(APPEND KNST_LINK_ITEMS
+        list(APPEND KNST_LINK_ITEMS
         gdi32 user32 shell32 shcore ole32 oleaut32 uuid
         hid bthprops setupapi strmiids iphlpapi ws2_32 wbemuuid
-        psapi dxgi pdh advapi32)
+        psapi dxgi pdh advapi32
+        winmm wlanapi crypt32 bcrypt userenv
+        mfplat mf mfuuid mfreadwrite ksuser
+        winspool wiaguid)
 
     if(MSVC)
         set(KNST_PLATFORM_DETAIL "Windows (MSVC)")
@@ -202,27 +422,9 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
 
     find_package(PkgConfig REQUIRED)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  Helper: knst_setup_wayland_protocols()
-    #
-    #  Generates all required Wayland protocol sources (.c) and headers (.h)
-    #  at build time using wayland-scanner. XML files are located
-    #  automatically under stable / staging / unstable directories so the
-    #  script works across different wayland-protocols versions.
-    #
-    #  Required variables in caller scope:
-    #    KNST_WAYLAND_SCANNER      — path to the wayland-scanner executable
-    #    KNST_WP_DIR               — wayland-protocols XML root directory
-    #    KNST_WAYLAND_PROTOCOL_DIR — destination for generated .c / .h files
-    #    PkgConfig::KNST_WAYLAND   — imported wayland-client target
-    #
-    #  Creates: knst_wayland_protocols (STATIC library)
-    # ─────────────────────────────────────────────────────────────────────────
     function(knst_setup_wayland_protocols)
-        # Snapshot every XML once — much faster than resolving per protocol
         file(GLOB_RECURSE _all_xmls "${KNST_WP_DIR}/*.xml")
 
-        # Resolve a single XML basename to its full path
         function(_knst_resolve_xml xml_basename out_var)
             foreach(_xml IN LISTS _all_xmls)
                 get_filename_component(_base "${_xml}" NAME)
@@ -234,11 +436,6 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             set(${out_var} "" PARENT_SCOPE)
         endfunction()
 
-        # Protocol list: "<xml-basename>|<output-prefix>"
-        #
-        # NOTE: cursor-shape-v1.xml references zwp_tablet_tool_v2_interface
-        #       (used for stylus-aware cursors), so tablet-v2 must be
-        #       generated alongside it.
         set(_protos
             "xdg-shell.xml|xdg-shell"
             "xdg-decoration-unstable-v1.xml|xdg-decoration"
@@ -252,8 +449,7 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             "idle-inhibit-unstable-v1.xml|idle-inhibit"
             "text-input-unstable-v3.xml|text-input-v3"
             "xdg-toplevel-icon-v1.xml|xdg-toplevel-icon"
-            "tablet-v2.xml|tablet-v2"
-        )
+            "tablet-v2.xml|tablet-v2")
 
         set(_sources "")
         set(_headers "")
@@ -265,7 +461,6 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             list(GET _parts 1 _proto_name)
 
             _knst_resolve_xml("${_xml_name}" _xml_path)
-
             if(NOT _xml_path)
                 message(STATUS "Wayland protocol skipped (XML not found): ${_xml_name}")
                 continue()
@@ -280,7 +475,6 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
                 DEPENDS "${_xml_path}"
                 COMMENT "wayland-scanner: ${_proto_name} header"
                 VERBATIM)
-
             add_custom_command(
                 OUTPUT  "${_src}"
                 COMMAND "${KNST_WAYLAND_SCANNER}" private-code "${_xml_path}" "${_src}"
@@ -295,45 +489,30 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
 
         if(NOT _sources)
             message(FATAL_ERROR
-                "No Wayland protocols found.\n"
-                "Install the wayland-protocols package:\n"
-                "  Debian/Ubuntu: sudo apt install wayland-protocols\n"
-                "  Fedora       : sudo dnf install wayland-protocols-devel\n"
-                "  Arch         : sudo pacman -S wayland-protocols")
+                "No Wayland protocols found. "
+                "Install: sudo apt install wayland-protocols")
         endif()
 
-        # The .h files are listed as sources so CMake knows they are
-        # produced as a side-effect of the same custom commands.
         add_library(knst_wayland_protocols STATIC ${_sources} ${_headers})
-
         set_target_properties(knst_wayland_protocols PROPERTIES
-            LINKER_LANGUAGE          C
-            C_STANDARD               11
-            C_STANDARD_REQUIRED      ON
+            LINKER_LANGUAGE C
+            C_STANDARD 11
+            C_STANDARD_REQUIRED ON
             POSITION_INDEPENDENT_CODE ON)
-
         target_include_directories(knst_wayland_protocols PUBLIC
             $<BUILD_INTERFACE:${KNST_WAYLAND_PROTOCOL_DIR}>
             $<INSTALL_INTERFACE:include/platform/linux/wayland/protocol_files>)
-
         target_link_libraries(knst_wayland_protocols PUBLIC PkgConfig::KNST_WAYLAND)
-
-        message(STATUS "Wayland protocols: ${_generated_count} will be generated")
     endfunction()
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  Linux / Dual-backend mode
-    # ─────────────────────────────────────────────────────────────────────────
     if(KNST_WINDOW_EMBEDDED_X11_AND_WAYLAND)
-        message(STATUS "Linux window backend: DUAL (X11 + Wayland, runtime-selected)")
+        message(STATUS "Linux window backend: DUAL (X11 + Wayland)")
         set(KNST_PLATFORM_DETAIL "Linux (X11 + Wayland, runtime-selected)")
-
         list(APPEND KNST_DEFINITIONS
             KNST_WINDOW_EMBEDDED_X11_AND_WAYLAND
             KNST_USING_LINUX_PLATFORM_X11
             KNST_USING_LINUX_PLATFORM_WAYLAND)
 
-        # ---- X11 dependencies ---------------------------------------------
         set(KNST_X11_MODULES
             x11 x11-xcb xcb xcb-randr xcb-keysyms xcb-icccm xcb-util
             xext xfixes xcb-sync xi xrandr xcursor xcb-xinput)
@@ -343,12 +522,10 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             list(APPEND KNST_LINK_ITEMS PkgConfig::${_prefix})
         endforeach()
 
-        # ---- Wayland dependencies -----------------------------------------
         pkg_check_modules(KNST_WAYLAND REQUIRED IMPORTED_TARGET GLOBAL
             wayland-client wayland-cursor xkbcommon)
         list(APPEND KNST_LINK_ITEMS PkgConfig::KNST_WAYLAND)
 
-        # wayland-egl is mandatory for the OpenGL backend, optional otherwise
         if(KNST_WINDOW_USE_OPENGL)
             pkg_check_modules(KNST_WAYLAND_EGL REQUIRED IMPORTED_TARGET GLOBAL wayland-egl)
         else()
@@ -358,16 +535,11 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             list(APPEND KNST_LINK_ITEMS PkgConfig::KNST_WAYLAND_EGL)
         endif()
 
-        # ---- wayland-scanner ----------------------------------------------
-        find_program(KNST_WAYLAND_SCANNER NAMES wayland-scanner
-                     HINTS /usr/bin /usr/local/bin)
+        find_program(KNST_WAYLAND_SCANNER NAMES wayland-scanner HINTS /usr/bin /usr/local/bin)
         if(NOT KNST_WAYLAND_SCANNER)
-            message(FATAL_ERROR
-                "wayland-scanner not found.\n"
-                "  Debian/Ubuntu: sudo apt install libwayland-bin")
+            message(FATAL_ERROR "wayland-scanner not found. Install: sudo apt install libwayland-bin")
         endif()
 
-        # ---- wayland-protocols XML root -----------------------------------
         pkg_check_modules(KNST_WAYLAND_PROTOCOLS QUIET wayland-protocols)
         if(KNST_WAYLAND_PROTOCOLS_FOUND)
             pkg_get_variable(KNST_WP_DIR wayland-protocols pkgdatadir)
@@ -375,61 +547,41 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
         if(NOT KNST_WP_DIR)
             set(KNST_WP_DIR "/usr/share/wayland-protocols")
         endif()
-        message(STATUS "wayland-protocols directory: ${KNST_WP_DIR}")
 
-        # ---- Generate protocols -------------------------------------------
         set(KNST_WAYLAND_PROTOCOL_DIR
             "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/linux/wayland/protocol_files")
         file(MAKE_DIRECTORY "${KNST_WAYLAND_PROTOCOL_DIR}")
-
         knst_setup_wayland_protocols()
 
-        # ⚠️ Mark generated files as build artifacts. They are listed in
-        #    .gitignore so `git status` stays clean. The source tree is
-        #    still used as the output location because the C++ side uses
-        #    relative includes (`../linux/wayland/protocol_files/...`)
-        #    which only resolve inside the source tree.
         file(GLOB _knst_generated_protos CONFIGURE_DEPENDS
             "${KNST_WAYLAND_PROTOCOL_DIR}/*-protocol.c"
             "${KNST_WAYLAND_PROTOCOL_DIR}/*-client-protocol.h")
         if(_knst_generated_protos)
-            set_source_files_properties(${_knst_generated_protos}
-                PROPERTIES GENERATED TRUE)
+            set_source_files_properties(${_knst_generated_protos} PROPERTIES GENERATED TRUE)
         endif()
-
         list(APPEND KNST_LINK_ITEMS knst_wayland_protocols)
 
     else()
-        # ─────────────────────────────────────────────────────────────────
-        #  Single-backend mode — X11 or Wayland
-        # ─────────────────────────────────────────────────────────────────
         string(TOUPPER "${KNST_LINUX_PLATFORM}" KNST_LINUX_PLATFORM_UC)
         if(NOT KNST_LINUX_PLATFORM_UC MATCHES "^(X11|WAYLAND)$")
-            message(FATAL_ERROR
-                "KNST_LINUX_PLATFORM must be 'X11' or 'Wayland'. "
-                "Got: '${KNST_LINUX_PLATFORM}'")
+            message(FATAL_ERROR "KNST_LINUX_PLATFORM must be X11 or Wayland. Got: '${KNST_LINUX_PLATFORM}'")
         endif()
 
-        # ---- Single / Wayland ---------------------------------------------
         if(KNST_LINUX_PLATFORM_UC STREQUAL "WAYLAND")
             list(APPEND KNST_DEFINITIONS KNST_USING_LINUX_PLATFORM_WAYLAND)
             set(KNST_PLATFORM_DETAIL "Linux (Wayland)")
 
             pkg_check_modules(KNST_WAYLAND REQUIRED IMPORTED_TARGET GLOBAL
                 wayland-client wayland-cursor xkbcommon)
-
             if(KNST_WINDOW_USE_OPENGL)
                 pkg_check_modules(KNST_WAYLAND_EGL REQUIRED IMPORTED_TARGET GLOBAL wayland-egl)
             else()
                 pkg_check_modules(KNST_WAYLAND_EGL QUIET    IMPORTED_TARGET GLOBAL wayland-egl)
             endif()
 
-            find_program(KNST_WAYLAND_SCANNER NAMES wayland-scanner
-                         HINTS /usr/bin /usr/local/bin)
+            find_program(KNST_WAYLAND_SCANNER NAMES wayland-scanner HINTS /usr/bin /usr/local/bin)
             if(NOT KNST_WAYLAND_SCANNER)
-                message(FATAL_ERROR
-                    "wayland-scanner not found.\n"
-                    "  Debian/Ubuntu: sudo apt install libwayland-bin")
+                message(FATAL_ERROR "wayland-scanner not found. Install: sudo apt install libwayland-bin")
             endif()
 
             pkg_check_modules(KNST_WAYLAND_PROTOCOLS QUIET wayland-protocols)
@@ -439,12 +591,10 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             if(NOT KNST_WP_DIR)
                 set(KNST_WP_DIR "/usr/share/wayland-protocols")
             endif()
-            message(STATUS "wayland-protocols directory: ${KNST_WP_DIR}")
 
             set(KNST_WAYLAND_PROTOCOL_DIR
                 "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/linux/wayland/protocol_files")
             file(MAKE_DIRECTORY "${KNST_WAYLAND_PROTOCOL_DIR}")
-
             knst_setup_wayland_protocols()
 
             list(APPEND KNST_LINK_ITEMS knst_wayland_protocols)
@@ -452,7 +602,6 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
                 list(APPEND KNST_LINK_ITEMS PkgConfig::KNST_WAYLAND_EGL)
             endif()
 
-        # ---- Single / X11 -------------------------------------------------
         else()
             list(APPEND KNST_DEFINITIONS KNST_USING_LINUX_PLATFORM_X11)
             set(KNST_PLATFORM_DETAIL "Linux (X11)")
@@ -475,8 +624,7 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             if(KNST_X11_MISSING)
                 list(JOIN KNST_X11_MISSING ", " _missing_str)
                 message(FATAL_ERROR
-                    "Missing X11 development packages: ${_missing_str}\n"
-                    "Debian/Ubuntu/Pop!_OS:\n"
+                    "Missing X11 dev packages: ${_missing_str}\n"
                     "  sudo apt install libx11-dev libx11-xcb-dev libxcb1-dev "
                     "libxcb-randr0-dev libxcb-keysyms1-dev libxcb-icccm4-dev "
                     "libxcb-util-dev libxcb-sync-dev libxext-dev libxfixes-dev "
@@ -484,106 +632,59 @@ elseif(KNST_PLATFORM STREQUAL "Linux")
             endif()
         endif()
     endif()
-
 endif()
 
 # =============================================================================
 #  GPU backends
 # =============================================================================
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  OpenGL backend  (GLAD + platform EGL/WGL)
-# ─────────────────────────────────────────────────────────────────────────────
 if(KNST_WINDOW_USE_OPENGL)
     list(APPEND KNST_DEFINITIONS KNST_WINDOW_USE_OPENGL)
 
-    set(KNST_GLAD_ROOT
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/knst_window/opengl_content/glad_3_3")
+    set(KNST_GLAD_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/include/platform/knst_window/opengl_content/glad_3_3")
     set(KNST_GLAD_C    "${KNST_GLAD_ROOT}/src/glad.c")
     set(KNST_GLAD_INC  "${KNST_GLAD_ROOT}/include")
 
     if(NOT EXISTS "${KNST_GLAD_C}")
         message(FATAL_ERROR
-            "KNST_WINDOW_USE_OPENGL=ON but GLAD source is missing.\n"
-            "Expected: ${KNST_GLAD_C}\n"
-            "Download GLAD 3.3 Core from https://glad.dav1d.de/ and place it under:\n"
-            "  include/platform/knst_window/opengl_content/glad_3_3/")
+            "KNST_WINDOW_USE_OPENGL=ON but GLAD source is missing at:\n  ${KNST_GLAD_C}")
     endif()
 
     add_library(knst_glad STATIC "${KNST_GLAD_C}")
-
-    # Absolute paths must be wrapped so install(EXPORT) can rewrite them
     target_include_directories(knst_glad PUBLIC
         $<BUILD_INTERFACE:${KNST_GLAD_INC}>
         $<INSTALL_INTERFACE:include/platform/knst_window/opengl_content/glad_3_3/include>)
-
     set_target_properties(knst_glad PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-    # glad.c is third-party code — sanitizer instrumentation isn't needed.
     target_compile_options(knst_glad PRIVATE
         -fno-sanitize=address
         -fno-sanitize=undefined)
 
     if(ANDROID)
-        # The NDK ships EGL and GLESv2 — no extra discovery required
         target_link_libraries(knst_glad PUBLIC EGL GLESv2)
-        message(STATUS "OpenGL backend: enabled (Android, EGL + GLESv2)")
-
-    elseif(KNST_PLATFORM STREQUAL "Windows")
-        # WGL lives in opengl32.dll
+    elseif(WIN32)
         target_link_libraries(knst_glad PUBLIC opengl32)
-        message(STATUS "OpenGL backend: enabled (Windows, opengl32)")
-
     else()
-        # Linux (X11 / Wayland): GL + EGL + GLESv2 via pkg-config
         pkg_check_modules(KNST_PC_gl     REQUIRED IMPORTED_TARGET GLOBAL gl)
         pkg_check_modules(KNST_PC_egl    REQUIRED IMPORTED_TARGET GLOBAL egl)
         pkg_check_modules(KNST_PC_glesv2 REQUIRED IMPORTED_TARGET GLOBAL glesv2)
-
         target_link_libraries(knst_glad PUBLIC
-            PkgConfig::KNST_PC_gl
-            PkgConfig::KNST_PC_egl
-            PkgConfig::KNST_PC_glesv2)
-
-        message(STATUS "OpenGL backend: enabled (Linux, gl + egl + glesv2)")
+            PkgConfig::KNST_PC_gl PkgConfig::KNST_PC_egl PkgConfig::KNST_PC_glesv2)
     endif()
 
     list(APPEND KNST_LINK_ITEMS knst_glad)
 endif()
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Vulkan backend
-# ─────────────────────────────────────────────────────────────────────────────
 if(KNST_WINDOW_USE_VULKAN)
     list(APPEND KNST_DEFINITIONS KNST_WINDOW_USE_VULKAN)
-
     if(ANDROID)
-        if(KNST_ANDROID_API GREATER 0 AND KNST_ANDROID_API LESS 24)
-            message(FATAL_ERROR
-                "Vulkan requires Android API 24+. Current: ${KNST_ANDROID_API}.\n"
-                "Use -DANDROID_PLATFORM=android-24 or newer.")
-        endif()
         list(APPEND KNST_LINK_ITEMS vulkan)
-        message(STATUS "Vulkan backend: enabled (Android NDK)")
-
     else()
         find_package(Vulkan QUIET)
         if(TARGET Vulkan::Vulkan)
             list(APPEND KNST_LINK_ITEMS Vulkan::Vulkan)
-            message(STATUS "Vulkan backend: enabled (${Vulkan_LIBRARY})")
         else()
-            if(WIN32)
-                set(_vk_hint
-                    "Install the Vulkan SDK from https://vulkan.lunarg.com/ and "
-                    "make sure VULKAN_SDK is set (restart the terminal).")
-            else()
-                set(_vk_hint
-                    "Debian/Ubuntu: sudo apt install libvulkan-dev vulkan-tools\n"
-                    "Fedora       : sudo dnf install vulkan-loader-devel vulkan-headers\n"
-                    "Arch         : sudo pacman -S vulkan-headers vulkan-icd-loader")
-            endif()
             message(FATAL_ERROR
-                "KNST_WINDOW_USE_VULKAN=ON but Vulkan was not found.\n${_vk_hint}")
+                "KNST_WINDOW_USE_VULKAN=ON but Vulkan not found.\n"
+                "  Debian/Ubuntu: sudo apt install libvulkan-dev")
         endif()
     endif()
 endif()
@@ -592,21 +693,348 @@ if(NOT KNST_WINDOW_USE_OPENGL AND NOT KNST_WINDOW_USE_VULKAN)
     message(STATUS "Window backends: none (software rendering only)")
 endif()
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Apply accumulated flags to the INTERFACE target
-# ─────────────────────────────────────────────────────────────────────────────
-target_compile_definitions(KernelNucleusT INTERFACE ${KNST_DEFINITIONS})
-target_link_libraries(KernelNucleusT INTERFACE ${KNST_LINK_ITEMS})
+# =============================================================================
+#  Network tier resolution (desktop only)
+# =============================================================================
+if(NOT ANDROID)
+
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+    if(NOT DEFINED PKG_CONFIG_FOUND AND NOT PkgConfig_FOUND)
+        find_package(PkgConfig QUIET)
+    endif()
+
+    set(KNST_NET_TLS_OK FALSE)
+    set(KNST_NET_H2_OK  FALSE)
+    set(KNST_NET_H3_OK  FALSE)
+    set(KNST_NET_DEFS   "")
+    set(KNST_NET_LINK   "")
+    set(KNST_NET_RPATH  "")
+    set(KNST_QUICTLS_INCLUDE_DIR "")
+    set(_openssl_link_items "")
+
+    # ---- OpenSSL (system) ----
+    if(NOT KNST_NETWORK_DISABLE_TLS)
+        find_package(OpenSSL QUIET)
+        if(OpenSSL_FOUND)
+            set(KNST_NET_TLS_OK TRUE)
+            list(APPEND KNST_NET_DEFS KNST_NETWORK_ENABLE_TLS)
+            set(_openssl_link_items OpenSSL::SSL OpenSSL::Crypto)
+            message(STATUS "  OpenSSL found: ${OPENSSL_VERSION}")
+        else()
+            message(STATUS "  OpenSSL not found — TLS disabled")
+        endif()
+    endif()
+
+    # ---- nghttp2 (H2) ----
+    if(KNST_NET_TLS_OK AND NOT KNST_NETWORK_DISABLE_H2)
+        set(_nghttp2_target "")
+
+        find_package(nghttp2 CONFIG QUIET HINTS "${KNST_NGHTTP2_ROOT}")
+        if(TARGET nghttp2::nghttp2)
+            set(_nghttp2_target nghttp2::nghttp2)
+        endif()
+
+        if(NOT _nghttp2_target AND PkgConfig_FOUND)
+            pkg_check_modules(KNST_PC_NGHTTP2 QUIET IMPORTED_TARGET GLOBAL libnghttp2)
+            if(TARGET PkgConfig::KNST_PC_NGHTTP2)
+                set(_nghttp2_target PkgConfig::KNST_PC_NGHTTP2)
+            endif()
+        endif()
+
+        if(NOT _nghttp2_target)
+            find_path(KNST_NGHTTP2_INC NAMES nghttp2/nghttp2.h HINTS "${KNST_NGHTTP2_ROOT}")
+            find_library(KNST_NGHTTP2_LIB NAMES nghttp2 HINTS "${KNST_NGHTTP2_ROOT}")
+            if(KNST_NGHTTP2_INC AND KNST_NGHTTP2_LIB)
+                if(NOT TARGET knst::nghttp2)
+                    add_library(knst::nghttp2 UNKNOWN IMPORTED)
+                    set_target_properties(knst::nghttp2 PROPERTIES
+                        IMPORTED_LOCATION "${KNST_NGHTTP2_LIB}"
+                        INTERFACE_INCLUDE_DIRECTORIES "${KNST_NGHTTP2_INC}")
+                endif()
+                set(_nghttp2_target knst::nghttp2)
+            endif()
+        endif()
+
+                if(_nghttp2_target)
+            set(KNST_NET_H2_OK TRUE)
+            list(APPEND KNST_NET_DEFS KNST_NETWORK_ENABLE_H2)
+            if(WIN32 AND KNST_NGHTTP2_ROOT)
+                target_include_directories(KernelNucleusT INTERFACE
+                    "${KNST_NGHTTP2_ROOT}/include")
+                list(APPEND KNST_NET_LINK "${KNST_NGHTTP2_ROOT}/lib/libnghttp2.a")
+            else()
+                list(APPEND KNST_NET_LINK ${_nghttp2_target})
+            endif()
+        else()
+            message(STATUS "  nghttp2 not found — HTTP/2 disabled "
+                           "(sudo apt install libnghttp2-dev)")
+        endif()
+    endif()
+
+        # ---- FAAD2 (AAC decode, optional) ----
+    set(_faad2_target "")
+    if(PkgConfig_FOUND)
+        pkg_check_modules(KNST_PC_FAAD2 QUIET IMPORTED_TARGET GLOBAL faad2)
+        if(TARGET PkgConfig::KNST_PC_FAAD2)
+            set(_faad2_target PkgConfig::KNST_PC_FAAD2)
+        endif()
+    endif()
+    if(NOT _faad2_target)
+        find_path(KNST_FAAD2_INC NAMES neaacdec.h PATH_SUFFIXES faad2 include/faad2)
+        find_library(KNST_FAAD2_LIB NAMES faad faad2)
+        if(KNST_FAAD2_INC AND KNST_FAAD2_LIB)
+            if(NOT TARGET knst::faad2)
+                add_library(knst::faad2 UNKNOWN IMPORTED)
+                set_target_properties(knst::faad2 PROPERTIES
+                    IMPORTED_LOCATION "${KNST_FAAD2_LIB}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${KNST_FAAD2_INC}")
+            endif()
+            set(_faad2_target knst::faad2)
+        endif()
+    endif()
+    if(_faad2_target)
+        list(APPEND KNST_DEFINITIONS KNST_NETWORK_HAVE_FAAD2)
+        list(APPEND KNST_LINK_ITEMS ${_faad2_target})
+        message(STATUS "  FAAD2 found — AAC decode enabled")
+    else()
+        message(STATUS "  FAAD2 not found — AAC decode disabled "
+                       "(apt install libfaad-dev / vcpkg install faad2)")
+    endif()
+
+    # ---- Vorbis (OGG Vorbis encode, optional) ----
+    set(_vorbis_ok FALSE)
+    set(_vorbis_link "")
+    if(PkgConfig_FOUND)
+        pkg_check_modules(KNST_PC_VORBIS QUIET IMPORTED_TARGET GLOBAL vorbis vorbisenc ogg)
+        if(TARGET PkgConfig::KNST_PC_VORBIS)
+            set(_vorbis_ok TRUE)
+            set(_vorbis_link PkgConfig::KNST_PC_VORBIS)
+        endif()
+    endif()
+    if(NOT _vorbis_ok)
+        find_path(KNST_VORBIS_INC NAMES vorbis/vorbisenc.h)
+        find_library(KNST_VORBIS_LIB NAMES vorbis)
+        find_library(KNST_VORBISENC_LIB NAMES vorbisenc)
+        find_library(KNST_OGG_LIB NAMES ogg)
+        if(KNST_VORBIS_INC AND KNST_VORBIS_LIB AND KNST_VORBISENC_LIB AND KNST_OGG_LIB)
+            set(_vorbis_ok TRUE)
+            target_include_directories(KernelNucleusT INTERFACE "${KNST_VORBIS_INC}")
+            set(_vorbis_link "${KNST_VORBIS_LIB}" "${KNST_VORBISENC_LIB}" "${KNST_OGG_LIB}")
+        endif()
+    endif()
+    if(_vorbis_ok)
+        list(APPEND KNST_DEFINITIONS KNST_NETWORK_HAVE_VORBIS)
+        list(APPEND KNST_LINK_ITEMS ${_vorbis_link})
+        message(STATUS "  Vorbis found — native OGG encode enabled")
+    else()
+        message(STATUS "  Vorbis not found — OGG encode relies on libsndfile "
+                       "(apt install libvorbis-dev libogg-dev)")
+    endif()
+
+    # ---- H3 (quictls + ngtcp2 + nghttp3) ----
+    if(KNST_NET_H2_OK AND NOT KNST_NETWORK_DISABLE_H3)
+
+        set(_qroot "${KNST_QUICTLS_ROOT}")
+        if(NOT _qroot AND DEFINED ENV{QUICTLS_ROOT})
+            set(_qroot "$ENV{QUICTLS_ROOT}")
+        endif()
+        if(NOT _qroot)
+            foreach(_cand /usr/local/quictls /opt/quictls "$ENV{HOME}/quictls")
+                if(EXISTS "${_cand}/include/openssl/ssl.h")
+                    set(_qroot "${_cand}")
+                    break()
+                endif()
+            endforeach()
+        endif()
+
+        set(_quictls_ssl    "")
+        set(_quictls_crypto "")
+        set(_quictls_inc    "")
+        if(_qroot AND EXISTS "${_qroot}/include/openssl/ssl.h")
+            set(_quictls_inc "${_qroot}/include")
+                        if(WIN32)
+                # MSVC layouts: ssl.lib / libssl.lib under lib, lib/x64, lib/win64, lib/x86.
+                # MinGW (MSYS2) quictls installs: lib64/libssl.a and lib64/libcrypto.a,
+                # so also probe lib64 and accept the ".a" extension.
+                foreach(_dir lib lib64 lib/x64 lib/win64 lib/x86)
+                    if(EXISTS "${_qroot}/${_dir}/ssl.lib")
+                        set(_quictls_ssl    "${_qroot}/${_dir}/ssl.lib")
+                        set(_quictls_crypto "${_qroot}/${_dir}/libcrypto.lib")
+                        break()
+                    endif()
+                    if(EXISTS "${_qroot}/${_dir}/libssl.lib")
+                        set(_quictls_ssl    "${_qroot}/${_dir}/libssl.lib")
+                        set(_quictls_crypto "${_qroot}/${_dir}/libcrypto.lib")
+                        break()
+                    endif()
+                    if(EXISTS "${_qroot}/${_dir}/libssl.a")
+                        set(_quictls_ssl    "${_qroot}/${_dir}/libssl.a")
+                        set(_quictls_crypto "${_qroot}/${_dir}/libcrypto.a")
+                        break()
+                    endif()
+                endforeach()
+            else()
+                foreach(_dir lib64 lib)
+                    if(NOT _quictls_ssl AND EXISTS "${_qroot}/${_dir}/libssl.so")
+                        set(_quictls_ssl    "${_qroot}/${_dir}/libssl.so")
+                        set(_quictls_crypto "${_qroot}/${_dir}/libcrypto.so")
+                    endif()
+                    if(NOT _quictls_ssl AND EXISTS "${_qroot}/${_dir}/libssl.a")
+                        set(_quictls_ssl    "${_qroot}/${_dir}/libssl.a")
+                        set(_quictls_crypto "${_qroot}/${_dir}/libcrypto.a")
+                    endif()
+                endforeach()
+            endif()
+            if(NOT _quictls_ssl OR NOT _quictls_crypto)
+                message(STATUS "  WARNING: quictls headers found at ${_qroot} but libssl/libcrypto missing")
+                set(_quictls_inc "")
+            endif()
+        endif()
+
+        set(_ngtcp2_target "")
+        set(_ngtcp2_crypto_target "")
+        set(_nghttp3_target "")
+
+        find_package(ngtcp2 CONFIG QUIET HINTS "${KNST_NGTCP2_ROOT}")
+        if(TARGET ngtcp2::ngtcp2)
+            set(_ngtcp2_target ngtcp2::ngtcp2)
+        endif()
+        if(NOT _ngtcp2_target AND PkgConfig_FOUND)
+            pkg_check_modules(KNST_PC_NGTCP2 QUIET IMPORTED_TARGET GLOBAL libngtcp2)
+            if(TARGET PkgConfig::KNST_PC_NGTCP2)
+                set(_ngtcp2_target PkgConfig::KNST_PC_NGTCP2)
+            endif()
+        endif()
+
+        foreach(_t ngtcp2_crypto_quictls::ngtcp2_crypto_quictls
+                  ngtcp2::ngtcp2_crypto_quictls
+                  ngtcp2_crypto_quictls)
+            if(TARGET ${_t})
+                set(_ngtcp2_crypto_target ${_t})
+                break()
+            endif()
+        endforeach()
+        if(NOT _ngtcp2_crypto_target AND PkgConfig_FOUND)
+            pkg_check_modules(KNST_PC_NGTCP2_Q QUIET IMPORTED_TARGET GLOBAL libngtcp2_crypto_quictls)
+            if(TARGET PkgConfig::KNST_PC_NGTCP2_Q)
+                set(_ngtcp2_crypto_target PkgConfig::KNST_PC_NGTCP2_Q)
+            endif()
+        endif()
+
+        find_package(nghttp3 CONFIG QUIET HINTS "${KNST_NGHTTP3_ROOT}")
+        if(TARGET nghttp3::nghttp3)
+            set(_nghttp3_target nghttp3::nghttp3)
+        endif()
+        if(NOT _nghttp3_target AND PkgConfig_FOUND)
+            pkg_check_modules(KNST_PC_NGHTTP3 QUIET IMPORTED_TARGET GLOBAL libnghttp3)
+            if(TARGET PkgConfig::KNST_PC_NGHTTP3)
+                set(_nghttp3_target PkgConfig::KNST_PC_NGHTTP3)
+            endif()
+        endif()
+
+        if(_quictls_ssl AND _quictls_crypto AND _quictls_inc AND
+           _ngtcp2_target AND _ngtcp2_crypto_target AND _nghttp3_target)
+            set(KNST_NET_H3_OK TRUE)
+            set(KNST_QUICTLS_INCLUDE_DIR "${_quictls_inc}")
+            list(APPEND KNST_NET_DEFS KNST_NETWORK_ENABLE_H3)
+            if(WIN32 AND KNST_NGTCP2_ROOT AND KNST_NGHTTP2_ROOT AND KNST_NGHTTP3_ROOT)
+                # Static .a paths bypass the imported targets, so add their
+                # include directories explicitly — otherwise ngtcp2/ngtcp2.h
+                # and ngtcp2/ngtcp2_crypto_quictls.h are not found.
+                target_include_directories(KernelNucleusT INTERFACE
+                    "${KNST_NGTCP2_ROOT}/include"
+                    "${KNST_NGHTTP2_ROOT}/include"
+                    "${KNST_NGHTTP3_ROOT}/include")
+                # Static linking: suppress __declspec(dllimport) in headers.
+                # Without these, every call becomes `__imp_*` and the linker
+                # cannot resolve it against the plain static symbols.
+                target_compile_definitions(KernelNucleusT INTERFACE
+                    NGTCP2_STATICLIB
+                    NGHTTP3_STATICLIB
+                    NGHTTP2_STATICLIB)
+                list(APPEND KNST_NET_LINK
+                    "${KNST_NGTCP2_ROOT}/lib/libngtcp2.a"
+                    "${KNST_NGTCP2_ROOT}/lib/libngtcp2_crypto_quictls.a"
+                    "${KNST_NGHTTP3_ROOT}/lib/libnghttp3.a"
+                    "${KNST_NGHTTP2_ROOT}/lib/libnghttp2.a"
+                    "${_quictls_ssl}" "${_quictls_crypto}")
+            else()
+                list(APPEND KNST_NET_LINK
+                    ${_ngtcp2_target} ${_ngtcp2_crypto_target} ${_nghttp3_target}
+                    "${_quictls_ssl}" "${_quictls_crypto}")
+            endif()
+            if(NOT WIN32)
+                list(APPEND KNST_NET_RPATH "${_qroot}/lib" "${_qroot}/lib64")
+            endif()
+            message(STATUS "  quictls found: ${_qroot}")
+        else()
+            if(NOT _qroot)
+                message(STATUS "  quictls not found — HTTP/3 disabled.\n"
+                    "    Hint: -DKNST_QUICTLS_ROOT=/path/to/quictls")
+            else()
+                message(STATUS "  H3 disabled — missing dependency "
+                    "(ngtcp2=${_ngtcp2_target} "
+                    "ngtcp2_crypto=${_ngtcp2_crypto_target} "
+                    "nghttp3=${_nghttp3_target})")
+            endif()
+        endif()
+    endif()
+
+    # NEVER link both system OpenSSL and quictls — ABI clash.
+    if(NOT KNST_NET_H3_OK)
+        list(APPEND KNST_NET_LINK ${_openssl_link_items})
+    endif()
+
+    if(KNST_NET_H3_OK)
+        message(STATUS "Network tier: TLS + H2 + H3  (quictls + nghttp2 + ngtcp2 + nghttp3)")
+    elseif(KNST_NET_H2_OK)
+        message(STATUS "Network tier: TLS + H2       (system OpenSSL + nghttp2)")
+    elseif(KNST_NET_TLS_OK)
+        message(STATUS "Network tier: TLS + H1       (system OpenSSL)")
+    else()
+        message(STATUS "Network tier: disabled       (no OpenSSL / H2 / H3)")
+    endif()
+
+        list(APPEND KNST_DEFINITIONS ${KNST_NET_DEFS})
+    list(APPEND KNST_LINK_ITEMS  ${KNST_NET_LINK})
+
+    # Static link order fix (MinGW + quictls):
+    # libcrypto.a/libssl.a reference Winsock / crypt32 / bcrypt symbols, so
+    # those libraries must appear AFTER quictls on the link line. Unix-style
+    # linkers resolve symbols left-to-right only. Re-append here.
+    if(WIN32 AND KNST_NET_H3_OK)
+        list(APPEND KNST_LINK_ITEMS
+            ws2_32 crypt32 bcrypt userenv advapi32 iphlpapi)
+    endif()
+
+    if(KNST_QUICTLS_INCLUDE_DIR)
+        target_include_directories(KernelNucleusT INTERFACE "${KNST_QUICTLS_INCLUDE_DIR}")
+    endif()
+
+    if(KNST_NET_RPATH AND NOT WIN32)
+        list(APPEND CMAKE_BUILD_RPATH ${KNST_NET_RPATH})
+    endif()
+endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Per-target warning / sanitizer configuration
-#
-#  Applied only to targets built by this project (apps and examples),
-#  not forced onto downstream consumers.
 # ─────────────────────────────────────────────────────────────────────────────
 function(knst_configure_target TARGET_NAME)
-    if(MSVC)
-        target_compile_options(${TARGET_NAME} PRIVATE /W4 /utf-8 /permissive-)
+if(MSVC)
+    target_compile_options(${TARGET_NAME} PRIVATE
+        /W4 /utf-8 /permissive-
+        /wd4267   # size_t → uint32_t
+        /wd4244   # tip dönüşümü daralması
+        /wd4100   # kullanılmayan parametre
+        /wd4068   # bilinmeyen pragma (GCC pragma'ları)
+        /wd4996   # deprecated POSIX isimleri
+        /wd4099   # struct/class ileri bildirim uyumsuzluğu
+        /wd4310   # cast sabit değer kesiyor
+        /wd4091   # kullanılmayan typedef
+        /wd4005   # makro yeniden tanımı
+        /wd4200   # zero-sized array (flexible array member, C99 pattern)
+    )
         if(KNST_WARNINGS_AS_ERRORS)
             target_compile_options(${TARGET_NAME} PRIVATE /WX)
         endif()
@@ -616,52 +1044,40 @@ function(knst_configure_target TARGET_NAME)
         return()
     endif()
 
-    # =====================================================================
-    #  Warning policy
-    #
-    #  -Wundef is enabled to catch `#if KNST_FOO` when KNST_FOO is not
-    #  defined — a common source of silent misconfiguration.
-    #
-    #  Deliberately NOT disabled:
-    #    -Warray-bounds, -Wstringop-overflow, -Wstringop-overread
-    #  These catch real out-of-bounds / buffer-overrun issues.
-    # =====================================================================
     target_compile_options(${TARGET_NAME} PRIVATE
-        -Wall
-        -Wextra
-        -Wshadow
-        -Wundef
-        -Wno-pedantic
-        -Wno-conversion
-        -Wno-float-conversion
-        -Wno-unused-result
-        -Wno-unused-parameter
+        -Wall -Wextra -Wshadow -Wno-undef
+        -Wno-pedantic -Wno-conversion -Wno-float-conversion
+        -Wno-unused-result -Wno-unused-parameter
         $<$<CXX_COMPILER_ID:GNU>:-Wno-format-truncation>
-        -Wno-missing-field-initializers
-        -Wno-unknown-pragmas
-        -Wno-cast-function-type
-        -Wno-sign-compare
-        -Wno-delete-non-virtual-dtor
-        -Wno-mismatched-tags)
+        -Wno-missing-field-initializers -Wno-unknown-pragmas
+        -Wno-cast-function-type -Wno-sign-compare
+        -Wno-delete-non-virtual-dtor -Wno-mismatched-tags
+                -Wno-misleading-indentation
+        -Wno-array-bounds
+        $<$<CXX_COMPILER_ID:GNU>:-Wno-stringop-overflow>
+        $<$<CXX_COMPILER_ID:GNU>:-Wno-maybe-uninitialized>)
 
     if(KNST_WARNINGS_AS_ERRORS)
         target_compile_options(${TARGET_NAME} PRIVATE -Werror)
     endif()
 
-    if(KNST_ENABLE_SANITIZERS)
-        if(MINGW)
-            message(WARNING "MinGW does not support sanitizers.")
-        else()
-            target_compile_options(${TARGET_NAME} PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer)
-            target_link_options(${TARGET_NAME} PRIVATE
-                -fsanitize=address,undefined)
-        endif()
+    if(KNST_ENABLE_SANITIZERS AND NOT MINGW)
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(${TARGET_NAME} PRIVATE
+            -fsanitize=address,undefined)
+    endif()
+
+    if(MINGW)
+        target_link_options(${TARGET_NAME} PRIVATE
+            -static
+            -static-libgcc
+            -static-libstdc++)
     endif()
 endfunction()
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Optional custom application source
+#  Resolve KNST_APP_SOURCE (relative paths are resolved to this CMakeLists)
 # ─────────────────────────────────────────────────────────────────────────────
 set(KNST_APP_SOURCE_RESOLVED "")
 if(KNST_APP_SOURCE)
@@ -676,121 +1092,129 @@ if(KNST_APP_SOURCE)
 endif()
 
 # =============================================================================
-#  Applications
+#  The single executable — built ONLY from KNST_APP_SOURCE
 # =============================================================================
+if(KNST_APP_SOURCE_RESOLVED)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Android — shared library
-# ─────────────────────────────────────────────────────────────────────────────
-if(ANDROID AND (KNST_BUILD_EXAMPLES OR KNST_APP_SOURCE_RESOLVED))
+    if(ANDROID)
+        # --- Android shared library ---
+        if(DEFINED ANDROID_NDK)
+            set(KNST_NDK_ROOT "${ANDROID_NDK}")
+        elseif(DEFINED CMAKE_ANDROID_NDK)
+            set(KNST_NDK_ROOT "${CMAKE_ANDROID_NDK}")
+        elseif(DEFINED ENV{ANDROID_NDK_HOME})
+            set(KNST_NDK_ROOT "$ENV{ANDROID_NDK_HOME}")
+        else()
+            message(FATAL_ERROR "Android NDK not found.")
+        endif()
 
-    if(KNST_APP_SOURCE_RESOLVED)
-        set(KNST_ANDROID_APP_SOURCE "${KNST_APP_SOURCE_RESOLVED}")
-    elseif(KNST_WINDOW_USE_VULKAN AND NOT KNST_WINDOW_USE_OPENGL)
-        set(KNST_ANDROID_APP_SOURCE
-            "${CMAKE_CURRENT_SOURCE_DIR}/examples/complex_structures/knst_window/android/knst_window_android_vulkan_test.cpp")
+        set(KNST_NATIVE_APP_GLUE_DIR "${KNST_NDK_ROOT}/sources/android/native_app_glue")
+        add_library(knst_native_app_glue STATIC
+            "${KNST_NATIVE_APP_GLUE_DIR}/android_native_app_glue.c")
+        target_include_directories(knst_native_app_glue PUBLIC "${KNST_NATIVE_APP_GLUE_DIR}")
+        set_target_properties(knst_native_app_glue PROPERTIES POSITION_INDEPENDENT_CODE ON)
+        target_compile_options(knst_native_app_glue PRIVATE
+            -fno-sanitize=address -fno-sanitize=undefined)
+
+        add_library(knst_app SHARED "${KNST_APP_SOURCE_RESOLVED}")
+        target_link_libraries(knst_app PRIVATE
+            KernelNucleusT knst_native_app_glue camera2ndk mediandk)
+
+        if(TARGET nghttp2_static)
+            target_link_libraries(knst_app PRIVATE nghttp2_static)
+            # FetchContent + NDK: nghttp2_static's INTERFACE_INCLUDE_DIRECTORIES
+            # don't propagate to consumers. Add them explicitly so the
+            # `#include <nghttp2/nghttp2.h>` in knst_network_h2.hpp resolves.
+            if(DEFINED nghttp2_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${nghttp2_SOURCE_DIR}/lib/includes"
+                    "${nghttp2_BINARY_DIR}/lib/includes")
+            endif()
+        elseif(TARGET nghttp2::nghttp2)
+            target_link_libraries(knst_app PRIVATE nghttp2::nghttp2)
+            if(DEFINED nghttp2_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${nghttp2_SOURCE_DIR}/lib/includes")
+            endif()
+        endif()
+                if(TARGET nghttp3_static)
+            target_link_libraries(knst_app PRIVATE nghttp3_static)
+            # FetchContent + NDK: nghttp3_static's INTERFACE_INCLUDE_DIRECTORIES
+            # don't propagate on Android. Add them explicitly.
+            if(DEFINED nghttp3_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${nghttp3_SOURCE_DIR}/lib/includes"
+                    "${nghttp3_BINARY_DIR}/lib/includes")
+            else()
+                target_include_directories(knst_app PRIVATE
+                    "${CMAKE_BINARY_DIR}/_deps/nghttp3-src/lib/includes"
+                    "${CMAKE_BINARY_DIR}/_deps/nghttp3-build/lib/includes")
+            endif()
+        elseif(TARGET nghttp3::nghttp3)
+            target_link_libraries(knst_app PRIVATE nghttp3::nghttp3)
+            if(DEFINED nghttp3_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${nghttp3_SOURCE_DIR}/lib/includes"
+                    "${nghttp3_BINARY_DIR}/lib/includes")
+            endif()
+        endif()
+
+        if(TARGET ngtcp2_static)
+            target_link_libraries(knst_app PRIVATE ngtcp2_static)
+            if(DEFINED ngtcp2_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${ngtcp2_SOURCE_DIR}/lib/includes"
+                    "${ngtcp2_BINARY_DIR}/lib/includes")
+            endif()
+        elseif(TARGET ngtcp2::ngtcp2)
+            target_link_libraries(knst_app PRIVATE ngtcp2::ngtcp2)
+            if(DEFINED ngtcp2_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${ngtcp2_SOURCE_DIR}/lib/includes"
+                    "${ngtcp2_BINARY_DIR}/lib/includes")
+            endif()
+        endif()
+
+        if(TARGET ngtcp2_crypto_quictls_static)
+            target_link_libraries(knst_app PRIVATE ngtcp2_crypto_quictls_static)
+            if(DEFINED ngtcp2_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${ngtcp2_SOURCE_DIR}/crypto/includes"
+                    "${ngtcp2_BINARY_DIR}/crypto/includes")
+            endif()
+        elseif(TARGET ngtcp2_crypto_quictls::ngtcp2_crypto_quictls)
+            target_link_libraries(knst_app PRIVATE ngtcp2_crypto_quictls::ngtcp2_crypto_quictls)
+            if(DEFINED ngtcp2_SOURCE_DIR)
+                target_include_directories(knst_app PRIVATE
+                    "${ngtcp2_SOURCE_DIR}/crypto/includes"
+                    "${ngtcp2_BINARY_DIR}/crypto/includes")
+            endif()
+        endif()
+
+        knst_configure_target(knst_app)
+        target_link_options(knst_app PRIVATE
+            -u ANativeActivity_onCreate
+            -Wl,-z,max-page-size=16384)
     else()
-        set(KNST_ANDROID_APP_SOURCE
-            "${CMAKE_CURRENT_SOURCE_DIR}/examples/complex_structures/knst_window/android/knst_window_android_opengl_test.cpp")
-    endif()
-
-    if(NOT EXISTS "${KNST_ANDROID_APP_SOURCE}")
-        message(FATAL_ERROR "Android application source not found: ${KNST_ANDROID_APP_SOURCE}")
-    endif()
-
-    if(DEFINED ANDROID_NDK)
-        set(KNST_NDK_ROOT "${ANDROID_NDK}")
-    elseif(DEFINED CMAKE_ANDROID_NDK)
-        set(KNST_NDK_ROOT "${CMAKE_ANDROID_NDK}")
-    elseif(DEFINED ENV{ANDROID_NDK_HOME})
-        set(KNST_NDK_ROOT "$ENV{ANDROID_NDK_HOME}")
-    else()
-        message(FATAL_ERROR
-            "Android NDK not found. Pass the NDK toolchain file:\n"
-            "  -DCMAKE_TOOLCHAIN_FILE=<ndk>/build/cmake/android.toolchain.cmake")
-    endif()
-
-    set(KNST_NATIVE_APP_GLUE_DIR "${KNST_NDK_ROOT}/sources/android/native_app_glue")
-    if(NOT EXISTS "${KNST_NATIVE_APP_GLUE_DIR}/android_native_app_glue.c")
-        message(FATAL_ERROR
-            "android_native_app_glue.c not found at: ${KNST_NATIVE_APP_GLUE_DIR}")
-    endif()
-
-    add_library(knst_native_app_glue STATIC
-        "${KNST_NATIVE_APP_GLUE_DIR}/android_native_app_glue.c")
-    target_include_directories(knst_native_app_glue PUBLIC "${KNST_NATIVE_APP_GLUE_DIR}")
-    set_target_properties(knst_native_app_glue PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-    # The NDK's native_app_glue.c is incompatible with ASan.
-    # ANativeActivity_onCreate is called before the ASan runtime loads
-    # → SEGV. Google's own samples also exempt this file from ASan.
-    target_compile_options(knst_native_app_glue PRIVATE
-        -fno-sanitize=address
-        -fno-sanitize=undefined)
-
-    add_library(knst_app SHARED "${KNST_ANDROID_APP_SOURCE}")
-    target_link_libraries(knst_app PRIVATE KernelNucleusT knst_native_app_glue)
-    knst_configure_target(knst_app)
-
-    target_link_options(knst_app PRIVATE
-        -u ANativeActivity_onCreate
-        -Wl,-z,max-page-size=16384)
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Desktop — executables (Windows / Linux)
-# ─────────────────────────────────────────────────────────────────────────────
-elseif(NOT ANDROID)
-
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-
-    if(KNST_APP_SOURCE_RESOLVED)
+        # --- Desktop executable ---
         add_executable(knst_app "${KNST_APP_SOURCE_RESOLVED}")
         target_link_libraries(knst_app PRIVATE KernelNucleusT)
         knst_configure_target(knst_app)
     endif()
 
-    if(KNST_BUILD_EXAMPLES)
-        # ⚠️ FIX: filter on RELATIVE paths so an absolute path like
-        #    `/home/user/opengl-project/...` doesn't trip the regex.
-        file(GLOB_RECURSE KNST_EXAMPLE_SOURCES CONFIGURE_DEPENDS
-            RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/examples"
-            "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.cpp")
-
-        # Match the substring at the START of the relative path only.
-        list(FILTER KNST_EXAMPLE_SOURCES EXCLUDE REGEX "^android/")
-        list(FILTER KNST_EXAMPLE_SOURCES EXCLUDE REGEX "^.*/android/")
-
-        # Skip examples whose backend isn't built.
-        if(NOT KNST_WINDOW_USE_OPENGL)
-            list(FILTER KNST_EXAMPLE_SOURCES EXCLUDE REGEX "opengl")
-            list(FILTER KNST_EXAMPLE_SOURCES EXCLUDE REGEX "touch_screen")
-        endif()
-        if(NOT KNST_WINDOW_USE_VULKAN)
-            list(FILTER KNST_EXAMPLE_SOURCES EXCLUDE REGEX "vulkan")
-        endif()
-
-        # Re-prepend the examples root to get absolute paths back.
-        set(_knst_ex_abs "")
-        foreach(_rel IN LISTS KNST_EXAMPLE_SOURCES)
-            list(APPEND _knst_ex_abs
-                "${CMAKE_CURRENT_SOURCE_DIR}/examples/${_rel}")
-        endforeach()
-        set(KNST_EXAMPLE_SOURCES "${_knst_ex_abs}")
-
-        foreach(_src IN LISTS KNST_EXAMPLE_SOURCES)
-            get_filename_component(_name "${_src}" NAME_WE)
-            if(TARGET ${_name})
-                message(WARNING
-                    "Skipping example with duplicate target name '${_name}': ${_src}")
-                continue()
-            endif()
-            add_executable(${_name} "${_src}")
-            target_link_libraries(${_name} PRIVATE KernelNucleusT)
-            knst_configure_target(${_name})
-            list(APPEND KNST_EXAMPLE_TARGETS ${_name})
-        endforeach()
-    endif()
+else()
+    message(STATUS "No KNST_APP_SOURCE provided — headers only (no executable will be built).")
 endif()
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Dedupe + apply accumulated flags to the INTERFACE target
+# ─────────────────────────────────────────────────────────────────────────────
+list(REMOVE_DUPLICATES KNST_DEFINITIONS)
+# Do NOT dedupe KNST_LINK_ITEMS — static linking on MinGW requires that
+# winsock/crypt32/bcrypt/userenv appear AFTER quictls's libcrypto.a,
+# so the second copy at the end of the list must survive.
+target_compile_definitions(KernelNucleusT INTERFACE ${KNST_DEFINITIONS})
+target_link_libraries(KernelNucleusT INTERFACE ${KNST_LINK_ITEMS})
 
 # =============================================================================
 #  Installation + package export
@@ -801,46 +1225,39 @@ if(KNST_IS_TOP_LEVEL)
 
     install(DIRECTORY include/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-        FILES_MATCHING
-            PATTERN "*.hpp"
-            PATTERN "*.h"
-            PATTERN "*.c")
+        FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h" PATTERN "*.c")
 
     install(TARGETS KernelNucleusT
-        EXPORT   KernelNucleusTTargets
+        EXPORT KernelNucleusTTargets
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
     if(TARGET knst_glad)
         install(TARGETS knst_glad
-            EXPORT  KernelNucleusTTargets
+            EXPORT KernelNucleusTTargets
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endif()
-
     if(TARGET knst_wayland_protocols)
         install(TARGETS knst_wayland_protocols
-            EXPORT  KernelNucleusTTargets
+            EXPORT KernelNucleusTTargets
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endif()
 
     install(EXPORT KernelNucleusTTargets
-        FILE      KernelNucleusTTargets.cmake
+        FILE KernelNucleusTTargets.cmake
         NAMESPACE KernelNucleusT::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/KernelNucleusT)
 
     write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/KernelNucleusTConfigVersion.cmake"
-        VERSION       ${PROJECT_VERSION}
+        VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion)
 
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/KernelNucleusTConfig.cmake"
 "include(CMakeFindDependencyMacro)
-
-# Threads — required on Linux, harmless on Windows
 if(NOT WIN32)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
     find_dependency(Threads)
 endif()
-
 include(\"\${CMAKE_CURRENT_LIST_DIR}/KernelNucleusTTargets.cmake\")
 ")
 
@@ -849,18 +1266,10 @@ include(\"\${CMAKE_CURRENT_LIST_DIR}/KernelNucleusTTargets.cmake\")
         "${CMAKE_CURRENT_BINARY_DIR}/KernelNucleusTConfigVersion.cmake"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/KernelNucleusT)
 
-    if(NOT ANDROID)
-        set(_install_targets "")
-        if(TARGET knst_app)
-            list(APPEND _install_targets knst_app)
-        endif()
-        if(KNST_EXAMPLE_TARGETS)
-            list(APPEND _install_targets ${KNST_EXAMPLE_TARGETS})
-        endif()
-        if(_install_targets)
-            install(TARGETS ${_install_targets}
-                RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-        endif()
+    if(TARGET knst_app)
+        install(TARGETS knst_app
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
     endif()
 endif()
 
@@ -880,14 +1289,13 @@ if(KNST_IS_TOP_LEVEL)
         message(STATUS " Build type:     ${CMAKE_BUILD_TYPE}")
     endif()
     message(STATUS " C++ standard:   C++${CMAKE_CXX_STANDARD}")
-    message(STATUS " Examples:       ${KNST_BUILD_EXAMPLES}")
     message(STATUS " OpenGL:         ${KNST_WINDOW_USE_OPENGL}")
     message(STATUS " Vulkan:         ${KNST_WINDOW_USE_VULKAN}")
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
-        message(STATUS " Embedded:       ${KNST_WINDOW_EMBEDDED_X11_AND_WAYLAND}")
-    endif()
+    message(STATUS " Network:        TLS=${KNST_NET_TLS_OK} H2=${KNST_NET_H2_OK} H3=${KNST_NET_H3_OK}")
     if(KNST_APP_SOURCE_RESOLVED)
         message(STATUS " App source:     ${KNST_APP_SOURCE_RESOLVED}")
+    else()
+        message(STATUS " App source:     (none — headers only)")
     endif()
     message(STATUS " Sanitizers:     ${KNST_ENABLE_SANITIZERS}")
     message(STATUS "----------------------------------------")

@@ -69,10 +69,10 @@ inline void knst_display::refresh_screens_win32() noexcept {
             monitor.physical_height = 0;
         }
 
-        // Name
+      
         monitor.name = knst_c16string(monitorDevice.DeviceString);
 
-        // HMONITOR handle (used for the DPI query)
+        
         monitor.handle = MonitorFromPoint(
             { monitor.root_x + monitor.width / 2,
               monitor.root_y + monitor.height / 2 },
@@ -84,13 +84,31 @@ inline void knst_display::refresh_screens_win32() noexcept {
             monitor.refresh_rate = static_cast<float>(devMode.dmDisplayFrequency);
         }
 
-        // ── DPI: OS > LOGPIXELSX > physical calc ────────────────────
+     
         monitor.dpi_scale = 96.0f;
         UINT dpiX = 96, dpiY = 96;
         bool got_dpi = false;
 
-        if (monitor.handle) {
-            HRESULT hr = GetDpiForMonitor(monitor.handle,MDT_EFFECTIVE_DPI,&dpiX, &dpiY);
+                if (monitor.handle) {
+           
+            typedef HRESULT (WINAPI *KNST_GetDpiForMonitorFn)(
+                HMONITOR, int, UINT*, UINT*);
+            static KNST_GetDpiForMonitorFn knst_get_dpi_fn =
+                []() -> KNST_GetDpiForMonitorFn {
+                    HMODULE sh = ::LoadLibraryW(L"shcore.dll");
+                    return sh
+                        ? reinterpret_cast<KNST_GetDpiForMonitorFn>(
+                              ::GetProcAddress(sh, "GetDpiForMonitor"))
+                        : nullptr;
+                }();
+
+          
+            HRESULT hr = E_NOTIMPL;
+            if (knst_get_dpi_fn) {
+                hr = knst_get_dpi_fn(monitor.handle, 0 /* MDT_EFFECTIVE_DPI */,
+                                     &dpiX, &dpiY);
+            }
+
             if (SUCCEEDED(hr)) {
                 monitor.dpi_scale = static_cast<float>(dpiX);
                 got_dpi = true;
@@ -108,9 +126,7 @@ inline void knst_display::refresh_screens_win32() noexcept {
             }
         }
 
-        // Physical computation — only when the OS didn't give us a DPI.
-        // (A 27" 4K at 100% scaling computes to ~163 dpi → giant title
-        // bar.)
+        
         if (!got_dpi &&
             monitor.physical_width > 0 &&
             monitor.physical_height > 0) {
