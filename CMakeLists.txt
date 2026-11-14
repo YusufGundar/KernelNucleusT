@@ -74,10 +74,14 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(KernelNucleusT
-    VERSION     1.0.0
+    VERSION     2.0.0
     DESCRIPTION "KernelNucleusT cross-platform C++20 framework"
     LANGUAGES   C CXX
 )
+
+# Pre-release suffix — not part of CMake's numeric VERSION.
+# Printed in the summary; tags use v2.0.0-alpha.1.
+set(KNST_VERSION_SUFFIX "-alpha.1" CACHE STRING "Version suffix for display")
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Top-level project detection
@@ -392,12 +396,12 @@ if(KNST_PLATFORM STREQUAL "Android")
 elseif(KNST_PLATFORM STREQUAL "Windows")
 list(APPEND KNST_DEFINITIONS
     KNST_USING_PLATFORM_WINDOWS
-    WIN32_LEAN_AND_MEAN        # winsock.h (v1) → winsock2.h çakışmasını önler
+    WIN32_LEAN_AND_MEAN        # winsock.h (v1) -> winsock2.h clash prevention
     NOMINMAX
     OEMRESOURCE
     _CRT_SECURE_NO_WARNINGS
     _WIN32_WINNT=0x0A00        # Win10: MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING
-    WINVER=0x0A00)             # için Win8+ şart; hedefimiz Win10 olduğu için 0x0A00
+    WINVER=0x0A00)             # Win8+ required for above; target is Win10 so 0x0A00
 
         list(APPEND KNST_LINK_ITEMS
         gdi32 user32 shell32 shcore ole32 oleaut32 uuid
@@ -1024,15 +1028,15 @@ function(knst_configure_target TARGET_NAME)
 if(MSVC)
     target_compile_options(${TARGET_NAME} PRIVATE
         /W4 /utf-8 /permissive-
-        /wd4267   # size_t → uint32_t
-        /wd4244   # tip dönüşümü daralması
-        /wd4100   # kullanılmayan parametre
-        /wd4068   # bilinmeyen pragma (GCC pragma'ları)
-        /wd4996   # deprecated POSIX isimleri
-        /wd4099   # struct/class ileri bildirim uyumsuzluğu
-        /wd4310   # cast sabit değer kesiyor
-        /wd4091   # kullanılmayan typedef
-        /wd4005   # makro yeniden tanımı
+        /wd4267   # size_t -> uint32_t
+        /wd4244   # type narrowing conversion
+        /wd4100   # unreferenced parameter
+        /wd4068   # unknown pragma (GCC pragmas)
+        /wd4996   # deprecated POSIX names
+        /wd4099   # struct/class forward declaration mismatch
+        /wd4310   # cast truncates constant value
+        /wd4091   # unused typedef
+        /wd4005   # macro redefinition
         /wd4200   # zero-sized array (flexible array member, C99 pattern)
     )
         if(KNST_WARNINGS_AS_ERRORS)

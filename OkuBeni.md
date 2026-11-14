@@ -10,12 +10,11 @@
 
 <p align="center">
   <!-- Platforms -->
-  <img src="https://img.shields.io/badge/Windows-tested-0078D6?logo=windows&logoColor=white" alt="Windows"/>
-  <img src="https://img.shields.io/badge/Linux_X11-tested-FCC624?logo=linux&logoColor=black" alt="Linux X11"/>
-  <img src="https://img.shields.io/badge/Linux_Wayland-tested-FCC624?logo=linux&logoColor=black" alt="Linux Wayland"/>
+  <img src="https://img.shields.io/badge/Windows-tested-3DDC84?logo=windows&logoColor=white" alt="Windows"/>
+  <img src="https://img.shields.io/badge/Linux_X11-tested-3DDC84?logo=linux&logoColor=white" alt="Linux X11"/>
+  <img src="https://img.shields.io/badge/Linux_Wayland-tested-3DDC84?logo=linux&logoColor=white" alt="Linux Wayland"/>
   <img src="https://img.shields.io/badge/Android-tested-3DDC84?logo=android&logoColor=white" alt="Android"/>
 </p>
-
 <p align="center">
   <!-- Graphics -->
   <img src="https://img.shields.io/badge/OpenGL-3.3_Core-5586A4?logo=opengl&logoColor=white" alt="OpenGL"/>
